@@ -19,8 +19,9 @@ Two workflows share one loading and preprocessing framework:
 RQd and the software are described in: M. O. Güngör, J. Charmet, E. Yıldırım,
 *A full-surface gradient-magnitude correlation metric for non-destructive assessment
 of microchannel replication quality*, Measurement (submitted, 2026). The companion
-archive with one real channel, expected results, the paper's tables and the analysis
-scripts is on Zenodo (DOI to be added on publication).
+archive with the software and one real channel of the study, with its expected
+results, is on Zenodo: https://doi.org/10.5281/zenodo.22813916 (restricted until the article
+is published).
 
 ## Running MaRQA
 
@@ -52,24 +53,19 @@ which records every step, the quality-control flags and the numbers.
 To test the X3P path without an instrument file, run `python tests/make_test_x3p.py`.
 It writes `tests/test_channel.x3p`, a synthetic 1.2 mm by 0.5 mm surface with a
 parabolic channel 200 µm wide and 60 µm deep on a 10 µm grid. Load it as Point Cloud
-File 1 with Voxel size 5, Crop pad X 100, Crop pad Y 50 and Edge margin 20; the log's
+File 1 with Crop pad X 100, Crop pad Y 50 and Edge margin 20, the rest at their defaults;
+the log's
 first lines read "Format: X3P (ISO 25178-72)" and the reported depth is 60 µm.
 
 ## Workflow A: one surface
 
 1. Drop the file on **Point Cloud File 1** (or use Browse).
-2. Set the parameters. The paper used the interface defaults except three:
-
-   | Parameter | Paper value | Interface default |
-   |---|---|---|
-   | Voxel size | 5 | 10 |
-   | Crop pad X (units) | 180 | 250 |
-   | Crop pad Y (units) | 100 | 150 |
-
-   The remaining defaults are the paper's values: Field band 2.5 MAD, Opening level
-   fraction 0.10, Floor width fraction 0.90, Roughness eval area (floor) 0.5, Floor
-   eval length 4000, Field eval width 400, Field eval length 4000; Advanced: Edge
-   margin 100, Grid resolution 300, Smooth sigma 0, Profile slices 80, Skip rows 0.
+2. Leave the parameters at the interface defaults; they are the values used in the
+   paper: Voxel size 5, Field band 2.5 MAD, Crop pad X 180, Crop pad Y 100, Opening
+   level fraction 0.10, Floor width fraction 0.90, Roughness eval area (floor) 0.5,
+   Floor eval length 4000, Field eval width 400, Field eval length 4000; Advanced:
+   Edge margin 100, Grid resolution 300, Smooth sigma 0, Profile slices 80, Skip
+   rows 0. Units are those of the file.
 3. Click **Run Point Cloud Analysis**. The results bar shows width, depth and
    roughness; the tabs show *Rotation Maps*, *Channel Detection*, *Profiles*,
    *3D View* and *Roughness*. The log lists the residual tilt, the draft angle, the

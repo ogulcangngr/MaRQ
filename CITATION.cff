@@ -11,6 +11,10 @@ authors:
     orcid: "https://orcid.org/0009-0007-8864-5012"
     affiliation: "Middle East Technical University"
 repository-code: "https://github.com/ogulcangngr/MaRQA"
+identifiers:
+  - type: doi
+    value: "10.5281/zenodo.22813916"
+    description: "Zenodo archive: software v1.0 and sample data"
 keywords: [replication quality, surface metrology, optical profilometry, microchannel, rapid tooling]
 preferred-citation:
   type: article
@@ -20,7 +24,7 @@ preferred-citation:
       given-names: "Mehmet Oğulcan"
     - family-names: "Charmet"
       given-names: "Jérôme"
-    - family-names: "Yildirim"
+    - family-names: "Yıldırım"
       given-names: "Ender"
   journal: "Measurement"
   year: 2026

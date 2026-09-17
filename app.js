@@ -155,11 +155,11 @@ function num(id, fallback) {
 
 function getPvisualParams() {
   return {
-    margin: num("p-margin",100), voxel_size: num("p-voxel",20),
+    margin: num("p-margin",100), voxel_size: num("p-voxel",5),
     grid_res: Math.round(num("p-res",300)),
     smooth_sigma: num("p-sigma",0), n_slices: Math.round(num("p-slices",80)),
     opening_frac: num("p-ofrac", 0.10), floor_width_frac: num("p-flfrac", 0.90),
-    crop_pad_x: num("p-cropx", 250), crop_pad_y: num("p-cropy", 150),
+    crop_pad_x: num("p-cropx", 180), crop_pad_y: num("p-cropy", 100),
     skip_rows: Math.round(num("p-skiprows", 0)),
     field_k: num("p-fieldk", 2.5),
     floor_eval_frac: num("p-rfloor", 0.5),
