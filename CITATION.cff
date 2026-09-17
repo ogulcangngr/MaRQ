@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "If you use MaRQA or these data, please cite the paper below and this archive."
+type: software
+title: "MaRQA, the Microchannel and Replication Quality Analyzer: software, sample data and analysis scripts"
+version: "1.0"
+date-released: "2026-09-17"
+license: GPL-3.0
+authors:
+  - family-names: "Güngör"
+    given-names: "Mehmet Oğulcan"
+    orcid: "https://orcid.org/0009-0007-8864-5012"
+    affiliation: "Middle East Technical University"
+repository-code: "https://github.com/ogulcangngr/MaRQA"
+keywords: [replication quality, surface metrology, optical profilometry, microchannel, rapid tooling]
+preferred-citation:
+  type: article
+  title: "A full-surface gradient-magnitude correlation metric for non-destructive assessment of microchannel replication quality"
+  authors:
+    - family-names: "Güngör"
+      given-names: "Mehmet Oğulcan"
+    - family-names: "Charmet"
+      given-names: "Jérôme"
+    - family-names: "Yildirim"
+      given-names: "Ender"
+  journal: "Measurement"
+  year: 2026
+  notes: "submitted; DOI to be added on publication"

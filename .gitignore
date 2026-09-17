@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+tests/test_channel.x3p
+.DS_Store
+Thumbs.db

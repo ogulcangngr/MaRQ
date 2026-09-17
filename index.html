@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MaRQA</title>
+  <link rel="stylesheet" href="style.css">
+  <!-- Plotly.js — WebGL 3D, no server required -->
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="app">
+
+  <!-- ── Header ─────────────────────────────────────────────────────────────── -->
+  <header id="header">
+    <div id="header-brand">
+      <img id="header-logo" src="logo.svg" alt="">
+      <span id="header-title">MaRQA</span>
+    </div>
+    <div id="header-controls">
+      <label class="hdr-field">Palette
+        <select id="palette-select" class="hdr-select" title="3D surface colorscale">
+          <option value="Viridis" selected>Viridis</option>
+          <option value="Cividis">Cividis</option>
+          <option value="Plasma">Plasma</option>
+          <option value="Magma">Magma</option>
+          <option value="Inferno">Inferno</option>
+          <option value="Turbo">Turbo</option>
+          <option value="Earth">Earth</option>
+        </select>
+      </label>
+      <label class="hdr-field">3D quality
+        <select id="quality-select" class="hdr-select" title="3D render detail — higher is sharper but slower">
+          <option value="120">Low</option>
+          <option value="240" selected>Medium</option>
+          <option value="400">High</option>
+        </select>
+      </label>
+      <button id="theme-toggle" class="btn" title="Toggle light / dark theme">☀ Light</button>
+      <span id="spinner"></span>
+      <span id="status-bar" class="status-bar status-info">Loading Pyodide…</span>
+    </div>
+  </header>
+
+  <!-- ── Body ───────────────────────────────────────────────────────────────── -->
+  <div id="body">
+
+    <!-- ── Sidebar ──────────────────────────────────────────────────────────── -->
+    <aside id="sidebar">
+
+      <!-- Files -->
+      <div class="sidebar-section">
+        <div class="section-label">Input Files</div>
+
+        <div class="file-card" id="file1-zone">
+          <div class="file-card-label">Point Cloud File 1 (.txt, .xyz, .asc, .csv, .x3p)</div>
+          <div class="file-row">
+            <span class="file-name" id="file1-name">Drop here or Browse</span>
+            <button class="btn-icon" id="file1-clear" style="display:none"
+                    onclick="clearFile(1)" title="Remove file">✕</button>
+            <button class="btn" onclick="document.getElementById('file1-input').click()">Browse</button>
+            <input type="file" id="file1-input" accept=".txt,.xyz,.asc,.csv,.x3p" style="display:none"
+                   onchange="handleFileInput('file1-input', 1, 'file1-name')">
+          </div>
+        </div>
+
+        <div class="file-card" id="file2-zone">
+          <div class="file-card-label">Point Cloud File 2 (.txt, .xyz, .asc, .csv, .x3p) — optional, for gradient</div>
+          <div class="file-row">
+            <span class="file-name" id="file2-name">Drop here or Browse</span>
+            <button class="btn-icon" id="file2-clear" style="display:none"
+                    onclick="clearFile(2)" title="Remove file">✕</button>
+            <button class="btn" onclick="document.getElementById('file2-input').click()">Browse</button>
+            <input type="file" id="file2-input" accept=".txt,.xyz,.asc,.csv,.x3p" style="display:none"
+                   onchange="handleFileInput('file2-input', 2, 'file2-name')">
+          </div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Point cloud parameters -->
+      <div class="sidebar-section">
+        <div class="section-label">Parameters</div>
+        <details>
+          <summary>Point Cloud Parameters</summary>
+          <div class="param-grid">
+            <div class="param-card">
+              <div class="param-card-top">
+                <span class="param-label">Voxel size (0 = auto)</span>
+                <input class="param-input" type="number" id="p-voxel" value="10">
+              </div>
+              <span class="param-hint">Grid cell size for downsampling; 0 picks it automatically from point density.</span>
+            </div>
+            <div class="param-card">
+              <div class="param-card-top">
+                <span class="param-label">Field band (MAD ×)</span>
+                <input class="param-input" type="number" id="p-fieldk" value="2.5" step="0.5">
+              </div>
+              <span class="param-hint">How tightly the flat field plane is fit (robust MAD multiplier). Lower = stricter field selection. Leveling and orientation are referenced to this field, so there is no channel-floor percentile to set.</span>
+            </div>
+            <div class="param-card">
+              <div class="param-card-top">
+                <span class="param-label">Crop pad X (units)</span>
+                <input class="param-input" type="number" id="p-cropx" value="250">
+              </div>
+              <span class="param-hint">Extra distance added beyond the detected channel length on each end of the crop box, in point cloud units.</span>
+            </div>
+            <div class="param-card">
+              <div class="param-card-top">
+                <span class="param-label">Crop pad Y (units)</span>
+                <input class="param-input" type="number" id="p-cropy" value="150">
+              </div>
+              <span class="param-hint">Extra distance added beyond the detected channel width on each side of the crop box, in point cloud units.</span>
+            </div>
+            <div class="param-card">
+              <span class="param-label" style="display:block;margin-bottom:8px;">Opening level fraction</span>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <input type="range" min="0.02" max="0.3" step="0.02" id="p-ofrac" value="0.1" style="flex:1"
+                       oninput="document.getElementById('p-ofrac-val').textContent=parseFloat(this.value).toFixed(2)">
+                <span id="p-ofrac-val" style="font-size:11px;width:32px;text-align:right;">0.10</span>
+              </div>
+              <span class="param-hint" style="display:block;margin-top:6px;">Depth fraction used for the opening width/length measurement. 0.1 = top 10% of channel depth, close to where the channel meets the flat surface.</span>
+            </div>
+            <div class="param-card">
+              <span class="param-label" style="display:block;margin-bottom:8px;">Floor width fraction</span>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <input type="range" min="0.6" max="0.95" step="0.05" id="p-flfrac" value="0.90" style="flex:1"
+                       oninput="document.getElementById('p-flfrac-val').textContent=parseFloat(this.value).toFixed(2)">
+                <span id="p-flfrac-val" style="font-size:11px;width:32px;text-align:right;">0.90</span>
+              </div>
+              <span class="param-hint" style="display:block;margin-top:6px;">Depth fraction for the floor (narrowest) width — the channel bottom, where the nominal width is defined. 0.90 = bottom 10% of depth. Floor and opening widths are read at fixed levels off the mean cross-section, so they are comparable across surfaces.</span>
+            </div>
+            <div class="param-card">
+              <span class="param-label" style="display:block;margin-bottom:8px;">Roughness eval area (floor)</span>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <input type="range" min="0.1" max="0.9" step="0.05" id="p-rfloor" value="0.5" style="flex:1"
+                       oninput="document.getElementById('p-rfloor-val').textContent=parseFloat(this.value).toFixed(2)">
+                <span id="p-rfloor-val" style="font-size:11px;width:32px;text-align:right;">0.50</span>
+              </div>
+              <span class="param-hint" style="display:block;margin-top:6px;">Floor roughness strip width as a fraction of the channel width (central part of the floor). 0.5 = central 50%. The length is set below.</span>
+            </div>
+            <div class="param-card">
+              <div class="param-card-top">
+                <span class="param-label">Floor eval length (units)</span>
+                <input class="param-input" type="number" id="p-rfloorlen" value="4000">
+              </div>
+              <span class="param-hint">Length of the floor roughness strip along the channel axis, centered on the channel.</span>
+            </div>
+            <div class="param-card">
+              <div class="param-card-top">
+                <span class="param-label">Field eval width (units)</span>
+                <input class="param-input" type="number" id="p-rfwidth" value="400">
+              </div>
+              <span class="param-hint">Fixed width of the left/right field roughness strips. Their <b>position</b> is found automatically — placed just past the raised channel lip onto clean flat field — so only this fixed size needs setting, keeping measurements comparable across surfaces.</span>
+            </div>
+            <div class="param-card">
+              <div class="param-card-top">
+                <span class="param-label">Field eval length (units)</span>
+                <input class="param-input" type="number" id="p-rflen" value="4000">
+              </div>
+              <span class="param-hint">Fixed length of the field roughness strips along the channel axis, centered on the channel.</span>
+            </div>
+          </div>
+          <details class="sub-details">
+            <summary>Advanced Parameters</summary>
+          <div class="param-grid">
+            <div class="param-card">
+              <div class="param-card-top">
+                <span class="param-label">Edge margin</span>
+                <input class="param-input" type="number" id="p-margin" value="100">
+              </div>
+              <span class="param-hint">Distance from each edge to discard before analysis, removing boundary artifacts.</span>
+            </div>
+            <div class="param-card">
+              <div class="param-card-top">
+                <span class="param-label">Grid resolution</span>
+                <input class="param-input" type="number" id="p-res" value="300">
+              </div>
+              <span class="param-hint">Number of interpolation grid cells per axis for the surface heatmaps.</span>
+            </div>
+            <div class="param-card">
+              <div class="param-card-top">
+                <span class="param-label">Smooth sigma</span>
+                <input class="param-input" type="number" id="p-sigma" value="0">
+              </div>
+              <span class="param-hint">Gaussian blur radius on the interpolated grid; 0 disables smoothing.</span>
+            </div>
+            <div class="param-card">
+              <div class="param-card-top">
+                <span class="param-label">Profile slices</span>
+                <input class="param-input" type="number" id="p-slices" value="80">
+              </div>
+              <span class="param-hint">Number of cross-section slices along the channel used for the width/length profile overlays and their scatter.</span>
+            </div>
+            <div class="param-card">
+              <div class="param-card-top">
+                <span class="param-label">Skip rows</span>
+                <input class="param-input" type="number" id="p-skiprows" value="0">
+              </div>
+              <span class="param-hint">Number of header rows to skip when loading the point cloud file.</span>
+            </div>
+          </div>
+          </details>
+        </details>
+
+        <details>
+          <summary>Gradient Parameters</summary>
+          <div class="param-grid">
+            <div class="param-card">
+              <div class="param-card-top">
+                <span class="param-label">Grid spacing (µm)</span>
+                <input class="param-input" type="number" id="g-spacing" value="5" step="1">
+              </div>
+              <span class="param-hint">Physical size of each grid cell, in µm — set to the data (voxel) resolution. The same spacing is used for every comparison, so the gradient metrics (r_mag, etc.) are sampled identically and stay comparable across channels.</span>
+            </div>
+            <div class="param-card">
+              <div class="param-card-top">
+                <span class="param-label">Smooth sigma (µm)</span>
+                <input class="param-input" type="number" id="g-sigma" value="0">
+              </div>
+              <span class="param-hint">Gaussian blur (in µm) before computing gradients. A minimum of one grid cell is always applied for gradient stability.</span>
+            </div>
+            <div class="param-card">
+              <div class="param-card-top">
+                <span class="param-label">Skip rows</span>
+                <input class="param-input" type="number" id="g-skiprows" value="0">
+              </div>
+              <span class="param-hint">Number of header rows to skip when loading the point cloud files.</span>
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Actions -->
+      <div class="sidebar-section" style="padding-bottom:10px;">
+        <div class="section-label">Actions</div>
+        <button id="run-pvisual"  class="btn btn-secondary" disabled onclick="runPvisual()">
+          ▶&nbsp; Run Point Cloud Analysis
+        </button>
+        <button id="run-gradient" class="btn btn-primary"   disabled onclick="runGradient()">
+          ▶&nbsp; Run Gradient Correlation
+        </button>
+        <button id="download-crop" class="btn btn-secondary" disabled onclick="downloadCrop()">
+          ⬇&nbsp; Download Cropped Channel
+        </button>
+      </div>
+
+    </aside>
+
+    <!-- ── Content ─────────────────────────────────────────────────────────── -->
+    <div id="center">
+    <main id="content">
+
+      <!-- Tab strip -->
+      <nav class="tabs">
+        <button class="tab-btn" id="tab-btn-rotation"
+                style="display:none" onclick="switchTab('rotation')">Rotation Maps</button>
+        <button class="tab-btn" id="tab-btn-channel"
+                style="display:none" onclick="switchTab('channel')">Channel Detection</button>
+        <button class="tab-btn" id="tab-btn-profiles"
+                style="display:none" onclick="switchTab('profiles')">Profiles</button>
+        <button class="tab-btn" id="tab-btn-3d"
+                style="display:none" onclick="switchTab('3d')">3D View</button>
+        <button class="tab-btn" id="tab-btn-roughness"
+                style="display:none" onclick="switchTab('roughness')">Roughness</button>
+        <button class="tab-btn" id="tab-btn-grad3d"
+                style="display:none" onclick="switchTab('grad3d')">Gradient — 3D</button>
+        <button class="tab-btn" id="tab-btn-gradmaps"
+                style="display:none" onclick="switchTab('gradmaps')">Gradient — Maps</button>
+        <button class="tab-btn" id="tab-btn-corr"
+                style="display:none" onclick="switchTab('corr')">Correlation</button>
+      </nav>
+
+      <!-- Empty state (shown until first run) -->
+      <div id="empty-state" class="tab-panels" style="display:flex;align-items:center;justify-content:center;">
+        <div style="text-align:center;color:var(--text3);">
+          <div style="font-size:38px;margin-bottom:12px;">⬡</div>
+          <div style="font-size:15px;font-weight:600;margin-bottom:6px;">No analysis loaded</div>
+          <div style="font-size:12px;">Load a .txt point cloud and click Run to begin.</div>
+          <div style="font-size:11px;margin-top:16px;color:var(--text3);">
+            Computation runs locally in your browser via Pyodide.
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab panels -->
+      <div class="tab-panels" id="tab-panels-container" style="display:none;">
+        <div class="tab-panel" id="tab-rotation">
+          <div class="plot-container" id="plot-rotation"></div>
+        </div>
+        <div class="tab-panel" id="tab-channel">
+          <div class="plot-container" id="plot-channel"></div>
+        </div>
+        <div class="tab-panel" id="tab-profiles">
+          <div class="inner-tabs">
+            <button class="inner-tab-btn active" id="inner-tab-btn-profiles-ycenter"
+                    onclick="switchInnerTab('profiles','ycenter')">Y Center</button>
+            <button class="inner-tab-btn" id="inner-tab-btn-profiles-xcenter"
+                    onclick="switchInnerTab('profiles','xcenter')">X Center</button>
+            <button class="inner-tab-btn" id="inner-tab-btn-profiles-widthlength"
+                    onclick="switchInnerTab('profiles','widthlength')">Width &amp; Length</button>
+          </div>
+          <div class="inner-tab-panels">
+            <div class="inner-tab-panel active" id="inner-tab-profiles-ycenter">
+              <div class="plot-container" id="plot-profiles-ycenter"></div>
+            </div>
+            <div class="inner-tab-panel" id="inner-tab-profiles-xcenter">
+              <div class="plot-container" id="plot-profiles-xcenter"></div>
+            </div>
+            <div class="inner-tab-panel" id="inner-tab-profiles-widthlength">
+              <div class="plot-container" id="plot-profiles-widthlength"></div>
+            </div>
+          </div>
+        </div>
+        <div class="tab-panel" id="tab-3d">
+          <div class="plot-container" id="plot-3d"></div>
+        </div>
+        <div class="tab-panel" id="tab-roughness">
+          <div class="plot-container" id="plot-roughness"></div>
+        </div>
+        <div class="tab-panel" id="tab-grad3d">
+          <div class="inner-tabs">
+            <button class="inner-tab-btn active" id="inner-tab-btn-grad3d-cloud1"
+                    onclick="switchInnerTab('grad3d','cloud1')">Cloud 1</button>
+            <button class="inner-tab-btn" id="inner-tab-btn-grad3d-cloud2"
+                    onclick="switchInnerTab('grad3d','cloud2')">Cloud 2</button>
+            <button class="inner-tab-btn" id="inner-tab-btn-grad3d-error"
+                    onclick="switchInnerTab('grad3d','error')">Error Map</button>
+          </div>
+          <div class="inner-tab-panels">
+            <div class="inner-tab-panel active" id="inner-tab-grad3d-cloud1">
+              <div class="plot-container" id="plot-grad3d-cloud1"></div>
+            </div>
+            <div class="inner-tab-panel" id="inner-tab-grad3d-cloud2">
+              <div class="plot-container" id="plot-grad3d-cloud2"></div>
+            </div>
+            <div class="inner-tab-panel" id="inner-tab-grad3d-error">
+              <div class="plot-container" id="plot-grad3d-error"></div>
+            </div>
+          </div>
+        </div>
+        <div class="tab-panel" id="tab-gradmaps">
+          <div class="plot-container" id="plot-gradmaps"></div>
+        </div>
+        <div class="tab-panel" id="tab-corr">
+          <div class="plot-container" id="plot-corr"></div>
+        </div>
+      </div>
+
+    </main>
+
+      <!-- Results bar (channel width / depth / roughness) -->
+      <div id="results-bar">
+        <div id="results-empty">Run an analysis to see channel width, depth and roughness here.</div>
+        <div id="metrics-panel" style="display:none"></div>
+      </div>
+    </div><!-- /#center -->
+
+    <!-- ── Log panel (right side) ─────────────────────────────────────────── -->
+    <div id="right">
+      <div id="log-panel">
+        <div id="log-footer-label">Analysis Log</div>
+        <textarea id="log-box" readonly spellcheck="false"
+                  placeholder="Log output will appear here…"></textarea>
+      </div>
+      <div id="credits">
+        <div id="credits-name">Microchannel and Replication Quality Analyzer</div>
+        <div id="credits-row">
+          <span id="credits-ver">MaRQA v1.0</span>
+          <a id="credits-gh" href="https://github.com/ogulcangngr/MaRQA" target="_blank" rel="noopener">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+            github.com/ogulcangngr/MaRQA
+          </a>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
