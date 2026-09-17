@@ -1,4 +1,4 @@
-/* MaRQA (Microchannel and Replication Quality Analyzer): main application logic */
+/* MaRQ (Microchannel and Replication Quality Analyzer): main application logic */
 
 const PLOTLY_CONFIG = {
   displaylogo: false,

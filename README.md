@@ -1,6 +1,6 @@
-# MaRQA: the Microchannel and Replication Quality Analyzer
+# MaRQ: the Microchannel and Replication Quality Analyzer
 
-MaRQA measures microchannels in optical-profilometry point clouds and grades how
+MaRQ measures microchannels in optical-profilometry point clouds and grades how
 faithfully a channel has been replicated from a mould insert into a moulded part.
 It runs entirely in the browser: the analysis core is Python (NumPy, SciPy)
 executed through Pyodide, so nothing is installed and no measurement data leave
@@ -23,14 +23,14 @@ archive with the software and one real channel of the study, with its expected
 results, is on Zenodo: https://doi.org/10.5281/zenodo.22813916 (restricted until the article
 is published).
 
-## Running MaRQA
+## Running MaRQ
 
 The page loads its Python modules with `fetch`, so it must be served over HTTP, not
 opened as a local file:
 
 ```
-git clone https://github.com/ogulcangngr/MaRQA.git
-cd MaRQA
+git clone https://github.com/ogulcangngr/MaRQ.git
+cd MaRQ
 python -m http.server 8000
 ```
 
@@ -113,7 +113,7 @@ machine-readable form; GitHub's "Cite this repository" button uses it.
 
 ## Licence
 
-Copyright (C) 2026 Mehmet Oğulcan Güngör. MaRQA is free software released under the
+Copyright (C) 2026 Mehmet Oğulcan Güngör. MaRQ is free software released under the
 GNU General Public License, version 3 (`LICENSE`). Pyodide and Plotly are loaded from
 their CDNs under their own licences.
 

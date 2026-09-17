@@ -4,7 +4,7 @@
 
 First public release. This is the version used for the Measurement paper.
 
-- Renamed to MaRQA, the Microchannel and Replication Quality Analyzer
+- Renamed to MaRQ, the Microchannel and Replication Quality Analyzer
   (previously "Microchannel Analyzer" 0.6.0).
 - The analysis modules (`pvisual_core.py`, `rq_gradient_core.py`,
   `x3p_loader.py`, `plots.py`) are unchanged from 0.6.0; every number in the

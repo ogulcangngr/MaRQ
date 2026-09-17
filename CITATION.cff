@@ -1,7 +1,7 @@
 cff-version: 1.2.0
-message: "If you use MaRQA or these data, please cite the paper below and this archive."
+message: "If you use MaRQ or these data, please cite the paper below and this archive."
 type: software
-title: "MaRQA, the Microchannel and Replication Quality Analyzer: software, sample data and analysis scripts"
+title: "MaRQ, the Microchannel and Replication Quality Analyzer: software, sample data and analysis scripts"
 version: "1.0"
 date-released: "2026-09-17"
 license: GPL-3.0
@@ -10,7 +10,7 @@ authors:
     given-names: "Mehmet Oğulcan"
     orcid: "https://orcid.org/0009-0007-8864-5012"
     affiliation: "Middle East Technical University"
-repository-code: "https://github.com/ogulcangngr/MaRQA"
+repository-code: "https://github.com/ogulcangngr/MaRQ"
 identifiers:
   - type: doi
     value: "10.5281/zenodo.22813916"
