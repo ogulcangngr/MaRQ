@@ -730,62 +730,6 @@ def make_gradient_maps_fig(result):
     return {"data": data, "layout": layout}
 
 
-# ── Paired comparison: cell-by-cell correlation ────────────────────────────────
-
-def make_correlation_fig(result):
-    g, m = result["grids"], result["metrics"]
-    mask = np.asarray(g.get("mask", g["valid"]), bool)
-    ZA, ZB = np.asarray(g["ZI1"], float)[mask], np.asarray(g["ZI2"], float)[mask]
-    GA, GB = np.asarray(g["mag1"], float)[mask], np.asarray(g["mag2"], float)[mask]
-    n = int(mask.sum())
-
-    def density(a, b, lo, hi, nb=110):
-        H, xe, ye = np.histogram2d(a, b, bins=nb, range=[[lo, hi], [lo, hi]])
-        xc = 0.5 * (xe[:-1] + xe[1:]); yc = 0.5 * (ye[:-1] + ye[1:])
-        Hl = np.log10(H.T + 1.0)
-        Hl[H.T == 0] = np.nan
-        return xc.tolist(), yc.tolist(), Hl
-
-    if n > 1:
-        zlo, zhi = float(min(ZA.min(), ZB.min())), float(max(ZA.max(), ZB.max()))
-        ghi = float(np.percentile(np.concatenate([GA, GB]), 99.5)) or 1.0
-    else:
-        zlo, zhi, ghi = 0.0, 1.0, 1.0
-    xz, yz, hz = density(ZA, ZB, zlo, zhi) if n > 1 else ([], [], np.zeros((1, 1)))
-    xg, yg, hg = density(GA, GB, 0.0, ghi) if n > 1 else ([], [], np.zeros((1, 1)))
-
-    note = ""
-    if m.get("cad_mode"):
-        note = "<br><span style='font-size:11px'>Idealised surface detected: RQ is the primary metric, the slope correlations are not meaningful here.</span>"
-    layout = _base(margin={"t": 80, "b": 60, "l": 70, "r": 80}, showlegend=False)
-    layout["title"] = _title(f"Cell-by-cell correlation over the channel-interior mask  |  "
-                             f"n = {n:,} cells   RQdx = {m['r_gx']:.3f}   RQdy = {m['r_gy']:.3f}" + note)
-    layout["xaxis"]  = _axis(f"Z_A ({U})", domain=[0.0, 0.43])
-    layout["yaxis"]  = _axis(f"Z_B ({U})", scaleanchor="x")
-    layout["xaxis2"] = _axis("|∇Z_A| (µm/µm)", domain=[0.57, 1.0], anchor="y2")
-    layout["yaxis2"] = _axis("|∇Z_B| (µm/µm)", scaleanchor="x2", anchor="x2")
-    layout["annotations"] = [
-        _panel_title(f"Height:  RQ = {m['r_z']:.3f}", "x", "y"),
-        _panel_title(f"Slope magnitude:  RQd = {m['r_mag']:.3f}", "x2", "y2"),
-    ]
-    ident = lambda lo, hi, xa, ya: {"type": "scatter", "x": [lo, hi], "y": [lo, hi], "mode": "lines",
-                                    "line": {"color": _rgba(C("TEXT"), 0.6), "width": 1, "dash": "dash"},
-                                    "hoverinfo": "skip", "xaxis": xa, "yaxis": ya, "name": "identity"}
-    return {
-        "data": [
-            _heatmap(xz, yz, hz, _CS, "cells", cbar=_cbar("log10(1 + cells)", x=0.44, xanchor="left"),
-                     nd=3, xaxis="x", yaxis="y",
-                     hovertemplate="Z_A %{x:.1f}<br>Z_B %{y:.1f}<br>log10 n %{z:.2f}<extra></extra>"),
-            ident(zlo, zhi, "x", "y"),
-            _heatmap(xg, yg, hg, _CS, "cells", cbar=_cbar("log10(1 + cells)", x=1.01, xanchor="left"),
-                     nd=3, xaxis="x2", yaxis="y2",
-                     hovertemplate="|∇Z_A| %{x:.3f}<br>|∇Z_B| %{y:.3f}<br>log10 n %{z:.2f}<extra></extra>"),
-            ident(0.0, ghi, "x2", "y2"),
-        ],
-        "layout": layout,
-    }
-
-
 # ── Figure sets (called by the worker) ─────────────────────────────────────────
 
 # key -> builder(result, max_cells); the keys are the figure ids used by the interface
@@ -805,7 +749,6 @@ BUILDERS = {
         "grad3d_cloud2": lambda r, mc: make_gradient_3d_cloud2_fig(r, mc),
         "grad3d_error":  lambda r, mc: make_gradient_3d_error_fig(r, mc),
         "gradmaps":      lambda r, mc: make_gradient_maps_fig(r),
-        "corr":          lambda r, mc: make_correlation_fig(r),
     },
 }
 

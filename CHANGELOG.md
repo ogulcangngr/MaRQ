@@ -31,9 +31,9 @@ Compared with the internal "Microchannel Analyzer" 0.6.0:
   that gives every 2D plot of lengths the same scale on both axes, with the
   comparison maps stacked one per row for long channels; comparison maps with the height
   and slope-magnitude maps of both surfaces, E_Z and E_d, and the outline of
-  the channel-interior mask, on the shared actual colour ranges; cell-by-cell
-  density plots behind RQ and RQd instead of a bar chart; the palette applies
-  to every height map.
+  the channel-interior mask, on the shared actual colour ranges; the bar chart
+  that repeated the card values is gone; the palette applies to every height
+  map.
 - Interface: three file slots (the surface to analyse, Surface A, Surface B)
   with a workflow strip and crop hand-over buttons ("Use as A", "Use as B");
   batch comparison of A against several files with a results table; the

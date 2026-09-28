@@ -119,8 +119,7 @@ first lines read "Format: X3P (ISO 25178-72)" and the reported depth is 60 µm.
    interpretation to the user; the paper defines no acceptance thresholds. *Comparison 3D* shows the two
    surfaces and the slope error E_d drawn on surface B; *Comparison Maps* shows the
    height and slope-magnitude maps of both surfaces with the error maps E_Z (signed)
-   and E_d (unsigned) and the outline of the channel-interior mask; *Correlation*
-   shows the cell-by-cell density plots behind RQ and RQd. The log states which
+   and E_d (unsigned) and the outline of the channel-interior mask. The log states which
    orientation of B was kept, the valid-cell fraction and the mask size; its metrics
    table is that of the kept orientation.
 4. **Batch**: choose several files under *Batch: compare A with several surfaces* and

@@ -25,7 +25,6 @@ const FIGS = {
     grad3d_cloud2: ["Surface B (3D)",         "plot-grad3d-cloud2"],
     grad3d_error:  ["Slope error E_d (3D)",   "plot-grad3d-error"],
     gradmaps:      ["Height and slope maps",  "plot-gradmaps"],
-    corr:          ["Correlation",            "plot-corr"],
   },
 };
 const PARAM_IDS = ["p-voxel", "p-fieldk", "p-cropx", "p-cropy", "p-ofrac", "p-flfrac", "p-rfloor",
@@ -560,7 +559,7 @@ function renderGradient(result, retheme, batch) {
   const figs = result.figures;
   _gradFigs = figs;
 
-  ["grad3d", "gradmaps", "corr"].forEach((t) => {
+  ["grad3d", "gradmaps"].forEach((t) => {
     document.getElementById("tab-btn-" + t).style.display = "";
   });
   showPanels();
@@ -568,7 +567,6 @@ function renderGradient(result, retheme, batch) {
   _rendering = true;
   try {
     renderPlot("rq_gradient", "gradmaps", figs.gradmaps);
-    renderPlot("rq_gradient", "corr",     figs.corr);
   } finally {
     _rendering = false;
   }
@@ -681,7 +679,7 @@ function switchTab(tabId) {
     replotVisible(document.querySelector("#tab-profiles .inner-tab-panel.active .plot-container"));
   } else {
     const plotId = { rotation: "plot-rotation", channel: "plot-channel", roughness: "plot-roughness",
-                     gradmaps: "plot-gradmaps", corr: "plot-corr" }[tabId];
+                     gradmaps: "plot-gradmaps" }[tabId];
     replotVisible(document.getElementById(plotId));
   }
 }
@@ -700,7 +698,7 @@ function currentFigure() {
     return ["rq_gradient", "grad3d_" + inner.id.replace("inner-tab-grad3d-", "")];
   }
   return { rotation: ["pvisual", "rotation"], channel: ["pvisual", "channel"], "3d": ["pvisual", "view3d"],
-           roughness: ["pvisual", "roughness"], gradmaps: ["rq_gradient", "gradmaps"], corr: ["rq_gradient", "corr"] }[tab] || null;
+           roughness: ["pvisual", "roughness"], gradmaps: ["rq_gradient", "gradmaps"] }[tab] || null;
 }
 
 // ── Exports ────────────────────────────────────────────────────────────────────
