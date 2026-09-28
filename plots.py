@@ -1,51 +1,77 @@
 """
-Plotly.js figure spec generators — runs inside Pyodide (browser).
-All functions return JSON-serialisable Python dicts.
+Plotly.js figure builders for MaRQ. Runs inside Pyodide (browser); every builder
+returns a JSON-serialisable dict {data, layout}.
+
+The numbers come from pvisual_core.run_pvisual and rq_gradient_core.run_rq_gradient;
+this module only decides how they are drawn. Units: the analysis core works in the
+units of the input file, which for profilometry exports is micrometres, and the
+axes are labelled accordingly.
 """
 import json
 import math
 import numpy as np
+from scipy.ndimage import binary_erosion
 
-_BG      = "#0D1117"
-_PANEL   = "#161B22"
-_CARD    = "#21262D"
-_BORDER  = "#30363D"
-_TEXT    = "#C9D1D9"
-_TEXT2   = "#8B949E"
-_BLUE    = "#58A6FF"
-_RED     = "#F85149"
-_GREEN   = "#3FB950"
-_YELLOW  = "#D29922"
-_PURPLE  = "#A371F7"
+# ── Theme and palette ──────────────────────────────────────────────────────────
 
-# Switchable palettes. Figure builders read the module-level colour names above
-# at call time, so set_theme() before (re)building figures changes their look.
 _THEMES = {
     "dark":  dict(BG="#0D1117", PANEL="#161B22", CARD="#21262D", BORDER="#30363D",
                   TEXT="#C9D1D9", TEXT2="#8B949E", BLUE="#58A6FF", RED="#F85149",
-                  GREEN="#3FB950", YELLOW="#D29922", PURPLE="#A371F7"),
+                  GREEN="#3FB950", YELLOW="#D29922", PURPLE="#A371F7", MASK="#2BFF7A"),
     "light": dict(BG="#FFFFFF", PANEL="#FFFFFF", CARD="#EEF1F4", BORDER="#D0D7DE",
                   TEXT="#1F2328", TEXT2="#57606A", BLUE="#0969DA", RED="#CF222E",
-                  GREEN="#1A7F37", YELLOW="#9A6700", PURPLE="#8250DF"),
+                  GREEN="#1A7F37", YELLOW="#9A6700", PURPLE="#8250DF", MASK="#00A040"),
 }
+_T = dict(_THEMES["dark"])          # active theme colours
+_CS = "Viridis"                     # height colour scale (palette selector)
+EQUAL = True                        # 1:1 axis scales on the 2D plots: a µm on x is a µm on y
+
+SLOPE_CS = "Inferno"                # slope-magnitude maps and the slope error E_d
+DIFF_CS  = "RdBu"                   # signed height error E_Z
+FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
+U = "µm"
+
+Z_DTICK_3D       = 100      # Z tick spacing in the single-surface 3D view
+DEFAULT_3D_CELLS = 80_000   # 3D mesh budget when the interface passes none
+MAP_FULL_CELLS   = 300_000  # 2D comparison maps are sent at full resolution up to this size
+
 
 def set_theme(name):
-    """Switch the palette used by every figure builder. Call before (re)building."""
-    global _BG, _PANEL, _CARD, _BORDER, _TEXT, _TEXT2, _BLUE, _RED, _GREEN, _YELLOW, _PURPLE
-    t = _THEMES.get(str(name).lower(), _THEMES["dark"])
-    _BG, _PANEL, _CARD, _BORDER = t["BG"], t["PANEL"], t["CARD"], t["BORDER"]
-    _TEXT, _TEXT2 = t["TEXT"], t["TEXT2"]
-    _BLUE, _RED, _GREEN, _YELLOW, _PURPLE = t["BLUE"], t["RED"], t["GREEN"], t["YELLOW"], t["PURPLE"]
+    """Switch the colours used by every builder. Call before (re)building figures."""
+    global _T
+    _T = dict(_THEMES.get(str(name).lower(), _THEMES["dark"]))
 
-DEFAULT_3D_ROWS = 240        # 3D surface mesh detail (rows kept); higher = sharper, slower
-Z_DTICK_3D      = 100        # depth (Z) tick spacing in the 3D channel view
-COLORSCALE_3D   = "Viridis"  # default colorscale for the 3D channel surface
+
+def set_palette(name):
+    """Colour scale of every height map (2D and 3D)."""
+    global _CS
+    _CS = str(name) if name else "Viridis"
+
+
+def set_equal(flag):
+    """1:1 axis scales on every 2D plot whose two axes are lengths."""
+    global EQUAL
+    EQUAL = bool(flag)
+
+
+def _eq(xaxis, constrain=None):
+    """Axis attributes that lock the y scale to the x scale when EQUAL is on."""
+    if not EQUAL:
+        return {}
+    d = {"scaleanchor": xaxis, "scaleratio": 1}
+    if constrain:
+        d["constrain"] = constrain
+    return d
+
+
+def C(key):
+    return _T[key]
 
 
 # ── Serialisation helpers ──────────────────────────────────────────────────────
 
 def _v(x):
-    """Scalar: nan → None, numpy scalar → Python scalar."""
+    """Scalar: nan -> None, numpy scalar -> Python scalar."""
     if isinstance(x, float) and math.isnan(x):
         return None
     if isinstance(x, (np.floating, np.integer)):
@@ -54,49 +80,148 @@ def _v(x):
     return x
 
 
-def _arr(a):
-    """1-D or 2-D array → nested list with nan→None."""
+def _arr(a, nd=None):
+    """1-D or 2-D array -> nested list with nan -> None (vectorised), optionally rounded."""
     if a is None:
         return None
-    if a.ndim == 1:
-        return [_v(x) for x in a.tolist()]
-    return [[_v(x) for x in row] for row in a.tolist()]
+    a = np.asarray(a, dtype=float)
+    if nd is not None:
+        a = np.round(a, nd)
+    obj = a.astype(object)
+    obj[np.isnan(a)] = None
+    return obj.tolist()
 
 
-def _ds(a, step):
-    """Downsample 2-D array."""
-    return a[::step, ::step]
+def _step(shape, max_cells):
+    """Isotropic downsampling step that keeps a 2D grid within max_cells."""
+    n = int(shape[0]) * int(shape[1])
+    if not max_cells or n <= max_cells:
+        return 1
+    return int(math.ceil(math.sqrt(n / float(max_cells))))
 
 
-def _base():
-    return {
-        "paper_bgcolor": _PANEL,
-        "plot_bgcolor":  _BG,
-        "font":  {"color": _TEXT, "family": "monospace, monospace"},
-        "xaxis": {"gridcolor": _CARD, "linecolor": _BORDER, "zerolinecolor": _BORDER},
-        "yaxis": {"gridcolor": _CARD, "linecolor": _BORDER, "zerolinecolor": _BORDER},
-        "margin": {"t": 80, "b": 50, "l": 60, "r": 20},
-        "autosize": True,
+def _rgba(hex_colour, alpha):
+    h = hex_colour.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return f"rgba({r},{g},{b},{alpha})"
+
+
+# ── Layout helpers ─────────────────────────────────────────────────────────────
+
+def _font(size=12, color=None):
+    return {"family": FONT, "size": size, "color": color or C("TEXT")}
+
+
+def _axis(title=None, **kw):
+    d = {"gridcolor": C("CARD"), "linecolor": C("BORDER"), "zerolinecolor": C("BORDER"),
+         "tickfont": {"size": 11}}
+    if title:
+        d["title"] = {"text": title, "font": {"size": 12}}
+    d.update(kw)
+    return d
+
+
+def _base(**kw):
+    layout = {
+        "paper_bgcolor": C("PANEL"),
+        "plot_bgcolor":  C("BG"),
+        "font":          _font(12),
+        "autosize":      True,
+        "margin":        {"t": 60, "b": 55, "l": 65, "r": 30},
+        "hoverlabel":    {"font": {"family": FONT, "size": 12}},
     }
+    layout.update(kw)
+    return layout
 
 
-def _scene(domain_x):
-    return {
-        "domain": {"x": domain_x, "y": [0, 1]},
-        "xaxis": {"gridcolor": _CARD, "backgroundcolor": _BG, "showbackground": True,
-                  "gridwidth": 1},
-        "yaxis": {"gridcolor": _CARD, "backgroundcolor": _BG, "showbackground": True,
-                  "gridwidth": 1},
-        "zaxis": {"gridcolor": _CARD, "backgroundcolor": _BG, "showbackground": True,
-                  "gridwidth": 1},
-        "bgcolor": _BG,
-        "camera": {"eye": {"x": 1.4, "y": 1.1, "z": 0.9}},
-    }
+def _title(text, size=13):
+    return {"text": text, "font": {"size": size}, "x": 0.5, "xanchor": "center"}
 
 
-def _ann(text, x, y, color=None):
-    return {"text": text, "x": x, "xref": "paper", "y": y, "yref": "paper",
-            "showarrow": False, "font": {"size": 11, "color": color or _TEXT2}}
+def _legend_bottom(y=None):
+    """Horizontal legend anchored to the bottom edge of the figure (container units),
+    so it never drifts into the axis title when the window is short."""
+    return {"x": 0.5, "xanchor": "center", "orientation": "h",
+            "yref": "container", "y": 0.012, "yanchor": "bottom",
+            "bgcolor": C("CARD"), "bordercolor": C("BORDER"), "borderwidth": 1,
+            "font": {"size": 11}}
+
+
+def _cbar(text, **kw):
+    """Colourbar with a right-hand title `text`; any key in kw (including a full
+    `title` dict) overrides the defaults."""
+    d = {"thickness": 12, "len": 0.85, "outlinewidth": 0,
+         "title": {"text": text, "side": "right", "font": {"size": 11}},
+         "tickfont": {"size": 10}}
+    d.update(kw)
+    return d
+
+
+def _ann(text, x, y, xref="paper", yref="paper", size=11, color=None, **kw):
+    d = {"text": text, "x": x, "y": y, "xref": xref, "yref": yref, "showarrow": False,
+         "font": {"size": size, "color": color or C("TEXT2")}}
+    d.update(kw)
+    return d
+
+
+def _panel_title(text, xaxis, yaxis, size=12):
+    """Subplot title anchored to the subplot's own domain (cannot collide with a neighbour)."""
+    return _ann(text, 0.5, 1.0, xref=xaxis + " domain", yref=yaxis + " domain",
+                size=size, color=C("TEXT"), xanchor="center", yanchor="bottom", yshift=6)
+
+
+def _heatmap(x, y, z, cs, name, cbar=None, nd=2, **kw):
+    d = {"type": "heatmap", "x": x, "y": y, "z": _arr(z, nd), "colorscale": cs,
+         "name": name, "hoverongaps": False,
+         "hovertemplate": "x %{x:.0f}<br>y %{y:.0f}<br>%{z:.2f}<extra>" + name + "</extra>",
+         "showscale": cbar is not None}
+    if cbar is not None:
+        d["colorbar"] = cbar
+    d.update(kw)
+    return d
+
+
+# ── 3D helpers ─────────────────────────────────────────────────────────────────
+
+def _aspect3d(x_range, y_range, z_range):
+    """True proportions: the same micrometres per scene unit on X, Y and Z (no Z
+    exaggeration); the longest lateral axis is 1. The second value is kept for
+    the titles and is always 1."""
+    ref = max(float(x_range), float(y_range), 1e-9)
+    return {"x": float(x_range) / ref, "y": float(y_range) / ref,
+            "z": max(float(z_range), 1e-9) / ref}, 1
+
+
+def _camera(aspect):
+    """Oblique view from the side of the long axis, far enough to show the whole box."""
+    # The box spans ±aspect/2 about the origin; an eye about one unit away fills a
+    # wide panel with a long thin channel without noticeable perspective distortion.
+    if aspect["x"] >= aspect["y"]:
+        eye = {"x": 0.38, "y": -0.92, "z": 0.48}
+    else:
+        eye = {"x": 0.92, "y": -0.38, "z": 0.48}
+    return {"eye": eye, "up": {"x": 0, "y": 0, "z": 1}, "center": {"x": 0, "y": 0, "z": -0.02}}
+
+
+def _scene(aspect, xt, yt, zt, zdtick=None):
+    def ax(t):
+        return {"title": {"text": t, "font": {"size": 11}}, "gridcolor": C("CARD"),
+                "backgroundcolor": C("BG"), "showbackground": True, "gridwidth": 1,
+                "tickfont": {"size": 10}}
+    zax = ax(zt)
+    if zdtick:
+        zax["dtick"] = zdtick
+    return {"xaxis": ax(xt), "yaxis": ax(yt), "zaxis": zax, "bgcolor": C("BG"),
+            "camera": _camera(aspect), "aspectmode": "manual", "aspectratio": aspect}
+
+
+_LIGHTING = {"ambient": 0.6, "diffuse": 0.8, "roughness": 0.5, "specular": 0.1, "fresnel": 0.2}
+
+
+def _layout3d(title, scene):
+    return {"paper_bgcolor": C("PANEL"), "font": _font(12), "autosize": True,
+            "margin": {"t": 60, "b": 10, "l": 10, "r": 90},
+            "title": _title(title, 12), "scene": scene}
 
 
 # ── Rotation maps ──────────────────────────────────────────────────────────────
@@ -105,62 +230,44 @@ def make_rotation_fig(result):
     bg  = result["grids"]["before"]
     ag  = result["grids"]["after"]
     rot = result["rotation"]
-    S   = 2
 
-    xi_b = bg["XI"][0, ::S].tolist()
-    yi_b = bg["YI"][::S, 0].tolist()
-    zi_b = _arr(_ds(bg["ZI"], S))
-
-    xi_a = ag["XI"][0, ::S].tolist()
-    yi_a = ag["YI"][::S, 0].tolist()
-    zi_a = _arr(_ds(ag["ZI"], S))
-
-    xd   = np.array(bg["xd"])
-    yd   = np.array(bg["yd"])
+    xd, yd = np.asarray(bg["xd"], float), np.asarray(bg["yd"], float)
     ca   = rot["channel_axis"]
-    cx_  = float(xd.mean())
-    cy_  = float(yd.mean())
-    alen = float(min(xd.max() - xd.min(), yd.max() - yd.min()) * 0.22)
+    cx_, cy_ = float(xd.mean()), float(yd.mean())
+    alen = float(min(np.ptp(xd), np.ptp(yd)) * 0.22)
 
-    phi = rot["phi"]; xz = rot["xz_tilt"]; yz = rot["yz_tilt"]
-    vp  = rot["var_pct"]
+    after_txt = "After: field levelled, channel along X"
+    if rot.get("converted"):
+        after_txt += ", protrusion rotated to a depression"
 
-    layout = _base()
+    layout = _base(margin={"t": 80, "b": 55, "l": 65, "r": 80})
     layout.update({
-        "title": {"text": f"Rotation  |  φ={phi:.2f}°  XZ={xz:.2f}°  YZ={yz:.2f}°  var={vp:.1f}%",
-                  "font": {"size": 13}},
-        "autosize": True,
-        "xaxis":  {"title": "X", "domain": [0, 0.45], "gridcolor": _CARD, "linecolor": _BORDER},
-        "yaxis":  {"title": "Y", "scaleanchor": "x", "gridcolor": _CARD, "linecolor": _BORDER},
-        "xaxis2": {"title": "X (channel axis)", "domain": [0.55, 1.0], "gridcolor": _CARD,
-                   "linecolor": _BORDER, "anchor": "y2"},
-        "yaxis2": {"title": "Y (cross-channel)", "scaleanchor": "x2", "gridcolor": _CARD,
-                   "linecolor": _BORDER},
+        "title": _title(f"Levelling and alignment  |  φ = {rot['phi']:.2f}°   "
+                        f"residual tilt XZ {rot['xz_tilt']:.2f}°  YZ {rot['yz_tilt']:.2f}°   "
+                        f"axis variance {rot['var_pct']:.1f} %"),
+        "xaxis":  _axis(f"X ({U})", domain=[0.0, 0.40]),
+        "yaxis":  _axis(f"Y ({U})", scaleanchor="x"),
+        "xaxis2": _axis(f"X, channel axis ({U})", domain=[0.60, 1.0], anchor="y2"),
+        "yaxis2": _axis(f"Y, cross-channel ({U})", scaleanchor="x2", anchor="x2"),
         "annotations": [
-            _ann("BEFORE — raw",      0.22, 1.07),
-            _ann("AFTER — aligned",   0.78, 1.07),
-            {"x": cx_ + alen * ca[0], "y": cy_ + alen * ca[1],
-             "ax": cx_, "ay": cy_,
+            _panel_title("Before: raw scan", "x", "y"),
+            _panel_title(after_txt, "x2", "y2"),
+            {"x": cx_ + alen * ca[0], "y": cy_ + alen * ca[1], "ax": cx_, "ay": cy_,
              "xref": "x", "yref": "y", "axref": "x", "ayref": "y",
              "showarrow": True, "arrowhead": 3, "arrowsize": 1.2,
-             "arrowcolor": _RED, "arrowwidth": 2.5,
-             "text": "channel", "font": {"color": _RED, "size": 9}},
+             "arrowcolor": C("RED"), "arrowwidth": 2.5,
+             "text": "channel axis", "font": {"color": C("RED"), "size": 10}},
         ],
-        "margin": {"t": 90, "b": 50, "l": 60, "r": 60},
     })
 
     return {
         "data": [
-            {"type": "heatmap", "x": xi_b, "y": yi_b, "z": zi_b,
-             "colorscale": "Viridis", "showscale": True,
-             "colorbar": {"x": 0.46, "thickness": 12, "len": 0.85,
-                          "title": {"text": "Z", "side": "right"}},
-             "xaxis": "x", "yaxis": "y", "name": "Before"},
-            {"type": "heatmap", "x": xi_a, "y": yi_a, "z": zi_a,
-             "colorscale": "Viridis", "showscale": True,
-             "colorbar": {"x": 1.01, "thickness": 12, "len": 0.85,
-                          "title": {"text": "Z", "side": "right"}},
-             "xaxis": "x2", "yaxis": "y2", "name": "After"},
+            _heatmap(bg["XI"][0].tolist(), bg["YI"][:, 0].tolist(), bg["ZI"], _CS, "before",
+                     cbar=_cbar(f"Z ({U})", x=0.415, xanchor="left", tickfont={"size": 9},
+                                title={"text": f"Z ({U})", "side": "top", "font": {"size": 10}}),
+                     xaxis="x", yaxis="y"),
+            _heatmap(ag["XI"][0].tolist(), ag["YI"][:, 0].tolist(), ag["ZI"], _CS, "after",
+                     cbar=_cbar(f"Z ({U})", x=1.01, xanchor="left"), xaxis="x2", yaxis="y2"),
         ],
         "layout": layout,
     }
@@ -171,283 +278,264 @@ def make_rotation_fig(result):
 def make_channel_fig(result):
     ag  = result["grids"]["after"]
     sl  = result["slices"]
-    S   = 2
+    ch  = result["channel"]
 
-    xi = ag["XI"][0, ::S].tolist()
-    yi = ag["YI"][::S, 0].tolist()
-    zi = _arr(_ds(ag["ZI"], S))
-
-    rx  = sl["rx"].tolist();  cy  = sl["cy"].tolist();  cy_s = sl["cy_std"].tolist()
-    wx  = sl["width_x"].tolist()
-    ry  = sl["ry"].tolist();  cx  = sl["cx"].tolist();  cx_s = sl["cx_std"].tolist()
-    ly  = sl["length_y"].tolist()
+    rx = np.asarray(sl["rx"], float); cy = np.asarray(sl["cy"], float)
+    cy_s = np.asarray(sl["cy_std"], float); wx = np.asarray(sl["width_x"], float)
+    ry = np.asarray(sl["ry"], float); cx = np.asarray(sl["cx"], float)
+    cx_s = np.asarray(sl["cx_std"], float); ly = np.asarray(sl["length_y"], float)
     box = sl["crop_box"]
 
-    hi = lambda a, s: [v + 2*d for v, d in zip(a, s)]
-    lo = lambda a, s: [v - 2*d for v, d in zip(a, s)]
+    def two_lines(px1, py1, px2, py2):
+        """Two polylines in one trace, separated by a None break."""
+        return (list(px1) + [None] + list(px2), list(py1) + [None] + list(py2))
 
-    cy_hi = hi(cy, cy_s);   cy_lo = lo(cy, cy_s)
-    cx_hi = hi(cx, cx_s);   cx_lo = lo(cx, cx_s)
-    wx_hi = [c + w/2 for c, w in zip(cy, wx)]
+    wx_x, wx_y = two_lines(rx, cy - wx / 2, rx, cy + wx / 2)
+    ly_x, ly_y = two_lines(cx - ly / 2, ry, cx + ly / 2, ry)
+    box_px = [box["x_min"], box["x_max"], box["x_max"], box["x_min"], box["x_min"]]
+    box_py = [box["y_min"], box["y_min"], box["y_max"], box["y_max"], box["y_min"]]
+    edge_col = _rgba(C("TEXT"), 0.65)
+    fpct = int(round(ch.get("floor_width_frac", 0.9) * 100))
 
-    bx = box["x_min"]; bX = box["x_max"]
-    by = box["y_min"]; bY = box["y_max"]
-    box_px = [bx, bX, bX, bx, bx]
-    box_py = [by, by, bY, bY, by]
-
-    hm = {"type": "heatmap", "x": xi, "y": yi, "z": zi,
-          "colorscale": "Viridis", "showscale": False, "showlegend": False}
-
-    layout = {
-        "paper_bgcolor": _PANEL, "plot_bgcolor": _BG,
-        "font": {"color": _TEXT, "family": "monospace, monospace"},
-        "autosize": True,
-        "margin": {"t": 70, "b": 80, "l": 65, "r": 20},
-        # Left panel: X-slice detections
-        "xaxis":  {"title": "X (channel axis)", "domain": [0.00, 0.46],
-                   "gridcolor": _CARD, "linecolor": _BORDER},
-        "yaxis":  {"title": "Y (cross-channel)",
-                   "gridcolor": _CARD, "linecolor": _BORDER},
-        # Right panel: Y-slice detections
-        "xaxis2": {"title": "X (channel axis)", "domain": [0.54, 1.00],
-                   "gridcolor": _CARD, "linecolor": _BORDER, "anchor": "y2"},
-        "yaxis2": {"title": "Y (cross-channel)",
-                   "gridcolor": _CARD, "linecolor": _BORDER},
-        "showlegend": True,
-        "legend": {"x": 0.5, "y": -0.18, "xanchor": "center", "orientation": "h",
-                   "bgcolor": _CARD, "bordercolor": _BORDER, "borderwidth": 1, "font": {"size": 10}},
-        "annotations": [
-            _ann("X-slice detections — center Y & width",  0.23, 1.05),
-            _ann("Y-slice detections — center X & length", 0.77, 1.05),
-        ],
-    }
+    layout = _base(margin={"t": 60, "b": 120, "l": 65, "r": 80}, showlegend=True,
+                   legend=_legend_bottom())
+    layout["title"] = _title("Channel detection on the aligned surface  |  "
+                             f"per-slice floor edges at {fpct} % of depth, crop box for export")
+    layout["xaxis"] = _axis(f"X, channel axis ({U})")
+    layout["yaxis"] = _axis(f"Y, cross-channel ({U})", scaleanchor="x")
 
     data = [
-        # ── Left panel: X slices ─────────────────
-        {**hm, "xaxis": "x", "yaxis": "y"},
-        {"type": "scatter", "x": rx, "y": cy, "mode": "lines",
-         "line": {"color": _RED, "width": 2}, "name": "Center Y",
-         "xaxis": "x", "yaxis": "y"},
-        {"type": "scatter", "x": rx + rx[::-1], "y": cy_hi + cy_lo[::-1],
-         "fill": "toself", "fillcolor": "rgba(248,81,73,0.15)",
-         "line": {"width": 0}, "showlegend": False,
-         "xaxis": "x", "yaxis": "y", "name": "±2σ Y"},
-        {"type": "scatter", "x": rx, "y": wx_hi, "mode": "lines",
-         "line": {"color": "rgba(255,255,255,0.35)", "width": 1.5, "dash": "dash"},
-         "name": "Width edge", "xaxis": "x", "yaxis": "y"},
+        _heatmap(ag["XI"][0].tolist(), ag["YI"][:, 0].tolist(), ag["ZI"], _CS, "height",
+                 cbar=_cbar(f"Z ({U})", x=1.01, xanchor="left"), showlegend=False),
+        {"type": "scatter", "x": (list(rx) + list(rx[::-1])),
+         "y": (list(cy + 2 * cy_s) + list((cy - 2 * cy_s)[::-1])),
+         "fill": "toself", "fillcolor": _rgba(C("RED"), 0.18), "line": {"width": 0},
+         "hoverinfo": "skip", "showlegend": False, "name": "centre Y ±2 SD"},
+        {"type": "scatter", "x": rx.tolist(), "y": cy.tolist(), "mode": "lines",
+         "line": {"color": C("RED"), "width": 2}, "name": "Centre Y per longitudinal slice"},
+        {"type": "scatter", "x": wx_x, "y": wx_y, "mode": "lines",
+         "line": {"color": edge_col, "width": 1.5, "dash": "dash"},
+         "name": "Floor width edges"},
+        {"type": "scatter", "x": (list(cx + 2 * cx_s) + list((cx - 2 * cx_s)[::-1])),
+         "y": (list(ry) + list(ry[::-1])),
+         "fill": "toself", "fillcolor": _rgba(C("BLUE"), 0.18), "line": {"width": 0},
+         "hoverinfo": "skip", "showlegend": False, "name": "centre X ±2 SD"},
+        {"type": "scatter", "x": cx.tolist(), "y": ry.tolist(), "mode": "lines",
+         "line": {"color": C("BLUE"), "width": 2}, "name": "Centre X per transverse slice"},
+        {"type": "scatter", "x": ly_x, "y": ly_y, "mode": "lines",
+         "line": {"color": edge_col, "width": 1.5, "dash": "dot"},
+         "name": "Floor length edges"},
         {"type": "scatter", "x": box_px, "y": box_py, "mode": "lines",
-         "line": {"color": _YELLOW, "width": 2}, "name": "Crop box",
-         "xaxis": "x", "yaxis": "y"},
-
-        # ── Right panel: Y slices ────────────────
-        {**hm, "xaxis": "x2", "yaxis": "y2"},
-        {"type": "scatter", "x": cx, "y": ry, "mode": "lines",
-         "line": {"color": _BLUE, "width": 2}, "name": "Center X",
-         "xaxis": "x2", "yaxis": "y2"},
-        {"type": "scatter",
-         "x": cx_hi + cx_lo[::-1], "y": ry + ry[::-1],
-         "fill": "toself", "fillcolor": "rgba(88,166,255,0.15)",
-         "line": {"width": 0}, "showlegend": False,
-         "xaxis": "x2", "yaxis": "y2", "name": "±2σ X"},
-        {"type": "scatter", "x": [c + l/2 for c, l in zip(cx, ly)], "y": ry,
-         "mode": "lines",
-         "line": {"color": "rgba(255,255,255,0.35)", "width": 1.5, "dash": "dot"},
-         "name": "Length edge", "xaxis": "x2", "yaxis": "y2"},
-        {"type": "scatter", "x": box_px, "y": box_py, "mode": "lines",
-         "line": {"color": _YELLOW, "width": 2}, "showlegend": False,
-         "name": "Crop box (Y)", "xaxis": "x2", "yaxis": "y2"},
+         "line": {"color": C("YELLOW"), "width": 2}, "name": "Crop box (exported channel)"},
     ]
-
     return {"data": data, "layout": layout}
 
 
 # ── Profile plots ──────────────────────────────────────────────────────────────
 
-def _profile_base():
-    return {
-        "paper_bgcolor": _PANEL, "plot_bgcolor": _BG,
-        "font": {"color": _TEXT, "family": "monospace, monospace"},
-        "autosize": True,
-        "margin": {"t": 70, "b": 80, "l": 65, "r": 30},
-        "showlegend": True,
-        "legend": {"x": 0.5, "y": -0.18, "xanchor": "center", "orientation": "h",
-                   "bgcolor": _CARD, "bordercolor": _BORDER, "borderwidth": 1,
-                   "font": {"size": 10}},
-    }
+def _band(x, lo, hi, colour, name):
+    return {"type": "scatter", "x": list(x) + list(x[::-1]), "y": list(hi) + list(lo[::-1]),
+            "fill": "toself", "fillcolor": _rgba(colour, 0.18), "line": {"width": 0},
+            "hoverinfo": "skip", "showlegend": False, "name": name}
 
 
 def make_profile_ycenter_fig(result):
-    sl   = result["slices"]
-    ch   = result["channel"]
-    rx   = sl["rx"].tolist()
-    cy   = sl["cy"].tolist()
-    cy_s = sl["cy_std"].tolist()
-    cY   = ch["center_y"]
-    cY_c = ch["center_y_conf"]
+    sl, ch = result["slices"], result["channel"]
+    rx = np.asarray(sl["rx"], float); cy = np.asarray(sl["cy"], float)
+    cy_s = np.asarray(sl["cy_std"], float)
+    cY, cY_c = ch["center_y"], ch["center_y_conf"]
 
-    hi  = [y + s for y, s in zip(cy, cy_s)]
-    lo  = [y - s for y, s in zip(cy, cy_s)]
-    bx  = rx + rx[::-1]
-    by  = hi + lo[::-1]
-
-    layout = {**_profile_base()}
-    layout["title"] = {"text": f"Center Y  |  mean={cY:.2f} ± {cY_c:.2f}",
-                        "font": {"size": 12}}
-    layout["xaxis"] = {"title": "X (channel axis)", "gridcolor": _CARD,
-                        "linecolor": _BORDER}
-    layout["yaxis"] = {"title": "Center Y", "gridcolor": _CARD,
-                        "linecolor": _BORDER, "scaleanchor": "x", "scaleratio": 1}
-
+    layout = _base(showlegend=True, legend=_legend_bottom(), margin={"t": 60, "b": 100, "l": 70, "r": 30})
+    layout["title"] = _title(f"Channel centre line  |  mean Y = {cY:.2f} {U}, "
+                             f"SD over the central 80 % of slices {cY_c:.2f} {U}")
+    layout["xaxis"] = _axis(f"X, position along the channel ({U})")
+    layout["yaxis"] = _axis(f"Centre Y ({U})", **_eq("x"))
     return {
         "data": [
-            {"type": "scatter", "x": rx, "y": cy, "mode": "lines",
-             "line": {"color": _BLUE, "width": 2}, "name": "Center Y"},
-            {"type": "scatter", "x": bx, "y": by, "fill": "toself",
-             "fillcolor": "rgba(88,166,255,0.18)", "line": {"width": 0},
-             "showlegend": False},
-            {"type": "scatter", "x": [rx[0], rx[-1]], "y": [cY, cY], "mode": "lines",
-             "line": {"color": _RED, "width": 1.2, "dash": "dash"},
-             "name": f"mean {cY:.2f}"},
+            _band(rx, cy - cy_s, cy + cy_s, C("BLUE"), "±1 SD within slice"),
+            {"type": "scatter", "x": rx.tolist(), "y": cy.tolist(), "mode": "lines",
+             "line": {"color": C("BLUE"), "width": 2}, "name": "Centre Y per slice (band: ±1 SD within the slice)"},
+            {"type": "scatter", "x": [float(rx[0]), float(rx[-1])], "y": [cY, cY], "mode": "lines",
+             "line": {"color": C("RED"), "width": 1.2, "dash": "dash"}, "name": f"Mean {cY:.2f} {U}"},
         ],
         "layout": layout,
     }
 
 
 def make_profile_xcenter_fig(result):
-    sl   = result["slices"]
-    ch   = result["channel"]
-    ry   = sl["ry"].tolist()
-    cx   = sl["cx"].tolist()
-    cx_s = sl["cx_std"].tolist()
-    cX   = ch["center_x"]
-    cX_c = ch["center_x_conf"]
+    sl, ch = result["slices"], result["channel"]
+    ry = np.asarray(sl["ry"], float); cx = np.asarray(sl["cx"], float)
+    cx_s = np.asarray(sl["cx_std"], float)
+    cX, cX_c = ch["center_x"], ch["center_x_conf"]
 
-    hi  = [c + s for c, s in zip(cx, cx_s)]
-    lo  = [c - s for c, s in zip(cx, cx_s)]
-    bx  = hi + lo[::-1]
-    by  = ry + ry[::-1]
-
-    layout = {**_profile_base()}
-    layout["title"] = {"text": f"Center X  |  mean={cX:.2f} ± {cX_c:.2f}",
-                        "font": {"size": 12}}
-    layout["xaxis"] = {"title": "Center X", "gridcolor": _CARD, "linecolor": _BORDER}
-    layout["yaxis"] = {"title": "Y (cross-channel)", "gridcolor": _CARD,
-                        "linecolor": _BORDER, "scaleanchor": "x", "scaleratio": 1}
-
+    layout = _base(showlegend=True, legend=_legend_bottom(), margin={"t": 60, "b": 100, "l": 70, "r": 30})
+    layout["title"] = _title(f"Longitudinal centre per transverse slice  |  mean X = {cX:.2f} {U}, "
+                             f"SD {cX_c:.2f} {U}")
+    layout["xaxis"] = _axis(f"Y, position across the channel ({U})")
+    layout["yaxis"] = _axis(f"Centre X ({U})", **_eq("x"))
     return {
         "data": [
-            {"type": "scatter", "x": cx, "y": ry, "mode": "lines",
-             "line": {"color": _GREEN, "width": 2}, "name": "Center X"},
-            {"type": "scatter", "x": bx, "y": by, "fill": "toself",
-             "fillcolor": "rgba(63,185,80,0.18)", "line": {"width": 0},
-             "showlegend": False},
-            {"type": "scatter", "x": [cX, cX], "y": [ry[0], ry[-1]], "mode": "lines",
-             "line": {"color": _RED, "width": 1.2, "dash": "dash"},
-             "name": f"mean {cX:.2f}"},
+            _band(ry, cx - cx_s, cx + cx_s, C("GREEN"), "±1 SD within slice"),
+            {"type": "scatter", "x": ry.tolist(), "y": cx.tolist(), "mode": "lines",
+             "line": {"color": C("GREEN"), "width": 2}, "name": "Centre X per slice (band: ±1 SD within the slice)"},
+            {"type": "scatter", "x": [float(ry[0]), float(ry[-1])], "y": [cX, cX], "mode": "lines",
+             "line": {"color": C("RED"), "width": 1.2, "dash": "dash"}, "name": f"Mean {cX:.2f} {U}"},
         ],
         "layout": layout,
     }
 
 
 def make_profile_widthlength_fig(result):
-    sl   = result["slices"]
-    ch   = result["channel"]
-    rx   = sl["rx"].tolist()
-    wx   = sl["width_x"].tolist()
-    wx_s = sl["width_x_std"].tolist()
-    ry   = sl["ry"].tolist()
-    ly   = sl["length_y"].tolist()
-    ly_s = sl["length_y_std"].tolist()
-    mW   = ch["mean_width"];  mW_c = ch["mean_width_conf"]
-    mL   = ch["mean_length"]; mL_c = ch["mean_length_conf"]
+    sl, ch = result["slices"], result["channel"]
+    rx = np.asarray(sl["rx"], float); wx = np.asarray(sl["width_x"], float)
+    wx_s = np.asarray(sl["width_x_std"], float)
+    ry = np.asarray(sl["ry"], float); ly = np.asarray(sl["length_y"], float)
+    ly_s = np.asarray(sl["length_y_std"], float)
+    mW, mW_c = ch["mean_width"], ch["mean_width_conf"]
+    mL, mL_c = ch["mean_length"], ch["mean_length_conf"]
+    fpct = int(round(ch.get("floor_width_frac", 0.9) * 100))
 
-    bx_w = rx + rx[::-1]
-    by_w = ([w + s for w, s in zip(wx, wx_s)] +
-            [w - s for w, s in zip(wx, wx_s)][::-1])
-
-    layout = {**_profile_base()}
-    layout["margin"] = {"t": 70, "b": 80, "l": 65, "r": 65}
-    layout["title"] = {
-        "text": f"Width & Length  |  W={mW:.1f}±{mW_c:.1f}  L={mL:.1f}±{mL_c:.1f}",
-        "font": {"size": 12}}
-    layout["xaxis"] = {"title": "Position along axis", "gridcolor": _CARD,
-                        "linecolor": _BORDER}
-    layout["yaxis"] = {"title": "Width", "gridcolor": _CARD, "linecolor": _BORDER,
-                        "titlefont": {"color": _YELLOW}, "tickfont": {"color": _YELLOW},
-                        "scaleanchor": "x", "scaleratio": 1}
-    layout["yaxis2"] = {"title": "Length", "gridcolor": _CARD, "linecolor": _BORDER,
-                         "overlaying": "y", "side": "right",
-                         "titlefont": {"color": _PURPLE}, "tickfont": {"color": _PURPLE}}
-
+    layout = _base(showlegend=True, legend=_legend_bottom(),
+                   margin={"t": 60, "b": 115, "l": 70, "r": 30})
+    layout["title"] = _title(f"Floor width and length per slice at {fpct} % of depth  |  "
+                             f"W = {mW:.1f} ± {mW_c:.1f} {U}   L = {mL:.1f} ± {mL_c:.1f} {U}")
+    layout["xaxis"]  = _axis(f"X, position along the channel ({U})", anchor="y")
+    layout["yaxis"]  = _axis(f"Floor width ({U})", domain=[0.6, 1.0], **_eq("x"))
+    layout["xaxis2"] = _axis(f"Y, position across the channel ({U})", anchor="y2")
+    layout["yaxis2"] = _axis(f"Floor length ({U})" + (" (free scale)" if EQUAL else ""),
+                             domain=[0.0, 0.4], anchor="x2")
     return {
         "data": [
-            {"type": "scatter", "x": rx, "y": wx, "mode": "lines",
-             "line": {"color": _YELLOW, "width": 2}, "name": "Width"},
-            {"type": "scatter", "x": bx_w, "y": by_w, "fill": "toself",
-             "fillcolor": "rgba(210,153,34,0.18)", "line": {"width": 0},
-             "showlegend": False},
-            {"type": "scatter", "x": ry, "y": ly, "mode": "lines",
-             "line": {"color": _PURPLE, "width": 2, "dash": "dashdot"},
-             "name": "Length", "yaxis": "y2"},
+            _band(rx, wx - wx_s, wx + wx_s, C("YELLOW"), "width ±1 SD"),
+            {"type": "scatter", "x": rx.tolist(), "y": wx.tolist(), "mode": "lines",
+             "line": {"color": C("YELLOW"), "width": 2}, "name": "Floor width per longitudinal slice"},
+            {"type": "scatter", "x": [float(rx[0]), float(rx[-1])], "y": [mW, mW], "mode": "lines",
+             "line": {"color": C("RED"), "width": 1.2, "dash": "dash"}, "name": f"Width from the mean cross-section {mW:.1f} {U}"},
+            {**_band(ry, ly - ly_s, ly + ly_s, C("PURPLE"), "length ±1 SD"), "xaxis": "x2", "yaxis": "y2"},
+            {"type": "scatter", "x": ry.tolist(), "y": ly.tolist(), "mode": "lines",
+             "line": {"color": C("PURPLE"), "width": 2}, "name": "Floor length per transverse slice",
+             "xaxis": "x2", "yaxis": "y2"},
+            {"type": "scatter", "x": [float(ry[0]), float(ry[-1])], "y": [mL, mL], "mode": "lines",
+             "line": {"color": C("RED"), "width": 1.2, "dash": "dot"}, "name": f"Length from the mean profile {mL:.1f} {U}",
+             "xaxis": "x2", "yaxis": "y2"},
         ],
         "layout": layout,
     }
 
 
+# ── Mean cross-section and per-slice depth ─────────────────────────────────────
+
+def make_cross_section_fig(result):
+    """Top: the mean cross-section on which the reported widths are measured, with the
+    field, floor level, floor-width level and opening level and the detected edges.
+    Bottom: the local depth of every longitudinal slice against the mean depth."""
+    pr, ch, sl = result["profile"], result["channel"], result["slices"]
+    yc, zb = np.asarray(pr["yc"], float), np.asarray(pr["zb"], float)
+    depth = float(ch["mean_depth"]) if ch["mean_depth"] is not None else float("nan")
+    fl, ft, ot = pr["floor_level"], pr["floor_threshold"], pr["open_threshold"]
+    fe = (pr["floor_edge_left"], pr["floor_edge_right"])
+    oe = (pr["open_edge_left"], pr["open_edge_right"])
+    fpct = int(round(-ft / depth * 100)) if depth and np.isfinite(ft) else 90
+    opct = int(round(-ot / depth * 100)) if depth and np.isfinite(ot) else 10
+
+    # focus on the channel: opening width plus some field on each side
+    if all(np.isfinite(v) for v in oe):
+        half = (oe[1] - oe[0]) / 2; cen = (oe[0] + oe[1]) / 2
+        xr = [max(float(yc.min()), cen - 1.7 * half), min(float(yc.max()), cen + 1.7 * half)]
+    else:
+        xr = [float(yc.min()), float(yc.max())]
+    x0, x1 = float(yc.min()), float(yc.max())
+
+    pos = np.asarray(sl["depth_pos"], float); dep = np.asarray(sl["depth_x"], float)
+    valid = np.asarray(sl["depth_valid"], bool)
+    dsd = ch.get("channel_depth_slice_std_central80")
+    dsd_txt = f", SD over the central 80 % of slices {dsd:.2f} {U}" if dsd is not None and np.isfinite(dsd) else ""
+
+    def hline(y, colour, dash, name, x_from=x0, x_to=x1):
+        return {"type": "scatter", "x": [x_from, x_to], "y": [y, y], "mode": "lines",
+                "line": {"color": colour, "width": 1.3, "dash": dash}, "name": name, "hoverinfo": "name"}
+
+    data = [
+        {"type": "scatter", "x": yc.tolist(), "y": zb.tolist(), "mode": "lines",
+         "line": {"color": C("BLUE"), "width": 2.2}, "name": "Mean cross-section", "showlegend": False,
+         "hovertemplate": "y %{x:.1f}<br>z %{y:.2f}<extra></extra>"},
+        {**hline(0.0, C("TEXT2"), "dot", "Field, z = 0"), "showlegend": False},
+        {**hline(fl, C("GREEN"), "dash", f"Floor level {fl:.1f} {U}"), "showlegend": False},
+        {**hline(ft, C("YELLOW"), "dot", f"Floor-width level ({fpct} % of depth)"), "showlegend": False},
+        {**hline(ot, C("PURPLE"), "dot", f"Opening level ({opct} % of depth)"), "showlegend": False},
+    ]
+    if all(np.isfinite(v) for v in fe):
+        data.append({"type": "scatter", "x": list(fe), "y": [ft, ft], "mode": "markers",
+                     "marker": {"color": C("YELLOW"), "size": 9, "symbol": "diamond"},
+                     "name": f"Floor width {ch['floor_width']:.1f} {U} ({fpct} % of depth)", "hoverinfo": "name+x"})
+    if all(np.isfinite(v) for v in oe):
+        data.append({"type": "scatter", "x": list(oe), "y": [ot, ot], "mode": "markers",
+                     "marker": {"color": C("PURPLE"), "size": 9, "symbol": "diamond"},
+                     "name": f"Opening width {ch['opening_width']:.1f} {U} ({opct} % of depth)", "hoverinfo": "name+x"})
+    if valid.any():
+        data.append({"type": "scatter", "x": pos[valid].tolist(), "y": dep[valid].tolist(),
+                     "mode": "lines+markers", "marker": {"size": 4}, "line": {"color": C("GREEN"), "width": 1.6},
+                     "name": "Local depth per slice"
+                             + (f" (SD, central 80 %: {dsd:.2f} {U})" if dsd is not None and np.isfinite(dsd) else ""),
+                     "xaxis": "x2", "yaxis": "y2",
+                     "hovertemplate": "x %{x:.0f}<br>depth %{y:.2f}<extra></extra>"})
+        data.append({"type": "scatter", "x": [float(pos.min()), float(pos.max())], "y": [depth, depth],
+                     "mode": "lines", "line": {"color": C("RED"), "width": 1.2, "dash": "dash"},
+                     "name": f"Mean depth {depth:.1f} {U}", "xaxis": "x2", "yaxis": "y2", "hoverinfo": "name",
+                     "showlegend": False})
+    if (~valid).any():
+        data.append({"type": "scatter", "x": pos[~valid].tolist(), "y": [depth] * int((~valid).sum()),
+                     "mode": "markers", "marker": {"symbol": "x", "size": 6, "color": C("TEXT2")},
+                     "name": "Slice without a valid floor", "xaxis": "x2", "yaxis": "y2", "hoverinfo": "x+name",
+                     "showlegend": False})
+
+    draft = ch.get("draft_angle_deg")
+    layout = _base(showlegend=True, legend={**_legend_bottom(), "font": {"size": 10}},
+                   margin={"t": 60, "b": 140, "l": 70, "r": 30})
+    layout["title"] = _title(f"Mean cross-section and local depth  |  floor width {ch['floor_width']:.1f} {U}, "
+                             f"opening {ch['opening_width']:.1f} {U}, depth {depth:.1f} {U}"
+                             + (f", draft {draft:.1f}°" if draft is not None and np.isfinite(draft) else ""))
+    layout["xaxis"]  = _axis(f"Y, across the channel ({U})", range=xr, anchor="y")
+    layout["yaxis"]  = _axis(f"Z ({U})", domain=[0.58, 1.0], **_eq("x"))
+    layout["xaxis2"] = _axis(f"X, along the channel ({U})", anchor="y2")
+    layout["yaxis2"] = _axis(f"Local depth ({U})", domain=[0.0, 0.36], anchor="x2", **_eq("x2"))
+    return {"data": data, "layout": layout}
+
+
 # ── 3D channel view ────────────────────────────────────────────────────────────
 
-def make_3d_fig(result, max_rows=None, colorscale=None):
+def make_3d_fig(result, max_cells=None, colorscale=None):
     crop = result["grids"]["crop"]
     ch   = result["channel"]
-    ZI   = crop["ZI"]
-    rows = int(max_rows) if max_rows else DEFAULT_3D_ROWS
-    S    = max(1, ZI.shape[0] // max(1, rows))
-    cs   = colorscale or COLORSCALE_3D
+    ZI   = np.asarray(crop["ZI"], float)
+    S    = _step(ZI.shape, max_cells or DEFAULT_3D_CELLS)
+    cs   = colorscale or _CS
 
     x_range = float(crop["x_max"] - crop["x_min"])
     y_range = float(crop["y_max"] - crop["y_min"])
-    z_range = float(np.nanmax(ZI) - np.nanmin(ZI))
+    zf = ZI[np.isfinite(ZI)]
+    z_range = float(zf.max() - zf.min()) if zf.size else 1.0
+    aspect, zex = _aspect3d(x_range, y_range, z_range)
 
-    # Normalise so Y=1, scale X and Z proportionally
-    xy_ratio = (x_range / y_range) if y_range > 0 else 2.0
-    z_ratio  = (z_range / y_range) if y_range > 0 else 0.3
-    z_ratio  = max(0.05, min(z_ratio, 0.8))  # keep Z visible but not overwhelming
+    xi_c = np.linspace(crop["x_min"], crop["x_max"], ZI.shape[1])[::S]
+    yi_c = np.linspace(crop["y_min"], crop["y_max"], ZI.shape[0])[::S]
 
-    xi_c = np.linspace(crop["x_min"], crop["x_max"], ZI.shape[1])
-    yi_c = np.linspace(crop["y_min"], crop["y_max"], ZI.shape[0])
-    XI_c, YI_c = np.meshgrid(xi_c, yi_c)
+    title = (f"Cropped channel  |  floor width {ch['mean_width']:.1f} {U}   "
+             f"length {ch['mean_length']:.1f} {U}   depth {ch['mean_depth']:.1f} {U}")
+    if zex > 1:
+        title += f"   (Z exaggerated ×{zex})"
 
     return {
         "data": [
-            {"type": "surface",
-             "x": XI_c[::S, ::S].tolist(),
-             "y": YI_c[::S, ::S].tolist(),
-             "z": _arr(_ds(ZI, S)),
-             "colorscale": cs, "showscale": True,
-             "lighting": {"ambient": 0.55, "diffuse": 0.85,
-                          "roughness": 0.3, "specular": 0.2},
-             "colorbar": {"thickness": 14, "title": {"text": "Z", "side": "right"}},
-             "name": "Channel"},
+            {"type": "surface", "x": xi_c.tolist(), "y": yi_c.tolist(),
+             "z": _arr(ZI[::S, ::S], 2), "colorscale": cs, "showscale": True,
+             "lighting": _LIGHTING, "name": "channel",
+             "hovertemplate": "x %{x:.0f}<br>y %{y:.0f}<br>z %{z:.1f}<extra></extra>",
+             "colorbar": _cbar(f"Z ({U})", thickness=14)},
         ],
-        "layout": {
-            "paper_bgcolor": _PANEL,
-            "font": {"color": _TEXT},
-            "autosize": True,
-            "margin": {"t": 60, "b": 10, "l": 10, "r": 80},
-            "title": {"text": (f"Cropped Channel 3D  |  "
-                               f"width={ch['mean_width']:.1f}  "
-                               f"length={ch['mean_length']:.1f}  "
-                               f"depth={ch['mean_depth']:.1f}"),
-                      "font": {"size": 12}},
-            "scene": {
-                **_scene([0, 1]),
-                "aspectmode": "manual",
-                "aspectratio": {"x": xy_ratio, "y": 1.0, "z": z_ratio},
-                "xaxis": {**_scene([0, 1])["xaxis"], "title": "X (channel axis)"},
-                "yaxis": {**_scene([0, 1])["yaxis"], "title": "Y (cross-channel)"},
-                "zaxis": {**_scene([0, 1])["zaxis"], "title": "Z", "dtick": Z_DTICK_3D},
-            },
-        },
+        "layout": _layout3d(title, _scene(aspect, f"X, channel axis ({U})",
+                                          f"Y, cross-channel ({U})", f"Z ({U})",
+                                          zdtick=Z_DTICK_3D)),
     }
 
 
@@ -456,266 +544,310 @@ def make_3d_fig(result, max_rows=None, colorscale=None):
 def make_roughness_fig(result):
     rgh  = result["roughness"]
     vg   = rgh["vis_grid"]
-    ZI   = vg["ZI"]
-    S    = max(1, ZI.shape[0] // 160)
-
+    ZI   = np.asarray(vg["ZI"], float)
     xi_c = np.linspace(float(vg["x_min"]), float(vg["x_max"]), ZI.shape[1])
     yi_c = np.linspace(float(vg["y_min"]), float(vg["y_max"]), ZI.shape[0])
 
     def _legend(r, name):
         if r is None:
             return f"{name}: no data"
-        return f"{name}  Sa={r['Sa']:.3f}  Sq={r['Sq']:.3f}  Sz={r['Sz']:.3f}"
+        return f"{name}   Sa {r['Sa']:.2f}   Sq {r['Sq']:.2f}   Sz {r['Sz']:.1f} {U}"
 
     def _hover(r, name):
         if r is None:
-            return f"<b>{name}</b><br>No data"
-        return (f"<b>{name}</b><br>"
-                f"Sa = {r['Sa']:.4f}<br>"
-                f"Sq = {r['Sq']:.4f}<br>"
-                f"Sz = {r['Sz']:.4f}<br>"
-                f"Ssk = {r['Ssk']:.3f}<br>"
-                f"Sku = {r['Sku']:.3f}<br>"
-                f"n = {r['n_pts']}<extra></extra>")
+            return f"<b>{name}</b><br>No data<extra></extra>"
+        return (f"<b>{name}</b><br>Sa = {r['Sa']:.3f} {U}<br>Sq = {r['Sq']:.3f} {U}<br>"
+                f"Sz = {r['Sz']:.2f} {U}<br>Ssk = {r['Ssk']:.3f}<br>Sku = {r['Sku']:.3f}<br>"
+                f"n = {r['n_pts']:,}<extra></extra>")
 
-    def _rect(reg, color, fill_rgba, name, rgh_entry):
+    def _rect(reg, colour, name, entry):
         rx = [reg["x_min"], reg["x_max"], reg["x_max"], reg["x_min"], reg["x_min"]]
         ry = [reg["y_min"], reg["y_min"], reg["y_max"], reg["y_max"], reg["y_min"]]
-        return {
-            "type": "scatter", "x": rx, "y": ry,
-            "mode": "lines", "fill": "toself",
-            "fillcolor": fill_rgba,
-            "line": {"color": color, "width": 2},
-            "name": _legend(rgh_entry, name),
-            "hovertemplate": _hover(rgh_entry, name),
-        }
+        return {"type": "scatter", "x": rx, "y": ry, "mode": "lines", "fill": "toself",
+                "fillcolor": _rgba(colour, 0.2), "line": {"color": colour, "width": 2},
+                "name": _legend(entry, name), "hovertemplate": _hover(entry, name)}
 
     data = [
-        {"type": "heatmap",
-         "x": xi_c[::S].tolist(), "y": yi_c[::S].tolist(),
-         "z": _arr(_ds(ZI, S)),
-         "colorscale": "Viridis", "showscale": True, "showlegend": False,
-         "colorbar": {"thickness": 14, "title": {"text": "Z", "side": "right"}}},
-        _rect(rgh["regions"]["floor"],
-              _GREEN, "rgba(63,185,80,0.20)",   "Floor",         rgh["floor"]),
-        _rect(rgh["regions"]["surf_left"],
-              _BLUE,  "rgba(88,166,255,0.20)",  "Surface Left",  rgh["surf_left"]),
-        _rect(rgh["regions"]["surf_right"],
-              _RED,   "rgba(248,81,73,0.20)",   "Surface Right", rgh["surf_right"]),
+        _heatmap(xi_c.tolist(), yi_c.tolist(), ZI, _CS, "height",
+                 cbar=_cbar(f"Z ({U})", x=1.01, xanchor="left"), showlegend=False),
+        _rect(rgh["regions"]["floor"],      C("GREEN"), "Floor",       rgh["floor"]),
+        _rect(rgh["regions"]["surf_left"],  C("BLUE"),  "Field left",  rgh["surf_left"]),
+        _rect(rgh["regions"]["surf_right"], C("RED"),   "Field right", rgh["surf_right"]),
     ]
-
-    return {
-        "data": data,
-        "layout": {
-            "paper_bgcolor": _PANEL, "plot_bgcolor": _BG,
-            "font": {"color": _TEXT, "family": "monospace, monospace"},
-            "autosize": True,
-            "margin": {"t": 70, "b": 160, "l": 65, "r": 80},
-            "title": {"text": "Surface Roughness — ISO 25178 Evaluation Areas",
-                      "font": {"size": 13}},
-            "xaxis": {"title": "X (channel axis)", "gridcolor": _CARD,
-                      "linecolor": _BORDER, "scaleanchor": "y", "scaleratio": 1},
-            "yaxis": {"title": "Y (cross-channel)", "gridcolor": _CARD,
-                      "linecolor": _BORDER},
-            "showlegend": True,
-            "legend": {"x": 0.5, "y": -0.22, "xanchor": "center", "orientation": "h",
-                       "bgcolor": _CARD, "bordercolor": _BORDER, "borderwidth": 1,
-                       "font": {"size": 9}},
-        },
-    }
+    layout = _base(margin={"t": 60, "b": 125, "l": 65, "r": 80}, showlegend=True,
+                   legend={**_legend_bottom(), "font": {"size": 10}})
+    layout["title"] = _title("Roughness evaluation areas (ISO 25178, plane-removed)")
+    layout["xaxis"] = _axis(f"X, channel axis ({U})")
+    layout["yaxis"] = _axis(f"Y, cross-channel ({U})", scaleanchor="x")
+    return {"data": data, "layout": layout}
 
 
-# ── Gradient 3D surfaces ───────────────────────────────────────────────────────
+# ── Paired comparison: 3D surfaces ─────────────────────────────────────────────
 
-def _gradient_3d_aspect(result):
-    """Real-world aspect ratios so X:Y:Z axes share the same grid unit size."""
+def _surface_fig(result, which, max_cells=None):
     g   = result["grids"]
     ext = result["extents"]
-    x_range = ext["x_max"] - ext["x_min"]
-    y_range = ext["y_max"] - ext["y_min"]
-    z1f = g["ZI1"][np.isfinite(g["ZI1"])]
-    z2f = g["ZI2"][np.isfinite(g["ZI2"])]
-    both = np.concatenate([a for a in [z1f, z2f] if len(a)])
-    z_range = float(both.max() - both.min()) if len(both) else 1.0
-    ref = max(x_range, y_range, 1.0)
-    return {"x": x_range / ref, "y": y_range / ref,
-            "z": max(0.05, min(z_range / ref, 1.0))}
+    m   = result["metrics"]
+    ZA, ZB = np.asarray(g["ZI1"], float), np.asarray(g["ZI2"], float)
+    zf = np.concatenate([ZA[np.isfinite(ZA)], ZB[np.isfinite(ZB)]])
+    z_range = float(zf.max() - zf.min()) if zf.size else 1.0
+    aspect, zex = _aspect3d(ext["x_max"] - ext["x_min"], ext["y_max"] - ext["y_min"], z_range)
+    S = _step(ZA.shape, max_cells or DEFAULT_3D_CELLS)
+    x = g["XI"][0, ::S].tolist(); y = g["YI"][::S, 0].tolist()
+    exag = f"   (Z exaggerated ×{zex})" if zex > 1 else ""
+
+    if which == "A":
+        trace = {"z": _arr(ZA[::S, ::S], 2), "colorscale": _CS, "name": "surface A",
+                 "colorbar": _cbar(f"Z ({U})", thickness=14)}
+        title = "Surface A, the reference: height" + exag
+    elif which == "B":
+        trace = {"z": _arr(ZB[::S, ::S], 2), "colorscale": _CS, "name": "surface B",
+                 "colorbar": _cbar(f"Z ({U})", thickness=14)}
+        title = ("Surface B, the compared surface: height" +
+                 (", rotated 180° about Z to match A" if m.get("z_flip") else "") + exag)
+    else:
+        ED = np.asarray(g["error_map"], float)
+        ed_hi = float(np.nanpercentile(ED, 99)) if np.isfinite(ED).any() else 1.0
+        trace = {"z": _arr(ZB[::S, ::S], 2), "surfacecolor": _arr(ED[::S, ::S], 4),
+                 "colorscale": SLOPE_CS, "cmin": 0, "cmax": ed_hi, "name": "E_d",
+                 "colorbar": _cbar("E_d (µm/µm)", thickness=14)}
+        title = "Slope-magnitude error E_d = | |∇Z_B| − |∇Z_A| | drawn on surface B" + exag
+
+    trace.update({"type": "surface", "x": x, "y": y, "showscale": True, "lighting": _LIGHTING,
+                  "hovertemplate": "x %{x:.0f}<br>y %{y:.0f}<br>z %{z:.1f}<extra></extra>"})
+    return {"data": [trace],
+            "layout": _layout3d(title, _scene(aspect, f"X ({U})", f"Y ({U})", f"Z ({U})"))}
 
 
-def _grad3d_scene(ratio):
-    return {
-        "xaxis": {"gridcolor": _CARD, "backgroundcolor": _BG,
-                  "showbackground": True, "gridwidth": 1, "title": "X"},
-        "yaxis": {"gridcolor": _CARD, "backgroundcolor": _BG,
-                  "showbackground": True, "gridwidth": 1, "title": "Y"},
-        "zaxis": {"gridcolor": _CARD, "backgroundcolor": _BG,
-                  "showbackground": True, "gridwidth": 1, "title": "Z"},
-        "bgcolor": _BG,
-        "camera": {"eye": {"x": 1.4, "y": 1.1, "z": 0.9}},
-        "aspectmode": "manual",
-        "aspectratio": ratio,
-    }
+def make_gradient_3d_cloud1_fig(result, max_cells=None):
+    return _surface_fig(result, "A", max_cells)
 
 
-def _grad3d_layout(title, ratio):
-    return {
-        "paper_bgcolor": _PANEL,
-        "font": {"color": _TEXT},
-        "autosize": True,
-        "margin": {"t": 60, "b": 10, "l": 10, "r": 80},
-        "title": {"text": title, "font": {"size": 12}},
-        "scene": _grad3d_scene(ratio),
-    }
+def make_gradient_3d_cloud2_fig(result, max_cells=None):
+    return _surface_fig(result, "B", max_cells)
 
 
-def make_gradient_3d_cloud1_fig(result):
-    g     = result["grids"]
-    ratio = _gradient_3d_aspect(result)
-    S     = max(1, g["ZI1"].shape[0] // 120)
-    Xm = g["XI"][::S, ::S].tolist()
-    Ym = g["YI"][::S, ::S].tolist()
-    return {
-        "data": [{"type": "surface", "x": Xm, "y": Ym,
-                  "z": _arr(_ds(g["ZI1"], S)),
-                  "colorscale": "Viridis", "showscale": True, "name": "Cloud 1",
-                  "colorbar": {"thickness": 14,
-                               "title": {"text": "Z", "side": "right"}}}],
-        "layout": _grad3d_layout("Cloud 1 — Surface", ratio),
-    }
+def make_gradient_3d_error_fig(result, max_cells=None):
+    return _surface_fig(result, "E", max_cells)
 
 
-def make_gradient_3d_cloud2_fig(result):
-    g     = result["grids"]
-    ratio = _gradient_3d_aspect(result)
-    S     = max(1, g["ZI2"].shape[0] // 120)
-    Xm = g["XI"][::S, ::S].tolist()
-    Ym = g["YI"][::S, ::S].tolist()
-    return {
-        "data": [{"type": "surface", "x": Xm, "y": Ym,
-                  "z": _arr(_ds(g["ZI2"], S)),
-                  "colorscale": "Viridis", "showscale": True, "name": "Cloud 2",
-                  "colorbar": {"thickness": 14,
-                               "title": {"text": "Z", "side": "right"}}}],
-        "layout": _grad3d_layout("Cloud 2 — Surface", ratio),
-    }
+# ── Paired comparison: 2D height and slope maps ────────────────────────────────
 
+def _mask_outline(g, mask, max_pts=3000):
+    """Boundary cells of the channel-interior mask as (x, y) lists, thinned."""
+    if mask.sum() == 0:
+        return [], []
+    b = mask & ~binary_erosion(mask, iterations=1, border_value=0)
+    by, bx = np.nonzero(b)
+    keep = max(1, len(bx) // max_pts)
+    XI, YI = np.asarray(g["XI"]), np.asarray(g["YI"])
+    return XI[by[::keep], bx[::keep]].tolist(), YI[by[::keep], bx[::keep]].tolist()
 
-def make_gradient_3d_error_fig(result):
-    g     = result["grids"]
-    ratio = _gradient_3d_aspect(result)
-    S     = max(1, g["ZI2"].shape[0] // 120)
-    Xm = g["XI"][::S, ::S].tolist()
-    Ym = g["YI"][::S, ::S].tolist()
-    return {
-        "data": [{"type": "surface", "x": Xm, "y": Ym,
-                  "z": _arr(_ds(g["ZI2"], S)),
-                  "surfacecolor": _arr(_ds(g["error_map"], S)),
-                  "colorscale": "Hot", "showscale": True, "name": "Error Map",
-                  "colorbar": {"thickness": 14,
-                               "title": {"text": "|∇Z|", "side": "right"}}}],
-        "layout": _grad3d_layout("Gradient Magnitude Error — |∇Z|", ratio),
-    }
-
-
-# ── Gradient 2D maps ───────────────────────────────────────────────────────────
 
 def make_gradient_maps_fig(result):
-    g  = result["grids"]
-    S  = 2
+    g = result["grids"]
+    ZA, ZB = np.asarray(g["ZI1"], float), np.asarray(g["ZI2"], float)
+    GA, GB = np.asarray(g["mag1"], float), np.asarray(g["mag2"], float)
+    EZ, ED = np.asarray(g["diff"], float), np.asarray(g["error_map"], float)
+    mask = np.asarray(g.get("mask", g["valid"]), bool)
 
-    xi = g["XI"][0, ::S].tolist()
-    yi = g["YI"][::S, 0].tolist()
-    z1 = _arr(_ds(g["ZI1"],  S))
-    z2 = _arr(_ds(g["ZI2"],  S))
-    df = _arr(_ds(g["diff"], S))
+    S  = _step(ZA.shape, MAP_FULL_CELLS)
+    xi = g["XI"][0, ::S].tolist(); yi = g["YI"][::S, 0].tolist()
 
-    vz  = float(np.nanpercentile(np.abs(np.concatenate(
-          [g["ZI1"][~np.isnan(g["ZI1"])], g["ZI2"][~np.isnan(g["ZI2"])]])), 99))
-    dv  = float(np.nanpercentile(np.abs(g["diff"][~np.isnan(g["diff"])]), 99)) if np.any(~np.isnan(g["diff"])) else 1.0
+    zall = np.concatenate([ZA[np.isfinite(ZA)], ZB[np.isfinite(ZB)]])
+    z0, z1 = (float(np.percentile(zall, 0.5)), float(np.percentile(zall, 99.5))) if zall.size else (0.0, 1.0)
+    gall = np.concatenate([GA[np.isfinite(GA)], GB[np.isfinite(GB)]])
+    g1 = float(np.percentile(gall, 99.5)) if gall.size else 1.0
+    ez = float(np.nanpercentile(np.abs(EZ), 99)) if np.isfinite(EZ).any() else 1.0
+    ed = float(np.nanpercentile(ED, 99)) if np.isfinite(ED).any() else 1.0
+    mx, my = _mask_outline(g, mask)
 
-    layout = {
-        "paper_bgcolor": _PANEL, "plot_bgcolor": _BG,
-        "font": {"color": _TEXT, "family": "monospace, monospace"},
-        "autosize": True,
-        "margin": {"t": 70, "b": 55, "l": 60, "r": 60},
-        "xaxis":  {"title": "X", "domain": [0.00, 0.28], "gridcolor": _CARD, "linecolor": _BORDER},
-        "yaxis":  {"title": "Y", "gridcolor": _CARD, "linecolor": _BORDER},
-        "xaxis2": {"title": "X", "domain": [0.37, 0.63], "gridcolor": _CARD,
-                   "linecolor": _BORDER, "anchor": "y2"},
-        "yaxis2": {"title": "Y", "gridcolor": _CARD, "linecolor": _BORDER},
-        "xaxis3": {"title": "X", "domain": [0.72, 1.00], "gridcolor": _CARD,
-                   "linecolor": _BORDER, "anchor": "y3"},
-        "yaxis3": {"title": "Y", "gridcolor": _CARD, "linecolor": _BORDER},
-        "annotations": [
-            _ann("Cloud 1",          0.14, 1.06),
-            _ann("Cloud 2",          0.50, 1.06),
-            _ann("Difference C1−C2", 0.86, 1.06),
-        ],
-    }
+    x_range = float(g["XI"][0, -1] - g["XI"][0, 0]); y_range = float(g["YI"][-1, 0] - g["YI"][0, 0])
+    stacked = EQUAL and (x_range / max(y_range, 1e-9) > 2.5)      # long channel at true scale: one map per row
+    small = {"xanchor": "left", "thickness": 10, "tickfont": {"size": 9}}
+    #        z    colourscale  zmin  zmax  name       decimals
+    P = {"ZA": (ZA, _CS,      z0,   z1,   "Z_A",     1),
+         "ZB": (ZB, _CS,      z0,   z1,   "Z_B",     1),
+         "EZ": (EZ, DIFF_CS,  -ez,  ez,   "E_Z",     1),
+         "GA": (GA, SLOPE_CS, 0.0,  g1,   "|∇Z_A|",  3),
+         "GB": (GB, SLOPE_CS, 0.0,  g1,   "|∇Z_B|",  3),
+         "ED": (ED, SLOPE_CS, 0.0,  ed,   "E_d",     3)}
+    if stacked:
+        order = ["ZA", "ZB", "EZ", "GA", "GB", "ED"]
+        gap = 0.028; h = (1 - 5 * gap) / 6
+        rows = {i: [1 - (i - 1) * (h + gap) - h, 1 - (i - 1) * (h + gap)] for i in range(1, 7)}
+        pos  = {key: (i, 1) for i, key in enumerate(order, 1)}
+        cols = {1: [0.0, 0.93]}
+        def span(r0, r1):
+            top, bot = rows[r0][1], rows[r1][0]
+            return {"y": (top + bot) / 2, "len": top - bot}
+        cb = {"ZA": _cbar(f"Z ({U})",     x=0.945, nticks=4, **span(1, 2), **small),
+              "EZ": _cbar(f"E_Z ({U})",   x=0.945, nticks=3, **span(3, 3), **small),
+              "GA": _cbar("|∇Z| (µm/µm)", x=0.945, nticks=4, **span(4, 5), **small),
+              "ED": _cbar("E_d (µm/µm)",  x=0.945, nticks=3, **span(6, 6), **small)}
+        ylabel  = {key: P[key][4] for key in order}
+        headers = []
+        title_note = "  |  1:1"
+    else:
+        order = ["ZA", "GA", "ZB", "GB", "EZ", "ED"]
+        cols = {1: [0.0, 0.42], 2: [0.57, 0.99]}
+        rows = {1: [0.70, 1.0], 2: [0.35, 0.65], 3: [0.0, 0.30]}
+        pos  = {"ZA": (1, 1), "GA": (1, 2), "ZB": (2, 1), "GB": (2, 2), "EZ": (3, 1), "ED": (3, 2)}
+        cb = {"ZA": _cbar(f"Z ({U})",     x=0.43, y=0.675, len=0.62, **small),
+              "EZ": _cbar(f"E_Z ({U})",   x=0.43, y=0.15,  len=0.30, **small),
+              "GA": _cbar("|∇Z| (µm/µm)", x=1.0,  y=0.675, len=0.62, **small),
+              "ED": _cbar("E_d (µm/µm)",  x=1.0,  y=0.15,  len=0.30, **small)}
+        row_label = {1: "Surface A", 2: "Surface B", 3: "Error"}
+        ylabel  = {key: (f"{row_label[pos[key][0]]}<br>Y ({U})" if pos[key][1] == 1 else None) for key in order}
+        headers = [_panel_title(f"Height Z ({U})", "x", "y"),
+                   _panel_title("Slope magnitude |∇Z| (µm/µm)", "x2", "y2")]
+        title_note = "" if not EQUAL else "  |  1:1"
+    nrows = max(r for r, c in pos.values())
 
-    cb = lambda x: {"x": x, "thickness": 12, "len": 0.85,
-                    "title": {"text": "Z", "side": "right"}}
+    layout = _base(margin={"t": 70 if headers else 55, "b": 50, "l": 75, "r": 75}, showlegend=False)
+    layout["title"] = _title("Height and slope maps on the common grid  |  green outline: metric mask" + title_note)
+    data = []
+    for k, key in enumerate(order, 1):
+        z, cs, zmin, zmax, name, nd = P[key]
+        r, c = pos[key]
+        xa, ya = ("x" if k == 1 else f"x{k}"), ("y" if k == 1 else f"y{k}")
+        xkey, ykey = ("xaxis" if k == 1 else f"xaxis{k}"), ("yaxis" if k == 1 else f"yaxis{k}")
+        # linked zoom (matches) and 1:1 scale (scaleanchor) cannot both be set on an axis
+        link_x = {} if (EQUAL or k == 1) else {"matches": "x"}
+        link_y = {} if (EQUAL or k == 1) else {"matches": "y"}
+        layout[xkey] = _axis(f"X ({U})" if r == nrows else None, domain=cols[c], anchor=ya,
+                             showticklabels=(r == nrows), **link_x,
+                             **({"constrain": "domain"} if EQUAL else {}))
+        layout[ykey] = _axis(ylabel[key], domain=rows[r], anchor=xa, showticklabels=(c == 1),
+                             **link_y, **_eq(xa, constrain="domain"))
+        data.append(_heatmap(xi, yi, z[::S, ::S], cs, name, cbar=cb.get(key), nd=nd,
+                             zmin=zmin, zmax=zmax, xaxis=xa, yaxis=ya))
+        if mx:
+            data.append({"type": "scatter", "x": mx, "y": my, "mode": "markers",
+                         "marker": {"size": 1.4, "color": _rgba(C("MASK"), 0.8)}, "hoverinfo": "skip",
+                         "showlegend": False, "xaxis": xa, "yaxis": ya, "name": "mask"})
+    layout["annotations"] = headers
+    return {"data": data, "layout": layout}
 
+
+# ── Paired comparison: cell-by-cell correlation ────────────────────────────────
+
+def make_correlation_fig(result):
+    g, m = result["grids"], result["metrics"]
+    mask = np.asarray(g.get("mask", g["valid"]), bool)
+    ZA, ZB = np.asarray(g["ZI1"], float)[mask], np.asarray(g["ZI2"], float)[mask]
+    GA, GB = np.asarray(g["mag1"], float)[mask], np.asarray(g["mag2"], float)[mask]
+    n = int(mask.sum())
+
+    def density(a, b, lo, hi, nb=110):
+        H, xe, ye = np.histogram2d(a, b, bins=nb, range=[[lo, hi], [lo, hi]])
+        xc = 0.5 * (xe[:-1] + xe[1:]); yc = 0.5 * (ye[:-1] + ye[1:])
+        Hl = np.log10(H.T + 1.0)
+        Hl[H.T == 0] = np.nan
+        return xc.tolist(), yc.tolist(), Hl
+
+    if n > 1:
+        zlo, zhi = float(min(ZA.min(), ZB.min())), float(max(ZA.max(), ZB.max()))
+        ghi = float(np.percentile(np.concatenate([GA, GB]), 99.5)) or 1.0
+    else:
+        zlo, zhi, ghi = 0.0, 1.0, 1.0
+    xz, yz, hz = density(ZA, ZB, zlo, zhi) if n > 1 else ([], [], np.zeros((1, 1)))
+    xg, yg, hg = density(GA, GB, 0.0, ghi) if n > 1 else ([], [], np.zeros((1, 1)))
+
+    note = ""
+    if m.get("cad_mode"):
+        note = "<br><span style='font-size:11px'>Idealised surface detected: RQ is the primary metric, the slope correlations are not meaningful here.</span>"
+    layout = _base(margin={"t": 80, "b": 60, "l": 70, "r": 80}, showlegend=False)
+    layout["title"] = _title(f"Cell-by-cell correlation over the channel-interior mask  |  "
+                             f"n = {n:,} cells   RQdx = {m['r_gx']:.3f}   RQdy = {m['r_gy']:.3f}" + note)
+    layout["xaxis"]  = _axis(f"Z_A ({U})", domain=[0.0, 0.43])
+    layout["yaxis"]  = _axis(f"Z_B ({U})", scaleanchor="x")
+    layout["xaxis2"] = _axis("|∇Z_A| (µm/µm)", domain=[0.57, 1.0], anchor="y2")
+    layout["yaxis2"] = _axis("|∇Z_B| (µm/µm)", scaleanchor="x2", anchor="x2")
+    layout["annotations"] = [
+        _panel_title(f"Height:  RQ = {m['r_z']:.3f}", "x", "y"),
+        _panel_title(f"Slope magnitude:  RQd = {m['r_mag']:.3f}", "x2", "y2"),
+    ]
+    ident = lambda lo, hi, xa, ya: {"type": "scatter", "x": [lo, hi], "y": [lo, hi], "mode": "lines",
+                                    "line": {"color": _rgba(C("TEXT"), 0.6), "width": 1, "dash": "dash"},
+                                    "hoverinfo": "skip", "xaxis": xa, "yaxis": ya, "name": "identity"}
     return {
         "data": [
-            {"type": "heatmap", "x": xi, "y": yi, "z": z1, "colorscale": "Viridis",
-             "zmin": -vz, "zmax": vz, "xaxis": "x",  "yaxis": "y",
-             "showscale": True, "colorbar": cb(0.29), "name": "Cloud 1"},
-            {"type": "heatmap", "x": xi, "y": yi, "z": z2, "colorscale": "Viridis",
-             "zmin": -vz, "zmax": vz, "xaxis": "x2", "yaxis": "y2",
-             "showscale": True, "colorbar": cb(0.64), "name": "Cloud 2"},
-            {"type": "heatmap", "x": xi, "y": yi, "z": df, "colorscale": "RdBu",
-             "zmin": -dv, "zmax": dv, "xaxis": "x3", "yaxis": "y3",
-             "showscale": True,
-             "colorbar": {"x": 1.01, "thickness": 12, "len": 0.85,
-                          "title": {"text": "ΔZ", "side": "right"}},
-             "name": "Diff"},
+            _heatmap(xz, yz, hz, _CS, "cells", cbar=_cbar("log10(1 + cells)", x=0.44, xanchor="left"),
+                     nd=3, xaxis="x", yaxis="y",
+                     hovertemplate="Z_A %{x:.1f}<br>Z_B %{y:.1f}<br>log10 n %{z:.2f}<extra></extra>"),
+            ident(zlo, zhi, "x", "y"),
+            _heatmap(xg, yg, hg, _CS, "cells", cbar=_cbar("log10(1 + cells)", x=1.01, xanchor="left"),
+                     nd=3, xaxis="x2", yaxis="y2",
+                     hovertemplate="|∇Z_A| %{x:.3f}<br>|∇Z_B| %{y:.3f}<br>log10 n %{z:.2f}<extra></extra>"),
+            ident(0.0, ghi, "x2", "y2"),
         ],
         "layout": layout,
     }
 
 
-# ── Correlation summary ────────────────────────────────────────────────────────
+# ── Figure sets (called by the worker) ─────────────────────────────────────────
 
-def make_correlation_fig(result):
-    m      = result["metrics"]
-    labels = ["RQ (|∇Z|)", "RQ (∂y)", "RQ (∂x)", "RQ (Z)"]
-    r_vals = [m["r_mag"], m["r_gy"], m["r_gx"], m["r_z"]]
+# key -> builder(result, max_cells); the keys are the figure ids used by the interface
+BUILDERS = {
+    "pvisual": {
+        "rotation":             lambda r, mc: make_rotation_fig(r),
+        "channel":              lambda r, mc: make_channel_fig(r),
+        "profiles_xsection":    lambda r, mc: make_cross_section_fig(r),
+        "profiles_ycenter":     lambda r, mc: make_profile_ycenter_fig(r),
+        "profiles_xcenter":     lambda r, mc: make_profile_xcenter_fig(r),
+        "profiles_widthlength": lambda r, mc: make_profile_widthlength_fig(r),
+        "view3d":               lambda r, mc: make_3d_fig(r, mc),
+        "roughness":            lambda r, mc: make_roughness_fig(r),
+    },
+    "rq_gradient": {
+        "grad3d_cloud1": lambda r, mc: make_gradient_3d_cloud1_fig(r, mc),
+        "grad3d_cloud2": lambda r, mc: make_gradient_3d_cloud2_fig(r, mc),
+        "grad3d_error":  lambda r, mc: make_gradient_3d_error_fig(r, mc),
+        "gradmaps":      lambda r, mc: make_gradient_maps_fig(r),
+        "corr":          lambda r, mc: make_correlation_fig(r),
+    },
+}
 
-    return {
-        "data": [
-            {"type": "bar",
-             "orientation": "h",
-             "y": labels, "x": r_vals,
-             "marker": {"color": _BLUE, "line": {"color": _BORDER, "width": 1}},
-             "name": "Pearson r"},
-        ],
-        "layout": {
-            "paper_bgcolor": _PANEL, "plot_bgcolor": _BG,
-            "font": {"color": _TEXT, "family": "monospace, monospace"},
-            "autosize": True,
-            "margin": {"t": 60, "b": 60, "l": 100, "r": 30},
-            "title": {"text": "Gradient Correlation Summary", "font": {"size": 13}},
-            "xaxis": {"title": "Pearson r", "range": [0, 1],
-                      "gridcolor": _CARD, "linecolor": _BORDER},
-            "yaxis": {"gridcolor": _CARD, "linecolor": _BORDER},
-            "showlegend": False,
-        },
-    }
+
+def build_figs(kind, result, max_cells=None, palette=None, equal=None):
+    if palette:
+        set_palette(palette)
+    if equal is not None:
+        set_equal(equal)
+    return {key: fn(result, max_cells) for key, fn in BUILDERS[kind].items()}
+
+
+def build_one_fig(kind, key, result, max_cells=None, palette=None, equal=None):
+    if palette:
+        set_palette(palette)
+    if equal is not None:
+        set_equal(equal)
+    return BUILDERS[kind][key](result, max_cells)
+
+
+def build_pvisual_figs(result, max_cells=None, palette=None, equal=None):
+    return build_figs("pvisual", result, max_cells, palette, equal)
+
+
+def build_gradient_figs(result, max_cells=None, palette=None, equal=None):
+    return build_figs("rq_gradient", result, max_cells, palette, equal)
 
 
 # ── JSON serialisation ─────────────────────────────────────────────────────────
 
 def _safe(obj):
     if isinstance(obj, np.ndarray):
-        return _arr(obj)
+        return _arr(obj) if obj.dtype.kind in "fiub" else obj.tolist()
+    if isinstance(obj, (np.bool_,)):
+        return bool(obj)
     if isinstance(obj, np.integer):
         return int(obj)
     if isinstance(obj, np.floating):
         return None if math.isnan(float(obj)) else float(obj)
     if isinstance(obj, dict):
         return {k: _safe(v) for k, v in obj.items()}
-    if isinstance(obj, list):
+    if isinstance(obj, (list, tuple)):
         return [_safe(v) for v in obj]
     if isinstance(obj, float) and math.isnan(obj):
         return None

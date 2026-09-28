@@ -17,9 +17,14 @@ Grid interpolation uses numpy bin-averaging + scipy.ndimage NaN fill, avoiding
 scipy.interpolate.griddata (Delaunay/qhull) which is unstable in Pyodide WASM.
 """
 
+import io
+import math
 import time
 import numpy as np
 from scipy.ndimage import gaussian_filter, distance_transform_edt
+
+DISPLAY_MAX_CELLS = 160_000   # auto display-cell size keeps each display grid within this
+DISPLAY_HARD_MAX  = 600_000   # an explicit display-cell size is coarsened beyond this
 
 _PV_DEFAULTS = {
     "delimiter":      None,   # None = whitespace
@@ -35,8 +40,8 @@ _PV_DEFAULTS = {
                               #   geometry; it cleans the gradient/RQ_d in particular.
     "voxel_size":     20,     # 0 or None = auto
     "vsdivider":      1000,
-    "grid_res":       300,
-    "smooth_sigma":   0,
+    "display_cell":   0,      # µm; side of the square display-grid cells, 0 = auto
+    "smooth_sigma":   0,      # Gaussian blur of the display grids, in cells
     "n_slices":       80,
     "floor_width_frac":     0.90,   # depth fraction for the floor (narrowest) width
     "opening_frac":         0.10,   # depth fraction for the opening width
@@ -101,18 +106,45 @@ def _pv_fill_nan(arr):
     return arr[idx[0], idx[1]]
 
 
-def _pv_make_grid(u, v, w, res, sigma, u_range=None, v_range=None):
-    """Scatter (u, v, w) -> regular res x res grid (bin-average + NaN fill)."""
-    ui = np.linspace(u_range[0] if u_range else u.min(),
-                     u_range[1] if u_range else u.max(), res)
-    vi = np.linspace(v_range[0] if v_range else v.min(),
-                     v_range[1] if v_range else v.max(), res)
+def _pv_make_grid(u, v, w, cell, sigma, u_range=None, v_range=None, min_cell=0.0):
+    """Scatter (u, v, w) -> regular grid with SQUARE cells of side `cell` (data units),
+    bin-averaged, NaN cells filled from the nearest measured cell. These grids are for
+    display only; the geometry and roughness are computed from the points.
 
-    xi = np.clip(np.searchsorted(ui, u, side="right") - 1, 0, res - 1)
-    yi = np.clip(np.searchsorted(vi, v, side="right") - 1, 0, res - 1)
+    cell <= 0: the finest square cell that keeps the grid within DISPLAY_MAX_CELLS,
+    never finer than min_cell (the voxel size). An explicit cell is coarsened only if
+    it would exceed DISPLAY_HARD_MAX cells. Returns (UI, VI, WI, cell)."""
+    u = np.asarray(u, float); v = np.asarray(v, float); w = np.asarray(w, float)
+    u0, u1 = (float(u_range[0]), float(u_range[1])) if u_range else (float("nan"), float("nan"))
+    v0, v1 = (float(v_range[0]), float(v_range[1])) if v_range else (float("nan"), float("nan"))
+    if len(u) and not (math.isfinite(u0) and math.isfinite(u1)):
+        u0, u1 = float(np.nanmin(u)), float(np.nanmax(u))
+    if len(v) and not (math.isfinite(v0) and math.isfinite(v1)):
+        v0, v1 = float(np.nanmin(v)), float(np.nanmax(v))
+    if not all(math.isfinite(t) for t in (u0, u1, v0, v1)):   # nothing usable: empty grid
+        UI, VI = np.meshgrid(np.array([0.0, 1.0]), np.array([0.0, 1.0]))
+        return UI, VI, np.full((2, 2), np.nan), float("nan")
+    du, dv = max(u1 - u0, 1e-9), max(v1 - v0, 1e-9)
+    if not (min_cell and math.isfinite(min_cell)):
+        min_cell = 0.0
+    if cell is None or not math.isfinite(cell) or cell <= 0:
+        cell = math.sqrt(du * dv / DISPLAY_MAX_CELLS)
+        if min_cell and cell < min_cell:
+            cell = float(min_cell)
+    else:
+        cell = float(cell)
+        if du * dv / cell ** 2 > DISPLAY_HARD_MAX:
+            cell = math.sqrt(du * dv / DISPLAY_HARD_MAX)
+    res_u = max(2, int(round(du / cell)))
+    res_v = max(2, int(round(dv / cell)))
+    ui = np.linspace(u0, u1, res_u)
+    vi = np.linspace(v0, v1, res_v)
 
-    gsum = np.zeros((res, res), dtype=np.float64)
-    gcnt = np.zeros((res, res), dtype=np.float64)
+    xi = np.clip(np.searchsorted(ui, u, side="right") - 1, 0, res_u - 1)
+    yi = np.clip(np.searchsorted(vi, v, side="right") - 1, 0, res_v - 1)
+
+    gsum = np.zeros((res_v, res_u), dtype=np.float64)
+    gcnt = np.zeros((res_v, res_u), dtype=np.float64)
     np.add.at(gsum, (yi, xi), w)
     np.add.at(gcnt, (yi, xi), 1.0)
 
@@ -122,7 +154,7 @@ def _pv_make_grid(u, v, w, res, sigma, u_range=None, v_range=None):
         WI = gaussian_filter(WI, sigma=sigma)
 
     UI, VI = np.meshgrid(ui, vi)
-    return UI, VI, WI
+    return UI, VI, WI, cell
 
 
 def _core_mean(arr):
@@ -493,11 +525,13 @@ def run_pvisual(file_path: str, params: dict = None, log_fn=print) -> dict:
     yz_tilt = float(np.degrees(np.arctan(fc2[1])))
     log_fn(f"  φ={phi:.3f}°  residual XZ={xz_tilt:.3f}° YZ={yz_tilt:.3f}°  var={var_pct:.1f}%")
 
-    # ── Step 6: Interpolated grids ────────────────────────────────
-    log_fn("\nSTEP 6 — Interpolating grids")
-    res = int(p["grid_res"]); sig = p["smooth_sigma"]
-    XI_b, YI_b, ZI_b = _pv_make_grid(xd, yd, zd, res, sig)
-    XI_a, YI_a, ZI_a = _pv_make_grid(xr, yr, zr, res, sig)
+    # ── Step 6: Display grids (square cells; display only) ────────
+    log_fn("\nSTEP 6 — Display grids")
+    cell = float(p.get("display_cell") or 0.0); sig = p["smooth_sigma"]
+    XI_b, YI_b, ZI_b, cell_b = _pv_make_grid(xd, yd, zd, cell, sig, min_cell=voxel_size)
+    XI_a, YI_a, ZI_a, cell_a = _pv_make_grid(xr, yr, zr, cell, sig, min_cell=voxel_size)
+    log_fn(f"  square cells: raw {cell_b:.1f}, aligned {cell_a:.1f}  "
+           f"(grids {ZI_b.shape[1]}x{ZI_b.shape[0]}, {ZI_a.shape[1]}x{ZI_a.shape[0]})")
 
     # ── Step 7: Geometry from the mean cross-section ──────────────
     log_fn("\nSTEP 7 — Cross-section geometry")
@@ -620,13 +654,17 @@ def run_pvisual(file_path: str, params: dict = None, log_fn=print) -> dict:
     rgh_y_max = float(sr_y_max) + rgh_extra
     rgh_vis_mask = ((xr >= crop_x_min) & (xr <= crop_x_max) &
                     (yr >= rgh_y_min) & (yr <= rgh_y_max))
-    XI_rgh, YI_rgh, ZI_rgh = _pv_make_grid(
-        xr[rgh_vis_mask], yr[rgh_vis_mask], zr[rgh_vis_mask], res, sig,
+    XI_rgh, YI_rgh, ZI_rgh, cell_r = _pv_make_grid(
+        xr[rgh_vis_mask], yr[rgh_vis_mask], zr[rgh_vis_mask], cell, sig,
         u_range=(float(crop_x_min), float(crop_x_max)),
-        v_range=(rgh_y_min, rgh_y_max))
+        v_range=(rgh_y_min, rgh_y_max), min_cell=voxel_size)
 
-    _, _, ZI_crop = _pv_make_grid(xc_pts, yc_pts, zc_pts, res, sig) \
-        if cmask.sum() else (None, None, np.full((res, res), np.nan))
+    if cmask.sum():
+        _, _, ZI_crop, cell_c = _pv_make_grid(xc_pts, yc_pts, zc_pts, cell, sig, min_cell=voxel_size)
+    else:
+        ZI_crop, cell_c = np.full((2, 2), np.nan), float("nan")
+    log_fn(f"  display cells: crop {cell_c:.1f}, roughness view {cell_r:.1f}  "
+           f"(grids {ZI_crop.shape[1]}x{ZI_crop.shape[0]}, {ZI_rgh.shape[1]}x{ZI_rgh.shape[0]})")
 
     log_fn(f"\nTotal time: {time.time()-t_total:.1f}s\nDone.")
 
@@ -684,6 +722,9 @@ def run_pvisual(file_path: str, params: dict = None, log_fn=print) -> dict:
             "crop":   {"ZI": ZI_crop, "x": xc_pts, "y": yc_pts, "z": zc_pts,
                        "x_min": float(crop_x_min), "x_max": float(crop_x_max),
                        "y_min": float(crop_y_min), "y_max": float(crop_y_max)},
+            # side of the square display cells actually used (units of the file)
+            "cells":  {"before": float(cell_b), "after": float(cell_a),
+                       "crop": float(cell_c), "roughness": float(cell_r)},
         },
         "slices": {
             "rx": rx, "cy": cy, "cy_std": cy_std,
@@ -719,3 +760,11 @@ def run_pvisual(file_path: str, params: dict = None, log_fn=print) -> dict:
                          "y_min": float(YI_rgh[0, 0]),  "y_max": float(YI_rgh[-1, 0])},
         },
     }
+
+
+def crop_to_text(result, fmt="%.6f"):
+    """The exported crop (one 'x y z' line per point, units of the input file) as text.
+    Built on demand so the point list never travels to the interface as JSON."""
+    buf = io.StringIO()
+    np.savetxt(buf, np.asarray(result["cropped_cloud"], float), fmt=fmt, delimiter=" ")
+    return buf.getvalue()

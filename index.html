@@ -5,8 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MaRQ</title>
   <link rel="stylesheet" href="style.css">
-  <!-- Plotly.js — WebGL 3D, no server required -->
-  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" crossorigin="anonymous"></script>
+  <!-- Plotly.js from the local bundle (vendor/), with the CDN as fallback when the bundle is absent -->
+  <script>window.__marqRuntime = { plotly: "local", plotlyVersion: "2.35.2" };</script>
+  <script src="vendor/plotly-2.35.2.min.js"
+          onerror="window.__marqRuntime.plotly='cdn';var s=document.createElement('script');s.src='https://cdn.plot.ly/plotly-2.35.2.min.js';s.crossOrigin='anonymous';document.head.appendChild(s);"></script>
 </head>
 <body>
 <div id="app">
@@ -14,12 +16,15 @@
   <!-- ── Header ─────────────────────────────────────────────────────────────── -->
   <header id="header">
     <div id="header-brand">
+      <button id="toggle-sidebar" class="btn btn-ghost" title="Show or hide the sidebar">◧</button>
       <img id="header-logo" src="logo.svg" alt="">
       <span id="header-title">MaRQ</span>
     </div>
     <div id="header-controls">
+      <label class="hdr-field" title="Lock the y scale of the 2D plots to the x scale, so a micrometre on one axis is a micrometre on the other and the channel keeps its true proportions. Off: each axis fills the panel, small variations become visible.">
+        <input type="checkbox" id="equal-axes" checked> 1:1 axes</label>
       <label class="hdr-field">Palette
-        <select id="palette-select" class="hdr-select" title="3D surface colorscale">
+        <select id="palette-select" class="hdr-select" title="Colour scale of every height map (2D and 3D)">
           <option value="Viridis" selected>Viridis</option>
           <option value="Cividis">Cividis</option>
           <option value="Plasma">Plasma</option>
@@ -29,16 +34,18 @@
           <option value="Earth">Earth</option>
         </select>
       </label>
-      <label class="hdr-field">3D quality
-        <select id="quality-select" class="hdr-select" title="3D render detail — higher is sharper but slower">
-          <option value="120">Low</option>
-          <option value="240" selected>Medium</option>
-          <option value="400">High</option>
+      <label class="hdr-field">3D detail
+        <select id="quality-select" class="hdr-select" title="Mesh budget of the 3D views (cells); higher is sharper but slower to rotate">
+          <option value="30000">Low</option>
+          <option value="80000" selected>Medium</option>
+          <option value="200000">High</option>
         </select>
       </label>
-      <button id="theme-toggle" class="btn" title="Toggle light / dark theme">☀ Light</button>
+      <button id="theme-toggle" class="btn btn-ghost" title="Toggle light / dark theme">☀ Light</button>
+      <button id="toggle-log" class="btn btn-ghost" title="Show or hide the analysis log">▤ Log</button>
+      <button id="about-open" class="btn btn-ghost" title="About MaRQ: version, citation, licences">About</button>
       <span id="spinner"></span>
-      <span id="status-bar" class="status-bar status-info">Loading Pyodide…</span>
+      <span id="status-bar" class="status-bar status-info">Loading the Python runtime…</span>
     </div>
   </header>
 
@@ -48,40 +55,104 @@
     <!-- ── Sidebar ──────────────────────────────────────────────────────────── -->
     <aside id="sidebar">
 
-      <!-- Files -->
+      <!-- Workflow -->
       <div class="sidebar-section">
-        <div class="section-label">Input Files</div>
-
-        <div class="file-card" id="file1-zone">
-          <div class="file-card-label">Point Cloud File 1 (.txt, .xyz, .asc, .csv, .x3p)</div>
-          <div class="file-row">
-            <span class="file-name" id="file1-name">Drop here or Browse</span>
-            <button class="btn-icon" id="file1-clear" style="display:none"
-                    onclick="clearFile(1)" title="Remove file">✕</button>
-            <button class="btn" onclick="document.getElementById('file1-input').click()">Browse</button>
-            <input type="file" id="file1-input" accept=".txt,.xyz,.asc,.csv,.x3p" style="display:none"
-                   onchange="handleFileInput('file1-input', 1, 'file1-name')">
-          </div>
-        </div>
-
-        <div class="file-card" id="file2-zone">
-          <div class="file-card-label">Point Cloud File 2 (.txt, .xyz, .asc, .csv, .x3p) — optional, for gradient</div>
-          <div class="file-row">
-            <span class="file-name" id="file2-name">Drop here or Browse</span>
-            <button class="btn-icon" id="file2-clear" style="display:none"
-                    onclick="clearFile(2)" title="Remove file">✕</button>
-            <button class="btn" onclick="document.getElementById('file2-input').click()">Browse</button>
-            <input type="file" id="file2-input" accept=".txt,.xyz,.asc,.csv,.x3p" style="display:none"
-                   onchange="handleFileInput('file2-input', 2, 'file2-name')">
-          </div>
+        <div class="section-label">Workflow</div>
+        <div class="steps" id="steps">
+          <div class="step" data-step="1"><span class="step-n">1</span><span class="step-t">Analyse a surface</span></div>
+          <div class="step" data-step="2"><span class="step-n">2</span><span class="step-t">Keep its crop as A or B</span></div>
+          <div class="step" data-step="3"><span class="step-n">3</span><span class="step-t">Compare A with B</span></div>
         </div>
       </div>
 
       <div class="divider"></div>
 
-      <!-- Point cloud parameters -->
+      <!-- Single surface -->
       <div class="sidebar-section">
-        <div class="section-label">Parameters</div>
+        <div class="section-label">Single surface</div>
+        <div class="file-card" id="file1-zone">
+          <div class="file-card-label">Point cloud to analyse (.txt, .xyz, .asc, .csv, .x3p)</div>
+          <div class="file-row">
+            <span class="file-name" id="file1-name">Drop here or Browse</span>
+            <button class="btn-icon" id="file1-clear" style="display:none" onclick="clearFile('1')" title="Remove file">✕</button>
+            <button class="btn" onclick="document.getElementById('file1-input').click()">Browse</button>
+            <input type="file" id="file1-input" accept=".txt,.xyz,.asc,.csv,.x3p" style="display:none"
+                   onchange="handleFileInput('file1-input', '1', 'file1-name')">
+          </div>
+        </div>
+        <button id="run-pvisual" class="btn btn-primary" disabled onclick="runPvisual()">▶&nbsp; Analyse surface</button>
+        <div class="btn-row">
+          <button id="download-crop" class="btn btn-secondary" disabled onclick="downloadCrop()" title="Save the levelled, aligned, voxel-thinned crop of the channel (x y z text)">⬇ Crop</button>
+          <button id="use-crop-a" class="btn btn-secondary" disabled onclick="useCrop('A')" title="Place the crop of this analysis in the Surface A slot">Use as A</button>
+          <button id="use-crop-b" class="btn btn-secondary" disabled onclick="useCrop('B')" title="Place the crop of this analysis in the Surface B slot">Use as B</button>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Comparison -->
+      <div class="sidebar-section">
+        <div class="section-label">Comparison</div>
+        <div class="file-card" id="fileA-zone">
+          <div class="file-card-label">Surface A, the reference (a crop exported by this tool)</div>
+          <div class="file-row">
+            <span class="file-name" id="fileA-name">Drop here or Browse</span>
+            <button class="btn-icon" id="fileA-clear" style="display:none" onclick="clearFile('A')" title="Remove file">✕</button>
+            <button class="btn" onclick="document.getElementById('fileA-input').click()">Browse</button>
+            <input type="file" id="fileA-input" accept=".txt,.xyz,.asc,.csv,.x3p" style="display:none"
+                   onchange="handleFileInput('fileA-input', 'A', 'fileA-name')">
+          </div>
+        </div>
+        <div class="file-card" id="fileB-zone">
+          <div class="file-card-label">Surface B, the compared surface</div>
+          <div class="file-row">
+            <span class="file-name" id="fileB-name">Drop here or Browse</span>
+            <button class="btn-icon" id="fileB-clear" style="display:none" onclick="clearFile('B')" title="Remove file">✕</button>
+            <button class="btn" onclick="document.getElementById('fileB-input').click()">Browse</button>
+            <input type="file" id="fileB-input" accept=".txt,.xyz,.asc,.csv,.x3p" style="display:none"
+                   onchange="handleFileInput('fileB-input', 'B', 'fileB-name')">
+          </div>
+        </div>
+        <button id="run-gradient" class="btn btn-primary" disabled onclick="runGradient()">▶&nbsp; Compare A with B</button>
+        <div class="file-card batch-card" id="batch-zone">
+          <div class="file-card-label">Batch: compare A with several surfaces</div>
+          <div class="file-row">
+            <span class="file-name" id="batch-count">No files chosen</span>
+            <button class="btn" onclick="document.getElementById('batch-input').click()">Choose files</button>
+            <input type="file" id="batch-input" multiple accept=".txt,.xyz,.asc,.csv,.x3p" style="display:none"
+                   onchange="handleBatchInput()">
+          </div>
+          <button id="batch-run" class="btn btn-secondary" disabled onclick="runBatch()" style="margin-top:8px;">▶&nbsp; Run batch</button>
+        </div>
+        <button id="cancel-run" class="btn btn-danger" style="display:none" onclick="cancelRun()">■&nbsp; Cancel and restart the engine</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Export -->
+      <div class="sidebar-section">
+        <div class="section-label">Export</div>
+        <div class="btn-row">
+          <button id="export-figure" class="btn btn-secondary" disabled onclick="openExportDialog()" title="Any figure as SVG or PNG, in the current or the light theme, at a chosen size">Figure…</button>
+          <button id="export-json" class="btn btn-secondary" disabled onclick="exportJSON()" title="Every number and every parameter of this session">Results JSON</button>
+          <button id="export-csv" class="btn btn-secondary" disabled onclick="exportCSV()" title="One row per analysed surface and per comparison">Results CSV</button>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Parameters -->
+      <div class="sidebar-section" style="padding-bottom:12px;">
+        <div class="section-head">
+          <div class="section-label">Parameters</div>
+          <div class="btn-row compact">
+            <button id="params-reset" class="btn btn-mini" onclick="resetParams()" title="Back to the values used in the paper">Paper defaults</button>
+            <button id="params-save" class="btn btn-mini" onclick="saveParamsFile()" title="Save the current parameters as a JSON file">Save</button>
+            <button id="params-load" class="btn btn-mini" onclick="document.getElementById('params-load-input').click()" title="Load parameters from a JSON file">Load</button>
+            <input type="file" id="params-load-input" accept=".json" style="display:none" onchange="loadParamsFile(this)">
+          </div>
+        </div>
+        <div class="param-note" id="params-note">Values are remembered in this browser; changed values are marked.</div>
         <details>
           <summary>Point Cloud Parameters</summary>
           <div class="param-grid">
@@ -97,7 +168,7 @@
                 <span class="param-label">Field band (MAD ×)</span>
                 <input class="param-input" type="number" id="p-fieldk" value="2.5" step="0.5">
               </div>
-              <span class="param-hint">How tightly the flat field plane is fit (robust MAD multiplier). Lower = stricter field selection. Leveling and orientation are referenced to this field, so there is no channel-floor percentile to set.</span>
+              <span class="param-hint">How tightly the flat field plane is fit (robust MAD multiplier). Lower = stricter field selection. Levelling and orientation are referenced to this field.</span>
             </div>
             <div class="param-card">
               <div class="param-card-top">
@@ -129,7 +200,7 @@
                        oninput="document.getElementById('p-flfrac-val').textContent=parseFloat(this.value).toFixed(2)">
                 <span id="p-flfrac-val" style="font-size:11px;width:32px;text-align:right;">0.90</span>
               </div>
-              <span class="param-hint" style="display:block;margin-top:6px;">Depth fraction for the floor (narrowest) width — the channel bottom, where the nominal width is defined. 0.90 = bottom 10% of depth. Floor and opening widths are read at fixed levels off the mean cross-section, so they are comparable across surfaces.</span>
+              <span class="param-hint" style="display:block;margin-top:6px;">Depth fraction for the floor (narrowest) width, the channel bottom where the nominal width is defined. 0.90 = bottom 10% of depth. Floor and opening widths are read at fixed levels off the mean cross-section, so they are comparable across surfaces.</span>
             </div>
             <div class="param-card">
               <span class="param-label" style="display:block;margin-bottom:8px;">Roughness eval area (floor)</span>
@@ -145,21 +216,21 @@
                 <span class="param-label">Floor eval length (units)</span>
                 <input class="param-input" type="number" id="p-rfloorlen" value="4000">
               </div>
-              <span class="param-hint">Length of the floor roughness strip along the channel axis, centered on the channel.</span>
+              <span class="param-hint">Length of the floor roughness strip along the channel axis, centred on the channel.</span>
             </div>
             <div class="param-card">
               <div class="param-card-top">
                 <span class="param-label">Field eval width (units)</span>
                 <input class="param-input" type="number" id="p-rfwidth" value="400">
               </div>
-              <span class="param-hint">Fixed width of the left/right field roughness strips. Their <b>position</b> is found automatically — placed just past the raised channel lip onto clean flat field — so only this fixed size needs setting, keeping measurements comparable across surfaces.</span>
+              <span class="param-hint">Fixed width of the left/right field roughness strips. Their <b>position</b> is found automatically, just past the raised channel lip on clean flat field, so only this fixed size needs setting, keeping measurements comparable across surfaces.</span>
             </div>
             <div class="param-card">
               <div class="param-card-top">
                 <span class="param-label">Field eval length (units)</span>
                 <input class="param-input" type="number" id="p-rflen" value="4000">
               </div>
-              <span class="param-hint">Fixed length of the field roughness strips along the channel axis, centered on the channel.</span>
+              <span class="param-hint">Fixed length of the field roughness strips along the channel axis, centred on the channel.</span>
             </div>
           </div>
           <details class="sub-details">
@@ -174,17 +245,17 @@
             </div>
             <div class="param-card">
               <div class="param-card-top">
-                <span class="param-label">Grid resolution</span>
-                <input class="param-input" type="number" id="p-res" value="300">
+                <span class="param-label">Display cell size (0 = auto)</span>
+                <input class="param-input" type="number" id="p-cell" value="0" step="1">
               </div>
-              <span class="param-hint">Number of interpolation grid cells per axis for the surface heatmaps.</span>
+              <span class="param-hint">Side of the square cells of the height maps and the 3D view, in point cloud units. Display only: the geometry and roughness are computed from the points. 0 chooses the finest cell (never below the voxel size) that keeps each map within 160&thinsp;000 cells.</span>
             </div>
             <div class="param-card">
               <div class="param-card-top">
                 <span class="param-label">Smooth sigma</span>
                 <input class="param-input" type="number" id="p-sigma" value="0">
               </div>
-              <span class="param-hint">Gaussian blur radius on the interpolated grid; 0 disables smoothing.</span>
+              <span class="param-hint">Gaussian blur radius on the display grids, in cells; 0 disables smoothing.</span>
             </div>
             <div class="param-card">
               <div class="param-card-top">
@@ -205,21 +276,21 @@
         </details>
 
         <details>
-          <summary>Gradient Parameters</summary>
+          <summary>Comparison Parameters</summary>
           <div class="param-grid">
             <div class="param-card">
               <div class="param-card-top">
                 <span class="param-label">Grid spacing (µm)</span>
                 <input class="param-input" type="number" id="g-spacing" value="5" step="1">
               </div>
-              <span class="param-hint">Physical size of each grid cell, in µm — set to the data (voxel) resolution. The same spacing is used for every comparison, so the gradient metrics (r_mag, etc.) are sampled identically and stay comparable across channels.</span>
+              <span class="param-hint">Physical size of each grid cell of the common grid, in µm. RQd is defined at a stated cell size; keep the same value for every comparison so the correlations stay comparable.</span>
             </div>
             <div class="param-card">
               <div class="param-card-top">
                 <span class="param-label">Smooth sigma (µm)</span>
                 <input class="param-input" type="number" id="g-sigma" value="0">
               </div>
-              <span class="param-hint">Gaussian blur (in µm) before computing gradients. A minimum of one grid cell is always applied for gradient stability.</span>
+              <span class="param-hint">Gaussian blur (in µm) before computing the slopes. A minimum of one grid cell is always applied for gradient stability.</span>
             </div>
             <div class="param-card">
               <div class="param-card-top">
@@ -232,22 +303,6 @@
         </details>
       </div>
 
-      <div class="divider"></div>
-
-      <!-- Actions -->
-      <div class="sidebar-section" style="padding-bottom:10px;">
-        <div class="section-label">Actions</div>
-        <button id="run-pvisual"  class="btn btn-secondary" disabled onclick="runPvisual()">
-          ▶&nbsp; Run Point Cloud Analysis
-        </button>
-        <button id="run-gradient" class="btn btn-primary"   disabled onclick="runGradient()">
-          ▶&nbsp; Run Gradient Correlation
-        </button>
-        <button id="download-crop" class="btn btn-secondary" disabled onclick="downloadCrop()">
-          ⬇&nbsp; Download Cropped Channel
-        </button>
-      </div>
-
     </aside>
 
     <!-- ── Content ─────────────────────────────────────────────────────────── -->
@@ -256,105 +311,70 @@
 
       <!-- Tab strip -->
       <nav class="tabs">
-        <button class="tab-btn" id="tab-btn-rotation"
-                style="display:none" onclick="switchTab('rotation')">Rotation Maps</button>
-        <button class="tab-btn" id="tab-btn-channel"
-                style="display:none" onclick="switchTab('channel')">Channel Detection</button>
-        <button class="tab-btn" id="tab-btn-profiles"
-                style="display:none" onclick="switchTab('profiles')">Profiles</button>
-        <button class="tab-btn" id="tab-btn-3d"
-                style="display:none" onclick="switchTab('3d')">3D View</button>
-        <button class="tab-btn" id="tab-btn-roughness"
-                style="display:none" onclick="switchTab('roughness')">Roughness</button>
-        <button class="tab-btn" id="tab-btn-grad3d"
-                style="display:none" onclick="switchTab('grad3d')">Gradient — 3D</button>
-        <button class="tab-btn" id="tab-btn-gradmaps"
-                style="display:none" onclick="switchTab('gradmaps')">Gradient — Maps</button>
-        <button class="tab-btn" id="tab-btn-corr"
-                style="display:none" onclick="switchTab('corr')">Correlation</button>
+        <button class="tab-btn" id="tab-btn-rotation"  style="display:none" onclick="switchTab('rotation')">Alignment</button>
+        <button class="tab-btn" id="tab-btn-channel"   style="display:none" onclick="switchTab('channel')">Channel Detection</button>
+        <button class="tab-btn" id="tab-btn-profiles"  style="display:none" onclick="switchTab('profiles')">Profiles</button>
+        <button class="tab-btn" id="tab-btn-3d"        style="display:none" onclick="switchTab('3d')">3D View</button>
+        <button class="tab-btn" id="tab-btn-roughness" style="display:none" onclick="switchTab('roughness')">Roughness</button>
+        <button class="tab-btn" id="tab-btn-grad3d"    style="display:none" onclick="switchTab('grad3d')">Comparison 3D</button>
+        <button class="tab-btn" id="tab-btn-gradmaps"  style="display:none" onclick="switchTab('gradmaps')">Comparison Maps</button>
+        <button class="tab-btn" id="tab-btn-corr"      style="display:none" onclick="switchTab('corr')">Correlation</button>
       </nav>
 
       <!-- Empty state (shown until first run) -->
       <div id="empty-state" class="tab-panels" style="display:flex;align-items:center;justify-content:center;">
-        <div style="text-align:center;color:var(--text3);">
+        <div style="text-align:center;color:var(--text3);max-width:520px;">
           <div style="font-size:38px;margin-bottom:12px;">⬡</div>
           <div style="font-size:15px;font-weight:600;margin-bottom:6px;">No analysis loaded</div>
-          <div style="font-size:12px;">Load a .txt point cloud and click Run to begin.</div>
+          <div style="font-size:12.5px;line-height:1.5;">Load a point cloud (.txt, .xyz, .asc, .csv or .x3p) under <b>Single surface</b> and click <b>Analyse surface</b>.
+            To grade a replication, analyse the insert and the part, keep each crop as A and B, then <b>Compare A with B</b>.</div>
           <div style="font-size:11px;margin-top:16px;color:var(--text3);">
-            Computation runs locally in your browser via Pyodide.
+            Computation runs locally in your browser; no data leave this computer.
           </div>
         </div>
       </div>
 
       <!-- Tab panels -->
       <div class="tab-panels" id="tab-panels-container" style="display:none;">
-        <div class="tab-panel" id="tab-rotation">
-          <div class="plot-container" id="plot-rotation"></div>
-        </div>
-        <div class="tab-panel" id="tab-channel">
-          <div class="plot-container" id="plot-channel"></div>
-        </div>
+        <div class="tab-panel" id="tab-rotation"><div class="plot-container" id="plot-rotation"></div></div>
+        <div class="tab-panel" id="tab-channel"><div class="plot-container" id="plot-channel"></div></div>
         <div class="tab-panel" id="tab-profiles">
           <div class="inner-tabs">
-            <button class="inner-tab-btn active" id="inner-tab-btn-profiles-ycenter"
-                    onclick="switchInnerTab('profiles','ycenter')">Y Center</button>
-            <button class="inner-tab-btn" id="inner-tab-btn-profiles-xcenter"
-                    onclick="switchInnerTab('profiles','xcenter')">X Center</button>
-            <button class="inner-tab-btn" id="inner-tab-btn-profiles-widthlength"
-                    onclick="switchInnerTab('profiles','widthlength')">Width &amp; Length</button>
+            <button class="inner-tab-btn active" id="inner-tab-btn-profiles-xsection" onclick="switchInnerTab('profiles','xsection')">Cross-section &amp; depth</button>
+            <button class="inner-tab-btn" id="inner-tab-btn-profiles-ycenter" onclick="switchInnerTab('profiles','ycenter')">Centre line</button>
+            <button class="inner-tab-btn" id="inner-tab-btn-profiles-xcenter" onclick="switchInnerTab('profiles','xcenter')">Longitudinal centre</button>
+            <button class="inner-tab-btn" id="inner-tab-btn-profiles-widthlength" onclick="switchInnerTab('profiles','widthlength')">Width &amp; Length</button>
           </div>
           <div class="inner-tab-panels">
-            <div class="inner-tab-panel active" id="inner-tab-profiles-ycenter">
-              <div class="plot-container" id="plot-profiles-ycenter"></div>
-            </div>
-            <div class="inner-tab-panel" id="inner-tab-profiles-xcenter">
-              <div class="plot-container" id="plot-profiles-xcenter"></div>
-            </div>
-            <div class="inner-tab-panel" id="inner-tab-profiles-widthlength">
-              <div class="plot-container" id="plot-profiles-widthlength"></div>
-            </div>
+            <div class="inner-tab-panel active" id="inner-tab-profiles-xsection"><div class="plot-container" id="plot-profiles-xsection"></div></div>
+            <div class="inner-tab-panel" id="inner-tab-profiles-ycenter"><div class="plot-container" id="plot-profiles-ycenter"></div></div>
+            <div class="inner-tab-panel" id="inner-tab-profiles-xcenter"><div class="plot-container" id="plot-profiles-xcenter"></div></div>
+            <div class="inner-tab-panel" id="inner-tab-profiles-widthlength"><div class="plot-container" id="plot-profiles-widthlength"></div></div>
           </div>
         </div>
-        <div class="tab-panel" id="tab-3d">
-          <div class="plot-container" id="plot-3d"></div>
-        </div>
-        <div class="tab-panel" id="tab-roughness">
-          <div class="plot-container" id="plot-roughness"></div>
-        </div>
+        <div class="tab-panel" id="tab-3d"><div class="plot-container" id="plot-3d"></div></div>
+        <div class="tab-panel" id="tab-roughness"><div class="plot-container" id="plot-roughness"></div></div>
         <div class="tab-panel" id="tab-grad3d">
           <div class="inner-tabs">
-            <button class="inner-tab-btn active" id="inner-tab-btn-grad3d-cloud1"
-                    onclick="switchInnerTab('grad3d','cloud1')">Cloud 1</button>
-            <button class="inner-tab-btn" id="inner-tab-btn-grad3d-cloud2"
-                    onclick="switchInnerTab('grad3d','cloud2')">Cloud 2</button>
-            <button class="inner-tab-btn" id="inner-tab-btn-grad3d-error"
-                    onclick="switchInnerTab('grad3d','error')">Error Map</button>
+            <button class="inner-tab-btn active" id="inner-tab-btn-grad3d-cloud1" onclick="switchInnerTab('grad3d','cloud1')">Surface A</button>
+            <button class="inner-tab-btn" id="inner-tab-btn-grad3d-cloud2" onclick="switchInnerTab('grad3d','cloud2')">Surface B</button>
+            <button class="inner-tab-btn" id="inner-tab-btn-grad3d-error" onclick="switchInnerTab('grad3d','error')">Slope error E<sub>d</sub></button>
           </div>
           <div class="inner-tab-panels">
-            <div class="inner-tab-panel active" id="inner-tab-grad3d-cloud1">
-              <div class="plot-container" id="plot-grad3d-cloud1"></div>
-            </div>
-            <div class="inner-tab-panel" id="inner-tab-grad3d-cloud2">
-              <div class="plot-container" id="plot-grad3d-cloud2"></div>
-            </div>
-            <div class="inner-tab-panel" id="inner-tab-grad3d-error">
-              <div class="plot-container" id="plot-grad3d-error"></div>
-            </div>
+            <div class="inner-tab-panel active" id="inner-tab-grad3d-cloud1"><div class="plot-container" id="plot-grad3d-cloud1"></div></div>
+            <div class="inner-tab-panel" id="inner-tab-grad3d-cloud2"><div class="plot-container" id="plot-grad3d-cloud2"></div></div>
+            <div class="inner-tab-panel" id="inner-tab-grad3d-error"><div class="plot-container" id="plot-grad3d-error"></div></div>
           </div>
         </div>
-        <div class="tab-panel" id="tab-gradmaps">
-          <div class="plot-container" id="plot-gradmaps"></div>
-        </div>
-        <div class="tab-panel" id="tab-corr">
-          <div class="plot-container" id="plot-corr"></div>
-        </div>
+        <div class="tab-panel" id="tab-gradmaps"><div class="plot-container" id="plot-gradmaps"></div></div>
+        <div class="tab-panel" id="tab-corr"><div class="plot-container" id="plot-corr"></div></div>
       </div>
 
     </main>
 
-      <!-- Results bar (channel width / depth / roughness) -->
+      <!-- Results bar (channel geometry, roughness, correlations, batch table) -->
       <div id="results-bar">
-        <div id="results-empty">Run an analysis to see channel width, depth and roughness here.</div>
+        <div id="results-empty">Run an analysis to see the channel geometry, roughness and correlations here.</div>
         <div id="metrics-panel" style="display:none"></div>
       </div>
     </div><!-- /#center -->
@@ -363,8 +383,7 @@
     <div id="right">
       <div id="log-panel">
         <div id="log-footer-label">Analysis Log</div>
-        <textarea id="log-box" readonly spellcheck="false"
-                  placeholder="Log output will appear here…"></textarea>
+        <textarea id="log-box" readonly spellcheck="false" placeholder="Log output will appear here…"></textarea>
       </div>
       <div id="credits">
         <div id="credits-name">Microchannel and Replication Quality Analyzer</div>
@@ -379,6 +398,77 @@
     </div>
 
   </div>
+
+  <!-- ── Export dialog ───────────────────────────────────────────────────────── -->
+  <div class="modal" id="modal-export" style="display:none">
+    <div class="modal-box">
+      <div class="modal-head"><span>Export a figure</span><button class="btn-icon" onclick="closeModal('modal-export')" title="Close">✕</button></div>
+      <div class="modal-body">
+        <label class="field">Figure <select id="exp-figure"></select></label>
+        <label class="field">Format
+          <select id="exp-format">
+            <option value="svg">SVG (vector; 3D scenes embedded as images)</option>
+            <option value="png2" selected>PNG, 2× resolution</option>
+            <option value="png3">PNG, 3× resolution</option>
+          </select>
+        </label>
+        <label class="field">Theme
+          <select id="exp-theme">
+            <option value="light" selected>Light (white background, for documents)</option>
+            <option value="current">Current theme</option>
+            <option value="dark">Dark</option>
+          </select>
+        </label>
+        <label class="field">Size (pixels)
+          <select id="exp-size">
+            <option value="panel">As shown on screen</option>
+            <option value="1200x700" selected>1200 × 700</option>
+            <option value="1600x900">1600 × 900</option>
+            <option value="1800x1000">1800 × 1000</option>
+            <option value="custom">Custom</option>
+          </select>
+        </label>
+        <div class="field-row" id="exp-custom" style="display:none">
+          <label class="field">Width <input type="number" id="exp-w" value="1400" min="300" max="6000"></label>
+          <label class="field">Height <input type="number" id="exp-h" value="800" min="200" max="6000"></label>
+        </div>
+        <div class="modal-note">The figure is rebuilt from the result in the chosen theme and size, so labels and line widths stay legible.</div>
+      </div>
+      <div class="modal-foot"><button class="btn btn-primary" id="exp-go" onclick="runExport()">Export</button></div>
+    </div>
+  </div>
+
+  <!-- ── About dialog ────────────────────────────────────────────────────────── -->
+  <div class="modal" id="modal-about" style="display:none">
+    <div class="modal-box">
+      <div class="modal-head"><span>About MaRQ</span><button class="btn-icon" onclick="closeModal('modal-about')" title="Close">✕</button></div>
+      <div class="modal-body about">
+        <p><b>MaRQ, the Microchannel and Replication Quality Analyzer</b>, version <span id="about-version">1.0</span>.
+           It measures microchannels in optical-profilometry point clouds and grades how faithfully a channel has
+           been replicated from a mould insert into a moulded part, with the height correlation RQ, the
+           directional slope correlations RQdx and RQdy, and RQd, the slope-magnitude correlation over the
+           channel interior.</p>
+        <p><b>Please cite</b><br>
+           M. O. Güngör, J. Charmet, E. Yıldırım, <i>A 3D slope-correlation metric and workflow for grading
+           microchannel replication quality</i>, Measurement (submitted, 2026).<br>
+           Software and sample data: <a href="https://doi.org/10.5281/zenodo.22813916" target="_blank" rel="noopener">doi:10.5281/zenodo.22813916</a>
+           &middot; code: <a href="https://github.com/ogulcangngr/MaRQ" target="_blank" rel="noopener">github.com/ogulcangngr/MaRQ</a></p>
+        <p>MaRQ software is developed by Mehmet Oğulcan Güngör. The software is released under the GNU General
+           Public License, version 3. Sample data: CC BY 4.0.</p>
+        <p><b>Runtime</b> <span id="about-runtime">detecting…</span><br>
+           Third-party components: Plotly.js (MIT), Pyodide (MPL-2.0), NumPy and SciPy (BSD-3-Clause), OpenBLAS (BSD-3-Clause).
+           All computation happens in this browser; no file is uploaded.</p>
+        <p><b>The metrics</b><br>
+           RQ: Pearson correlation of the two height maps over the channel-interior mask.
+           RQdx, RQdy: correlations of the signed slopes along and across the channel.
+           RQd: correlation of the slope-magnitude maps |∇Z| at the stated grid cell size (5 µm in the paper);
+           it is the grading metric because it responds to sidewall shape where height correlation saturates.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Off-screen stage for figure export -->
+  <div id="export-stage"></div>
 
 </div>
 

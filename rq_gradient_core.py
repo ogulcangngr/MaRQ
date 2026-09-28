@@ -97,16 +97,23 @@ def run_rq_gradient(file1: str, file2: str,
     c1 = _load_cloud(file1, p, log_fn)
     c2 = _load_cloud(file2, p, log_fn)
 
-    res_a = _gradient_metrics(c1, c2, p, log_fn)
+    # Both orientations are computed with their own log buffers and only the kept
+    # orientation's log is emitted, so the numbers in the log are the reported ones.
+    log_a, log_b = [], []
+    res_a = _gradient_metrics(c1, c2, p, log_a.append)
     c2f = c2.copy(); c2f[:, 0] = -c2f[:, 0]; c2f[:, 1] = -c2f[:, 1]
-    res_b = _gradient_metrics(c1, c2f, p, lambda s: None)
+    res_b = _gradient_metrics(c1, c2f, p, log_b.append)
 
     key  = "r_z" if res_a["metrics"]["cad_mode"] else "r_mag"
+    name = {"r_z": "RQ", "r_mag": "RQd"}[key]
     flip = bool(res_b["metrics"][key] > res_a["metrics"][key])
     res  = res_b if flip else res_a
     res["metrics"]["z_flip"] = flip
-    log_fn(f"\n  Z-orientation of cloud 2: {'ROTATED 180°' if flip else 'as-is'}  "
-           f"({key}: as-is={res_a['metrics'][key]:.3f}, rotated={res_b['metrics'][key]:.3f})")
+    log_fn(f"\n  Orientation check on surface B (File 2): {name} as-is = {res_a['metrics'][key]:.3f}, "
+           f"rotated 180° about Z = {res_b['metrics'][key]:.3f}  ->  "
+           f"keeping the {'ROTATED' if flip else 'AS-IS'} orientation")
+    for line in (log_b if flip else log_a):
+        log_fn(line)
     return res
 
 
@@ -267,10 +274,10 @@ def _gradient_metrics(c1, c2, p, log_fn) -> dict:
 
     log_fn(f"  {'Metric':<20} {'Pearson r':>10}  {'RMSE':>10}")
     log_fn(f"  {'-'*42}")
-    log_fn(f"  {'Z':<20} {r_z:>10.6f}  {rmse_z:>10.4f}")
-    log_fn(f"  {'dZ/dx':<20} {r_gx:>10.6f}  {rmse_gx:>10.6f}")
-    log_fn(f"  {'dZ/dy':<20} {r_gy:>10.6f}  {rmse_gy:>10.6f}")
-    log_fn(f"  {'|∇Z| magnitude':<20} {r_mag:>10.6f}  {rmse_mag:>10.6f}")
+    log_fn(f"  {'RQ   (height Z)':<20} {r_z:>10.6f}  {rmse_z:>10.4f}")
+    log_fn(f"  {'RQdx (dZ/dx)':<20} {r_gx:>10.6f}  {rmse_gx:>10.6f}")
+    log_fn(f"  {'RQdy (dZ/dy)':<20} {r_gy:>10.6f}  {rmse_gy:>10.6f}")
+    log_fn(f"  {'RQd  (|∇Z|)':<20} {r_mag:>10.6f}  {rmse_mag:>10.6f}")
     log_fn("\nDone.")
 
     error_map         = np.abs(mag1 - mag2).astype(float)
@@ -287,9 +294,15 @@ def _gradient_metrics(c1, c2, p, log_fn) -> dict:
             "cad_mode":   cad_mode,
             "texture_um": [tex1, tex2],
             "primary":    "r_z" if cad_mode else "r_mag",
+            "n_mask":     int(mmask.sum()),
+            "n_valid":    int(valid.sum()),
+            "n_cells":    int(ncells),
+            "cell_um":    [float(dx), float(dy)],
+            "grid_shape": [int(res_x), int(res_y)],
         },
         "grids": {
             "XI": XI, "YI": YI,
+            "mask": mmask,
             "ZI1": ZI1, "ZI2": ZI2,
             "diff": diff,
             "mag1": mag1, "mag2": mag2,

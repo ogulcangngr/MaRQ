@@ -1,9 +1,9 @@
 cff-version: 1.2.0
 message: "If you use MaRQ or these data, please cite the paper below and this archive."
 type: software
-title: "MaRQ, the Microchannel and Replication Quality Analyzer: software, sample data and analysis scripts"
+title: "MaRQ, the Microchannel and Replication Quality Analyzer: software and sample data"
 version: "1.0"
-date-released: "2026-09-17"
+date-released: "2026-09-28"
 license: GPL-3.0
 authors:
   - family-names: "Güngör"
