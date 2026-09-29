@@ -180,9 +180,12 @@ def _gradient_metrics(c1, c2, p, log_fn) -> dict:
     # CAD / idealized-surface detection: microtexture = plane-removed residual on
     # the flat channel FLOOR (deepest few % of the z range). An idealized CAD
     # surface is perfectly flat there (~0 µm) while a measured surface carries
-    # print/mould roughness (~µm). When either surface is idealized, the gradient
-    # metrics (r_mag) compare ideal walls to real texture and are NOT meaningful
-    # — r_z is the primary metric. (The explicit `cad` param overrides this.)
+    # print/mould roughness (~µm); the missing texture only serves to RECOGNISE
+    # the CAD surface. Against an ideal surface the height correlation r_z does
+    # not saturate and the difference is dominated by systematic wall offsets,
+    # which the extracted dimensions measure directly, so r_z (with the
+    # dimensions) is the primary metric; r_mag is still computed and reported.
+    # (The explicit `cad` param overrides the detection.)
     def _texture_amp(ZI):
         m = np.isfinite(ZI)
         if m.sum() < 200:
@@ -200,8 +203,10 @@ def _gradient_metrics(c1, c2, p, log_fn) -> dict:
                     (np.isfinite(tex1) and tex1 < p["cad_tex_tol"]) or
                     (np.isfinite(tex2) and tex2 < p["cad_tex_tol"]))
     if cad_mode:
-        log_fn(f"  IDEALIZED surface (field texture {tex1:.2f}/{tex2:.2f} µm) — "
-               f"primary metric is r_z; r_mag is not meaningful here.")
+        log_fn(f"  IDEALIZED surface detected (floor texture {tex1:.2f}/{tex2:.2f} µm): "
+               f"RQ and the extracted dimensions are the primary measures for this pair; "
+               f"against an ideal surface RQ does not saturate and the difference is "
+               f"dominated by systematic wall offsets, which the dimensions give directly.")
 
     # NaN-aware smoothing. smooth_sigma is in µm; convert per-axis to cells so the
     # physical blur is the same regardless of grid spacing, with a 1-cell floor so
