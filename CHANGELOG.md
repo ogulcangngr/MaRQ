@@ -1,10 +1,11 @@
 # Changelog
 
-## 1.0 (2026-09-28)
+## 0.9 (2026-09-30)
 
-First public release; the version used for the Measurement paper. A 1.0 build of
-2026-09-17 existed in the private repository and was superseded by this one before
-any public release. The analysis modules give identical results (checked on the
+The version the author's MS thesis is based on, kept as tag v0.9. It was labelled
+1.0 until 2026-10-01, when it was relabelled 0.9 because the geometry extraction was
+revised for the release that follows. Builds of 2026-09-17 and 2026-09-28 existed in
+the private repository; the analysis modules give identical results (checked on the
 sample channel: geometry, roughness, RQ, RQdx, RQdy, RQd and the exported crop).
 
 Compared with the internal "Microchannel Analyzer" 0.6.0:

@@ -1,7 +1,7 @@
 /* MaRQ (Microchannel and Replication Quality Analyzer): main application logic */
 
 const APP = {
-  name: "MaRQ", full: "Microchannel and Replication Quality Analyzer", version: "1.0",
+  name: "MaRQ", full: "Microchannel and Replication Quality Analyzer", version: "0.9",
   repo: "https://github.com/ogulcangngr/MaRQ", doi: "10.5281/zenodo.22813916",
   plotlyVersion: "2.35.2", pyodideVersion: "0.26.4",
   paper: "M. O. Güngör, J. Charmet, E. Yıldırım, A 3D measurement workflow for assessing replication quality " +
