@@ -21,8 +21,8 @@ Two workflows share one loading and preprocessing framework:
 
 RQd and the software are described in: M. O. Güngör, J. Charmet, E. Yıldırım,
 *A 3D measurement workflow for assessing replication quality and tool degradation
-in moulded microfluidic channels*, Measurement (submitted, 2026). The companion archive with the software and
-one real channel of the study, with its expected results, is on Zenodo:
+in moulded microfluidic channels*, Measurement (submitted, 2026). The companion archive, with the software,
+one sample channel with its expected results, and the point clouds of the study, is on Zenodo:
 https://doi.org/10.5281/zenodo.22813916 (restricted until the article is published).
 
 ## Running MaRQ
