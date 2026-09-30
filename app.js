@@ -4,8 +4,8 @@ const APP = {
   name: "MaRQ", full: "Microchannel and Replication Quality Analyzer", version: "1.0",
   repo: "https://github.com/ogulcangngr/MaRQ", doi: "10.5281/zenodo.22813916",
   plotlyVersion: "2.35.2", pyodideVersion: "0.26.4",
-  paper: "M. O. Güngör, J. Charmet, E. Yıldırım, A 3D slope-correlation metric and workflow for grading " +
-         "microchannel replication quality, Measurement (submitted, 2026)",
+  paper: "M. O. Güngör, J. Charmet, E. Yıldırım, A 3D measurement workflow for assessing replication quality " +
+         "and tool degradation in moulded microfluidic channels, Measurement (submitted, 2026)",
 };
 
 // Figure ids (as produced by plots.py) -> label and plot container

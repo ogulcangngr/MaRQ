@@ -18,7 +18,7 @@ identifiers:
 keywords: [replication quality, surface metrology, optical profilometry, microchannel, rapid tooling]
 preferred-citation:
   type: article
-  title: "A 3D slope-correlation metric and workflow for grading microchannel replication quality"
+  title: "A 3D measurement workflow for assessing replication quality and tool degradation in moulded microfluidic channels"
   authors:
     - family-names: "Güngör"
       given-names: "Mehmet Oğulcan"
