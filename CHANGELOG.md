@@ -1,5 +1,44 @@
 # Changelog
 
+## 1.0 (2026-10)
+
+The version used for the Measurement paper. The geometry of the single-surface module
+is read in a new way; RQ, RQdx, RQdy, RQd and the depth are computed as in 0.9, but
+the exported crop and the roughness strips are placed from the new widths and length,
+so every downstream number was recomputed.
+
+- Widths on grid lines. The aligned points are averaged on a grid (cells of one voxel
+  across the channel, lines two voxels apart along it) over the central 80 % of the
+  channel length, the rounded channel ends excluded. On every line the wall position
+  at a level is where the height profile first rises above the level, moving outwards
+  from the channel centre line, interpolated linearly between the two grid points that
+  bracket it (at most three empty cells between them). The floor, mid-depth and
+  opening widths (90, 50 and 10 % of the depth) are the medians over the lines, and
+  their standard deviations the longitudinal spreads. 0.9 took the span of the
+  outermost bin centres of the pooled cross-section below the level, without
+  interpolation: widths were quantised to the bin (about 7.5 um; 25 um per slice) and
+  read short by up to 15 um on the CAD references, whose widths the new reading
+  recovers within 0.1 um.
+- Wall angle. The draft of 0.9 was the chord between the wall positions at the two
+  width levels, which mixes the wall inclination with the rounding of the corners. The
+  wall angle is now a straight line through the wall positions at 25, 37.5, 50, 62.5
+  and 75 % of the depth on every grid line, median over the lines and both walls,
+  measured from the vertical and negative for an undercut; left and right are also
+  given. It recovers the 10 deg of the CAD references within 0.02 deg. Walls steeper
+  than about 3 deg span too few grid cells to be resolved and are flagged. The chord
+  angle is kept as chord_angle_deg; draft_angle_deg now holds the wall angle.
+- Corner rounding. How far the wall lies inside the extended mid-wall line at the
+  floor level (floor corner) and outside it at the opening level (rim corner), in um.
+- Length on grid lines along the channel, near its centre line. Each end is read from
+  the outside in (the outermost run of at least three cells below the level, and the
+  interpolated crossing just outside it), so a floor that undulates across the level
+  along a worn insert or a partly filled part does not end the length early; 0.9 read
+  the length short by 30 to 110 um on synthetic channels. The crop box spans the two
+  measured ends plus the pad; if no end is found (a mislevelled, warped field), it
+  falls back to the channel extent and the log says so.
+- The per-slice width and length overlays are replaced by the per-line values; the
+  per-slice depth is unchanged. run_pvisual also accepts a point array (tests).
+
 ## 0.9 (2026-09-30)
 
 The version the author's MS thesis is based on, kept as tag v0.9. It was labelled

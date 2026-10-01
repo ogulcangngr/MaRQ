@@ -300,7 +300,7 @@ def make_channel_fig(result):
     layout = _base(margin={"t": 60, "b": 120, "l": 65, "r": 80}, showlegend=True,
                    legend=_legend_bottom())
     layout["title"] = _title("Channel detection on the aligned surface  |  "
-                             f"per-slice floor edges at {fpct} % of depth, crop box for export")
+                             f"floor edges on the grid lines at {fpct} % of depth, crop box for export")
     layout["xaxis"] = _axis(f"X, channel axis ({U})")
     layout["yaxis"] = _axis(f"Y, cross-channel ({U})", scaleanchor="x")
 
@@ -312,7 +312,7 @@ def make_channel_fig(result):
          "fill": "toself", "fillcolor": _rgba(C("RED"), 0.18), "line": {"width": 0},
          "hoverinfo": "skip", "showlegend": False, "name": "centre Y ±2 SD"},
         {"type": "scatter", "x": rx.tolist(), "y": cy.tolist(), "mode": "lines",
-         "line": {"color": C("RED"), "width": 2}, "name": "Centre Y per longitudinal slice"},
+         "line": {"color": C("RED"), "width": 2}, "name": "Centre Y per grid line across the channel"},
         {"type": "scatter", "x": wx_x, "y": wx_y, "mode": "lines",
          "line": {"color": edge_col, "width": 1.5, "dash": "dash"},
          "name": "Floor width edges"},
@@ -321,7 +321,7 @@ def make_channel_fig(result):
          "fill": "toself", "fillcolor": _rgba(C("BLUE"), 0.18), "line": {"width": 0},
          "hoverinfo": "skip", "showlegend": False, "name": "centre X ±2 SD"},
         {"type": "scatter", "x": cx.tolist(), "y": ry.tolist(), "mode": "lines",
-         "line": {"color": C("BLUE"), "width": 2}, "name": "Centre X per transverse slice"},
+         "line": {"color": C("BLUE"), "width": 2}, "name": "Centre X per grid line along the channel"},
         {"type": "scatter", "x": ly_x, "y": ly_y, "mode": "lines",
          "line": {"color": edge_col, "width": 1.5, "dash": "dot"},
          "name": "Floor length edges"},
@@ -347,14 +347,13 @@ def make_profile_ycenter_fig(result):
 
     layout = _base(showlegend=True, legend=_legend_bottom(), margin={"t": 60, "b": 100, "l": 70, "r": 30})
     layout["title"] = _title(f"Channel centre line  |  mean Y = {cY:.2f} {U}, "
-                             f"SD over the central 80 % of slices {cY_c:.2f} {U}")
+                             f"SD over the central 80 % of the grid lines {cY_c:.2f} {U}")
     layout["xaxis"] = _axis(f"X, position along the channel ({U})")
     layout["yaxis"] = _axis(f"Centre Y ({U})", **_eq("x"))
     return {
         "data": [
-            _band(rx, cy - cy_s, cy + cy_s, C("BLUE"), "±1 SD within slice"),
             {"type": "scatter", "x": rx.tolist(), "y": cy.tolist(), "mode": "lines",
-             "line": {"color": C("BLUE"), "width": 2}, "name": "Centre Y per slice (band: ±1 SD within the slice)"},
+             "line": {"color": C("BLUE"), "width": 2}, "name": "Centre Y per grid line across the channel"},
             {"type": "scatter", "x": [float(rx[0]), float(rx[-1])], "y": [cY, cY], "mode": "lines",
              "line": {"color": C("RED"), "width": 1.2, "dash": "dash"}, "name": f"Mean {cY:.2f} {U}"},
         ],
@@ -369,15 +368,14 @@ def make_profile_xcenter_fig(result):
     cX, cX_c = ch["center_x"], ch["center_x_conf"]
 
     layout = _base(showlegend=True, legend=_legend_bottom(), margin={"t": 60, "b": 100, "l": 70, "r": 30})
-    layout["title"] = _title(f"Longitudinal centre per transverse slice  |  mean X = {cX:.2f} {U}, "
+    layout["title"] = _title(f"Longitudinal centre per grid line along the channel  |  mean X = {cX:.2f} {U}, "
                              f"SD {cX_c:.2f} {U}")
     layout["xaxis"] = _axis(f"Y, position across the channel ({U})")
     layout["yaxis"] = _axis(f"Centre X ({U})", **_eq("x"))
     return {
         "data": [
-            _band(ry, cx - cx_s, cx + cx_s, C("GREEN"), "±1 SD within slice"),
             {"type": "scatter", "x": ry.tolist(), "y": cx.tolist(), "mode": "lines",
-             "line": {"color": C("GREEN"), "width": 2}, "name": "Centre X per slice (band: ±1 SD within the slice)"},
+             "line": {"color": C("GREEN"), "width": 2}, "name": "Centre X per grid line along the channel"},
             {"type": "scatter", "x": [float(ry[0]), float(ry[-1])], "y": [cX, cX], "mode": "lines",
              "line": {"color": C("RED"), "width": 1.2, "dash": "dash"}, "name": f"Mean {cX:.2f} {U}"},
         ],
@@ -397,8 +395,8 @@ def make_profile_widthlength_fig(result):
 
     layout = _base(showlegend=True, legend=_legend_bottom(),
                    margin={"t": 60, "b": 115, "l": 70, "r": 30})
-    layout["title"] = _title(f"Floor width and length per slice at {fpct} % of depth  |  "
-                             f"W = {mW:.1f} ± {mW_c:.1f} {U}   L = {mL:.1f} ± {mL_c:.1f} {U}")
+    layout["title"] = _title(f"Floor width and length per grid line at {fpct} % of depth  |  "
+                             f"W = {mW:.1f} ± {mW_c:.1f} {U}   L = {mL:.1f} ± {mL_c:.1f} {U} (median ± SD of the lines)")
     layout["xaxis"]  = _axis(f"X, position along the channel ({U})", anchor="y")
     layout["yaxis"]  = _axis(f"Floor width ({U})", domain=[0.6, 1.0], **_eq("x"))
     layout["xaxis2"] = _axis(f"Y, position across the channel ({U})", anchor="y2")
@@ -406,17 +404,17 @@ def make_profile_widthlength_fig(result):
                              domain=[0.0, 0.4], anchor="x2")
     return {
         "data": [
-            _band(rx, wx - wx_s, wx + wx_s, C("YELLOW"), "width ±1 SD"),
+            _band(rx, wx - wx_s, wx + wx_s, C("YELLOW"), "width ±1 SD over 11 lines"),
             {"type": "scatter", "x": rx.tolist(), "y": wx.tolist(), "mode": "lines",
-             "line": {"color": C("YELLOW"), "width": 2}, "name": "Floor width per longitudinal slice"},
+             "line": {"color": C("YELLOW"), "width": 2}, "name": "Floor width per grid line across the channel"},
             {"type": "scatter", "x": [float(rx[0]), float(rx[-1])], "y": [mW, mW], "mode": "lines",
-             "line": {"color": C("RED"), "width": 1.2, "dash": "dash"}, "name": f"Width from the mean cross-section {mW:.1f} {U}"},
-            {**_band(ry, ly - ly_s, ly + ly_s, C("PURPLE"), "length ±1 SD"), "xaxis": "x2", "yaxis": "y2"},
+             "line": {"color": C("RED"), "width": 1.2, "dash": "dash"}, "name": f"Floor width, median of the lines {mW:.1f} {U}"},
+            {**_band(ry, ly - ly_s, ly + ly_s, C("PURPLE"), "length ±1 SD over 11 lines"), "xaxis": "x2", "yaxis": "y2"},
             {"type": "scatter", "x": ry.tolist(), "y": ly.tolist(), "mode": "lines",
-             "line": {"color": C("PURPLE"), "width": 2}, "name": "Floor length per transverse slice",
+             "line": {"color": C("PURPLE"), "width": 2}, "name": "Floor length per grid line along the channel",
              "xaxis": "x2", "yaxis": "y2"},
             {"type": "scatter", "x": [float(ry[0]), float(ry[-1])], "y": [mL, mL], "mode": "lines",
-             "line": {"color": C("RED"), "width": 1.2, "dash": "dot"}, "name": f"Length from the mean profile {mL:.1f} {U}",
+             "line": {"color": C("RED"), "width": 1.2, "dash": "dot"}, "name": f"Floor length, median of the lines {mL:.1f} {U}",
              "xaxis": "x2", "yaxis": "y2"},
         ],
         "layout": layout,
@@ -426,8 +424,9 @@ def make_profile_widthlength_fig(result):
 # ── Mean cross-section and per-slice depth ─────────────────────────────────────
 
 def make_cross_section_fig(result):
-    """Top: the mean cross-section on which the reported widths are measured, with the
-    field, floor level, floor-width level and opening level and the detected edges.
+    """Top: the mean cross-section on which the depth is measured, with the field,
+    floor level, floor-width level and opening level, the median wall positions of
+    the grid lines at the two width levels, and the mid-wall lines of the wall angle.
     Bottom: the local depth of every longitudinal slice against the mean depth."""
     pr, ch, sl = result["profile"], result["channel"], result["slices"]
     yc, zb = np.asarray(pr["yc"], float), np.asarray(pr["zb"], float)
@@ -472,6 +471,24 @@ def make_cross_section_fig(result):
         data.append({"type": "scatter", "x": list(oe), "y": [ot, ot], "mode": "markers",
                      "marker": {"color": C("PURPLE"), "size": 9, "symbol": "diamond"},
                      "name": f"Opening width {ch['opening_width']:.1f} {U} ({opct} % of depth)", "hoverinfo": "name+x"})
+    fr, wl, wr, band = pr.get("wall_fractions"), pr.get("wall_left"), pr.get("wall_right"), pr.get("wall_band")
+    if fr and band and depth and np.isfinite(depth):
+        # mid-wall line of each wall: fitted through the median wall positions of the
+        # band levels, drawn from the floor-width level to the opening level
+        zs = np.array([-f * depth for f in fr]); inb = np.isin(np.round(fr, 6), np.round(band, 6))
+        lx, ly_ = [], []
+        for W_ in (np.asarray(wl, float), np.asarray(wr, float)):
+            ok = inb & np.isfinite(W_)
+            if ok.sum() >= 3:
+                b_, a_ = np.polyfit(zs[ok], W_[ok], 1)
+                lx += [a_ + b_ * ft, a_ + b_ * ot, None]; ly_ += [ft, ot, None]
+        if lx:
+            wa = ch.get("wall_angle_deg")
+            data.append({"type": "scatter", "x": lx, "y": ly_, "mode": "lines",
+                         "line": {"color": C("RED"), "width": 1.4, "dash": "dash"},
+                         "name": f"Mid-wall lines (25–75 % of depth), wall angle {wa:.1f}°"
+                                 if wa is not None and np.isfinite(wa) else "Mid-wall lines (25–75 % of depth)",
+                         "hoverinfo": "name"})
     if valid.any():
         data.append({"type": "scatter", "x": pos[valid].tolist(), "y": dep[valid].tolist(),
                      "mode": "lines+markers", "marker": {"size": 4}, "line": {"color": C("GREEN"), "width": 1.6},
@@ -489,12 +506,12 @@ def make_cross_section_fig(result):
                      "name": "Slice without a valid floor", "xaxis": "x2", "yaxis": "y2", "hoverinfo": "x+name",
                      "showlegend": False})
 
-    draft = ch.get("draft_angle_deg")
+    wall = ch.get("wall_angle_deg", ch.get("draft_angle_deg"))
     layout = _base(showlegend=True, legend={**_legend_bottom(), "font": {"size": 10}},
                    margin={"t": 60, "b": 140, "l": 70, "r": 30})
     layout["title"] = _title(f"Mean cross-section and local depth  |  floor width {ch['floor_width']:.1f} {U}, "
                              f"opening {ch['opening_width']:.1f} {U}, depth {depth:.1f} {U}"
-                             + (f", draft {draft:.1f}°" if draft is not None and np.isfinite(draft) else ""))
+                             + (f", wall angle {wall:.1f}°" if wall is not None and np.isfinite(wall) else ""))
     layout["xaxis"]  = _axis(f"Y, across the channel ({U})", range=xr, anchor="y")
     layout["yaxis"]  = _axis(f"Z ({U})", domain=[0.58, 1.0], **_eq("x"))
     layout["xaxis2"] = _axis(f"X, along the channel ({U})", anchor="y2")

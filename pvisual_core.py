@@ -8,7 +8,11 @@ Method (replaces the old floor-percentile + Monte-Carlo approach):
   load -> crop -> voxel -> robust FIELD-PLANE leveling -> AUTO-ORIENTATION
   (a protrusion is rotated 180 deg about the in-plane axis into a depression —
   a proper rotation, NOT a z-flip mirror, so imperfection handedness is kept)
-  -> PCA axis alignment -> mean cross-section profile -> direct geometry.
+  -> PCA axis alignment -> mean cross-section profile (depth) -> grid-line
+  geometry: widths at fixed fractions of the depth, the mid-wall angle and the
+  corner rounding on every grid line across the channel, the length on grid lines
+  along it, level crossings interpolated between grid points (1.0; MaRQ 0.9 read the
+  widths from the bin centres of the pooled profile).
 
 There is no channel_pctl and no random sampling: the field is the large flat
 reference, so leveling and detection are robust for any channel width.
@@ -55,6 +59,11 @@ _PV_DEFAULTS = {
     "field_tol_min":        8.0,      # field-edge tolerance: max(this, frac x depth)
     "field_tol_frac":       0.04,
     "nominal_width":        0.0,      # if >0, floor strip keyed to nominal (comparability)
+    # grid-line geometry (1.0): widths, wall angle, corner rounding, length
+    "line_cell":            0.0,      # cell across the lines, µm; 0 = the voxel size
+    "line_step":            0.0,      # spacing of the lines, µm; 0 = twice the cell
+    "line_central":         0.80,     # central fraction of the channel length used
+    "line_max_gap":         3,        # empty cells a level crossing may be interpolated across
     # kept for UI back-compat (no longer used by the field-referenced method):
     "channel_pctl":   5,
     "z_search_frac":  0.50,
@@ -446,6 +455,211 @@ def _slice_depths(axis_vals, cross_vals, z_vals, n_slices, a_lo, a_hi,
     return pos, depth, valid, reason
 
 
+# ── Line geometry: widths, wall angle, corner rounding, length (1.0) ─────────────
+#
+# Every dimension is read on the lines of a regular grid: the aligned points are
+# averaged in cells `line_cell` wide across the channel on lines `line_step` apart
+# along it. On each line the wall position at a level is the first place where the
+# height profile rises above the level, moving outwards from the channel centre
+# line, located by linear interpolation between the two grid points that bracket it
+# (at most `line_max_gap` empty cells between them, so a crossing is never
+# interpolated across a dropout). The reported values are medians over the lines of
+# the central `line_central` fraction of the channel length (the rounded channel
+# ends excluded); their standard deviations are the longitudinal spreads. The
+# length is read on lines along the channel, each end from the outside in
+# (_line_length).
+
+WALL_BAND = (0.25, 0.375, 0.50, 0.625, 0.75)   # depth fractions of the mid-wall fit
+WALL_ANGLE_MIN_RESOLVED = 3.0                   # deg; steeper walls span too few cells
+
+
+def _line_grid(u, v, w, du, dv, u_lo, u_hi):
+    """Mean of w on lines along u (spacing du, from u_lo to u_hi) and cells across v
+    (spacing dv). Returns (grid[n_lines, n_cells], line centres, cell centres)."""
+    m = (u >= u_lo) & (u <= u_hi)
+    u, v, w = u[m], v[m], w[m]
+    if len(u) < 10:
+        return np.full((0, 0), np.nan), np.zeros(0), np.zeros(0)
+    iu = np.floor((u - u_lo) / du).astype(np.intp)          # intp: np.bincount in 32-bit Pyodide
+    v0 = float(v.min())
+    iv = np.floor((v - v0) / dv).astype(np.intp)
+    nu, nv = int(iu.max()) + 1, int(iv.max()) + 1
+    key = iu * nv + iv
+    s = np.bincount(key, weights=w, minlength=nu * nv)
+    n = np.bincount(key, minlength=nu * nv)
+    g = np.full(nu * nv, np.nan)
+    g[n > 0] = s[n > 0] / n[n > 0]
+    return g.reshape(nu, nv), u_lo + (np.arange(nu) + 0.5) * du, v0 + (np.arange(nv) + 0.5) * dv
+
+
+def _crossing(r, vc, lev, k0, step, max_gap):
+    """First position where row r rises above lev moving from index k0 in direction
+    step, interpolated linearly between the bracketing finite cells (the last one at
+    or below the level and the first one above it); nan if more than max_gap empty
+    cells lie between those two, or if the row ends first. Empty cells elsewhere on
+    the way (a sparsely sampled floor) do not matter."""
+    i, j, n = k0, k0 + step, len(r)
+    while 0 <= j < n:
+        rj = r[j]
+        if rj == rj:                                   # finite cell
+            if rj > lev:
+                if abs(j - i) - 1 > max_gap:
+                    return float("nan")
+                return float(vc[i] + (lev - r[i]) * (vc[j] - vc[i]) / (rj - r[i]))
+            i = j
+        j += step
+    return float("nan")
+
+
+def _line_cells(p, voxel_size):
+    cell = float(p.get("line_cell") or 0.0) or float(voxel_size)
+    step = float(p.get("line_step") or 0.0) or 2.0 * cell
+    return cell, step
+
+
+def _line_geometry(xr, yr, zr, depth, x_lo, x_hi, center_y, p, voxel_size):
+    """Widths at the floor / mid-depth / opening levels, the mid-wall angle of each
+    wall and the rounding of the floor and rim corners, on grid lines across the
+    channel (see the section comment). Angles are measured from the vertical,
+    positive for a wall that widens towards the opening (negative = undercut)."""
+    cell, step = _line_cells(p, voxel_size)
+    gap = int(p.get("line_max_gap", 3))
+    cf = float(p.get("line_central", 0.80))
+    fr_f, fr_o = float(p["floor_width_frac"]), float(p["opening_frac"])
+    L = x_hi - x_lo
+    u_lo, u_hi = x_lo + 0.5 * (1 - cf) * L, x_hi - 0.5 * (1 - cf) * L
+    G, uc, vc = _line_grid(xr, yr, zr, step, cell, u_lo, u_hi)
+    fracs = sorted(set((fr_o, fr_f) + WALL_BAND))
+    iF, iO, iM = fracs.index(fr_f), fracs.index(fr_o), fracs.index(0.50)
+    iB = [fracs.index(f) for f in WALL_BAND]
+    zlev = np.array([-f * depth for f in fracs])
+    zb = zlev[iB]
+    n_lines = G.shape[0]
+    yL = np.full((n_lines, len(fracs)), np.nan); yR = np.full_like(yL, np.nan)
+    for li in range(n_lines):
+        r = G[li]
+        fin = np.nonzero(np.isfinite(r))[0]
+        if len(fin) < 20:
+            continue
+        k0 = int(fin[np.argmin(np.abs(vc[fin] - center_y))])
+        for kl, lev in enumerate(zlev):
+            if r[k0] > lev:
+                continue
+            yL[li, kl] = _crossing(r, vc, lev, k0, -1, gap)
+            yR[li, kl] = _crossing(r, vc, lev, k0, +1, gap)
+    wf, wo, wm = yR[:, iF] - yL[:, iF], yR[:, iO] - yL[:, iO], yR[:, iM] - yL[:, iM]
+    angL = np.full(n_lines, np.nan); angR = np.full(n_lines, np.nan)
+    rfL = np.full(n_lines, np.nan); rfR = np.full(n_lines, np.nan)
+    roL = np.full(n_lines, np.nan); roR = np.full(n_lines, np.nan)
+    for li in range(n_lines):
+        for side, Y, ang, rf, ro in (("L", yL, angL, rfL, roL), ("R", yR, angR, rfR, roR)):
+            yy = Y[li, iB]; ok = np.isfinite(yy)
+            if ok.sum() < 4:
+                continue
+            b, a = np.polyfit(zb[ok], yy[ok], 1)          # y = a + b z along the wall
+            sgn = -1.0 if side == "L" else 1.0            # outward direction of this wall
+            ang[li] = math.degrees(math.atan(sgn * b))
+            # floor corner: how far the wall at the floor level lies inside the line;
+            # rim corner: how far the wall at the opening level lies outside it
+            rf[li] = sgn * ((a + b * zlev[iF]) - Y[li, iF])
+            ro[li] = sgn * (Y[li, iO] - (a + b * zlev[iO]))
+    med = lambda v: float(np.nanmedian(v)) if np.isfinite(v).any() else float("nan")
+    sd = lambda v: float(np.nanstd(v)) if np.isfinite(v).sum() > 1 else float("nan")
+    ang_all = np.concatenate([angL, angR])
+    wall = med(ang_all)
+    return {
+        "cell": cell, "step": step, "x_lo": float(u_lo), "x_hi": float(u_hi),
+        "n_lines": int(n_lines),
+        "floor_width": med(wf), "opening_width": med(wo), "mid_width": med(wm),
+        "floor_width_sd": sd(wf), "opening_width_sd": sd(wo), "mid_width_sd": sd(wm),
+        "valid_floor": float(np.isfinite(wf).mean()) if n_lines else 0.0,
+        "valid_opening": float(np.isfinite(wo).mean()) if n_lines else 0.0,
+        "wall_angle": wall, "wall_angle_left": med(angL), "wall_angle_right": med(angR),
+        "wall_angle_sd": sd(ang_all),
+        "wall_angle_resolved": bool(np.isfinite(wall) and abs(wall) >= WALL_ANGLE_MIN_RESOLVED),
+        "valid_wall": float(np.isfinite(ang_all).mean()) if n_lines else 0.0,
+        "floor_corner": med(np.concatenate([rfL, rfR])), "rim_corner": med(np.concatenate([roL, roR])),
+        "fractions": fracs,
+        "wall_left": [med(yL[:, k]) for k in range(len(fracs))],
+        "wall_right": [med(yR[:, k]) for k in range(len(fracs))],
+        "lines": {"x": uc, "floor_width": wf, "opening_width": wo,
+                  "center": 0.5 * (yL[:, iF] + yR[:, iF]),
+                  "wall_angle_left": angL, "wall_angle_right": angR},
+    }
+
+
+LENGTH_MIN_RUN = 3      # cells below the level that make a channel end (not a lone deep cell)
+
+
+def _end_cells(r, lev, min_run):
+    """Indices of the first and last cell of the outermost runs of at least min_run
+    finite cells at or below lev (empty cells do not break a run); None if none."""
+    fin = np.nonzero(np.isfinite(r))[0]
+    low = r[fin] <= lev
+    if low.sum() < min_run:
+        return None
+    # runs of consecutive below-level cells in finite-cell order
+    edges = np.diff(np.concatenate(([0], low.astype(np.int8), [0])))
+    starts, stops = np.nonzero(edges == 1)[0], np.nonzero(edges == -1)[0]
+    keep = (stops - starts) >= min_run
+    if not keep.any():
+        return None
+    starts, stops = starts[keep], stops[keep]
+    return int(fin[starts[0]]), int(fin[stops[-1] - 1])
+
+
+def _line_length(xr, yr, zr, depth, center_x, center_y, floor_width, p, voxel_size):
+    """Channel length at the floor and opening levels along the channel centre line,
+    read on grid lines ALONG the channel within |y - centre| <= 0.10 of the floor
+    width (at least one line spacing; lines far from the centre line would cut the
+    rounded channel ends short). Each end is found from the outside in: the outermost
+    run of at least LENGTH_MIN_RUN cells at or below the level, and the crossing just
+    outside it, interpolated as for the widths. Reading from the ends, not outward
+    from the centre, keeps a floor that undulates across the level along the channel
+    (a worn insert, a partly filled part) from ending the length early."""
+    cell, step = _line_cells(p, voxel_size)
+    gap = int(p.get("line_max_gap", 3))
+    fr_f, fr_o = float(p["floor_width_frac"]), float(p["opening_frac"])
+    half = max(0.10 * floor_width, step) if np.isfinite(floor_width) else step
+    G, uc, vc = _line_grid(yr, xr, zr, step, cell, center_y - half, center_y + half)
+    out, ctr = {}, np.full(G.shape[0], np.nan)
+    ends = {}
+    for name, fr in (("floor", fr_f), ("opening", fr_o)):
+        lev = -fr * depth
+        lens = np.full(G.shape[0], np.nan)
+        lo, hi = np.full(G.shape[0], np.nan), np.full(G.shape[0], np.nan)
+        for li in range(G.shape[0]):
+            r = G[li]
+            if np.isfinite(r).sum() < 20:
+                continue
+            e = _end_cells(r, lev, LENGTH_MIN_RUN)
+            if e is None:
+                continue
+            a, b = _crossing(r, vc, lev, e[0], -1, gap), _crossing(r, vc, lev, e[1], +1, gap)
+            lens[li], lo[li], hi[li] = b - a, a, b
+            if name == "floor":
+                ctr[li] = 0.5 * (a + b)
+        out[name] = lens
+        ends[name] = (lo, hi)
+    med = lambda v: float(np.nanmedian(v)) if np.isfinite(v).any() else float("nan")
+    sd = lambda v: float(np.nanstd(v)) if np.isfinite(v).sum() > 1 else float("nan")
+    return {"length": med(out["floor"]), "opening_length": med(out["opening"]),
+            "length_sd": sd(out["floor"]), "opening_length_sd": sd(out["opening"]),
+            "ends": (med(ends["floor"][0]), med(ends["floor"][1])),
+            "lines": {"y": uc, "length": out["floor"], "opening_length": out["opening"], "center": ctr}}
+
+
+def _rolling_sd(v, k=11):
+    """Standard deviation over a moving window of k lines (NaN-aware), for the band
+    drawn around the per-line widths."""
+    v = np.asarray(v, float); out = np.full(len(v), np.nan); h = k // 2
+    for i in range(len(v)):
+        w = v[max(0, i - h):i + h + 1]
+        if np.isfinite(w).sum() > 2:
+            out[i] = np.nanstd(w)
+    return out
+
+
 # ── Public API ────────────────────────────────────────────────────────────────
 
 def run_pvisual(file_path: str, params: dict = None, log_fn=print) -> dict:
@@ -457,7 +671,10 @@ def run_pvisual(file_path: str, params: dict = None, log_fn=print) -> dict:
     log_fn("STEP 1 — Loading")
     log_fn("=" * 55)
     t0 = time.time()
-    if file_path.lower().endswith('.x3p'):
+    if isinstance(file_path, np.ndarray):              # points passed directly (tests)
+        log_fn("  Source: point array (x y z)")
+        points = np.asarray(file_path, float)[:, :3]
+    elif file_path.lower().endswith('.x3p'):
         log_fn("  Format: X3P (ISO 25178-72) — coordinates in µm")
         xp, yp, zp = load_x3p(file_path, log_fn)        # noqa: F821 (injected in worker)
         points = np.column_stack([xp, yp, zp])
@@ -547,59 +764,83 @@ def run_pvisual(file_path: str, params: dict = None, log_fn=print) -> dict:
     floor_level = _floor_level_from_profile(zb, pctl=5)
     mean_depth  = float(-floor_level)
 
-    cen_y_f, floor_width   = _width_at(yc, zb, -floor_frac * mean_depth)
-    cen_y_o, opening_width = _width_at(yc, zb, -open_frac  * mean_depth)
-
-    # along-channel profile Z(X) over the central FLOOR band, so the median
-    # tracks the floor depth (a wider window would average in walls/field and
-    # never reach floor level on narrow channels -> NaN length).
-    fw_for_band = floor_width if np.isfinite(floor_width) and floor_width > 0 else opening_width
-    in_y = np.abs(yr - cen_y_f) <= max(fw_for_band * 0.35, 15.0)
-    xc, zbx = _mean_profile(xr[in_y], zr[in_y])
-    cen_x_f, mean_length    = _width_at(xc, zbx, -floor_frac * mean_depth)
-    cen_x_o, opening_length = _width_at(xc, zbx, -open_frac  * mean_depth)
-
-    if np.isfinite(floor_width) and np.isfinite(opening_width) and mean_depth > 0:
-        dz = (floor_frac - open_frac) * mean_depth
-        draft_angle = float(np.degrees(np.arctan2((opening_width - floor_width) / 2, dz)))
-    else:
-        draft_angle = float("nan")
-
-    log_fn(f"  depth={mean_depth:.1f}  floorW={floor_width:.1f}  openW={opening_width:.1f}  "
-           f"draft={draft_angle:.1f}°  length={mean_length:.0f}")
-
-    # ── Step 8: Per-slice detection (plot overlays) ───────────────
-    n_sl = int(p["n_slices"])
-    rx, cy, cy_std, width_x, width_x_std = _slice_widths(
-        xr, yr, zr, n_sl, mean_depth, floor_frac, xc_lo, xc_hi)
-    yc_lo, yc_hi = _channel_extent(yr, zr, depth_est)
-    ry, cx, cx_std, length_y, length_y_std = _slice_widths(
-        yr, xr, zr, n_sl, mean_depth, floor_frac, yc_lo, yc_hi)
-
-    # Per-slice LOCAL depth: same 80 non-overlapping longitudinal slices and same
-    # transverse extent as the width extraction, same depth definition as the
-    # aggregate cross-section. Additive -- does not alter any existing geometry.
-    depth_pos, depth_x, depth_valid, depth_reason = _slice_depths(
-        xr, yr, zr, n_sl, xc_lo, xc_hi)
-    # central 80% by slice POSITION (first/last 10% of valid slices excluded), same
-    # end-excluded convention as the width spread.
-    depth_slice_std_c80 = _core_std(depth_x[depth_valid])
-
     # Channel center = centroid of the deep floor points. This is immune to the
     # end-ramp sensitivity of an extent midpoint and to the wall-slice bias of
-    # the per-slice means, so the crop stays symmetric on the channel.
+    # the per-slice means, so the crop stays symmetric on the channel. The grid
+    # lines below start from it.
     deepm = zr < -0.5 * mean_depth
     center_x = float(np.mean(xr[deepm])) if deepm.any() else 0.0
     center_y = float(np.mean(yr[deepm])) if deepm.any() else 0.0
+
+    # Widths, mid-wall angle and corner rounding on grid lines across the channel;
+    # the length on grid lines along it (see "Line geometry" above).
+    lg = _line_geometry(xr, yr, zr, mean_depth, xc_lo, xc_hi, center_y, p, voxel_size)
+    floor_width, opening_width, mid_width = lg["floor_width"], lg["opening_width"], lg["mid_width"]
+    wall_angle = lg["wall_angle"]
+    if np.isfinite(floor_width) and np.isfinite(opening_width) and mean_depth > 0:
+        # inclination of the chord between the wall positions at the two width
+        # levels (the draft of MaRQ 0.9); kept as a secondary value
+        chord_angle = float(np.degrees(np.arctan2((opening_width - floor_width) / 2,
+                                                   (floor_frac - open_frac) * mean_depth)))
+    else:
+        chord_angle = float("nan")
+    ll = _line_length(xr, yr, zr, mean_depth, center_x, center_y, floor_width, p, voxel_size)
+    mean_length, opening_length = ll["length"], ll["opening_length"]
+    fr = lg["fractions"]
+    kF, kO = fr.index(floor_frac), fr.index(open_frac)
+
+    log_fn(f"  depth={mean_depth:.1f}  floorW={floor_width:.1f}  openW={opening_width:.1f}  "
+           f"wall angle={wall_angle:.1f}° (L {lg['wall_angle_left']:.1f}, R {lg['wall_angle_right']:.1f})  "
+           f"length={mean_length:.0f}")
+    log_fn(f"  corner rounding: floor {lg['floor_corner']:.1f} µm, rim {lg['rim_corner']:.1f} µm   "
+           f"(chord angle {chord_angle:.1f}°)")
+    log_fn(f"  grid lines: {lg['n_lines']} across the channel, {lg['step']:.0f} µm apart, {lg['cell']:.0f} µm cells;  "
+           f"valid: floor {100 * lg['valid_floor']:.0f}%, opening {100 * lg['valid_opening']:.0f}%, "
+           f"wall {100 * lg['valid_wall']:.0f}%")
+    if np.isfinite(wall_angle) and not lg["wall_angle_resolved"]:
+        log_fn(f"  QA: wall angle below {WALL_ANGLE_MIN_RESOLVED:.0f}° — the wall spans too few grid "
+               f"cells to resolve it; read it as < {WALL_ANGLE_MIN_RESOLVED:.0f}°")
+
+    # ── Step 8: Per-line values (plot overlays) and per-slice depth ─────
+    n_sl = int(p["n_slices"])
+    rx, width_x = lg["lines"]["x"], lg["lines"]["floor_width"]
+    width_x_std = _rolling_sd(width_x)
+    cy = lg["lines"]["center"]; cy_std = np.zeros(len(cy))
+    ry, length_y = ll["lines"]["y"], ll["lines"]["length"]
+    length_y_std = _rolling_sd(length_y)
+    cx = ll["lines"]["center"]; cx_std = np.zeros(len(cx))
+
+    # Per-slice LOCAL depth: 80 non-overlapping longitudinal slices, same depth
+    # definition as the aggregate cross-section.
+    depth_pos, depth_x, depth_valid, depth_reason = _slice_depths(
+        xr, yr, zr, n_sl, xc_lo, xc_hi)
+    # central 80% by slice POSITION (first/last 10% of valid slices excluded)
+    depth_slice_std_c80 = _core_std(depth_x[depth_valid])
+
     mean_width      = floor_width
-    mean_width_conf = _core_std(width_x)
-    mean_length_conf = _core_std(length_y)
+    mean_width_conf = lg["floor_width_sd"]
+    mean_length_conf = ll["length_sd"]
 
     # ── Crop box for the gradient module ──────────────────────────
-    crop_x_min = center_x - (mean_length / 2 + p["crop_pad_x"])
-    crop_x_max = center_x + (mean_length / 2 + p["crop_pad_x"])
-    crop_y_min = center_y - (max(opening_width, floor_width) / 2 + p["crop_pad_y"])
-    crop_y_max = center_y + (max(opening_width, floor_width) / 2 + p["crop_pad_y"])
+    # Along the channel the box spans the two measured channel ends (floor level)
+    # plus the pad; when no grid line along the channel reaches the floor level
+    # (e.g. a warped field that mislevels the surface), the channel extent from
+    # Step 7 is used instead so the box is never empty.
+    end_lo, end_hi = ll["ends"]
+    if np.isfinite(end_lo) and np.isfinite(end_hi):
+        crop_x_min, crop_x_max = end_lo - p["crop_pad_x"], end_hi + p["crop_pad_x"]
+    else:
+        crop_x_min, crop_x_max = xc_lo - p["crop_pad_x"], xc_hi + p["crop_pad_x"]
+        log_fn("  QA: length not measurable on the grid lines along the channel; the crop "
+               "uses the channel extent instead — check the levelling and the depth")
+    wy = np.nanmax([opening_width, floor_width, np.nan]) if (np.isfinite(opening_width) or
+                                                              np.isfinite(floor_width)) else np.nan
+    if np.isfinite(wy):
+        crop_y_min = center_y - (wy / 2 + p["crop_pad_y"])
+        crop_y_max = center_y + (wy / 2 + p["crop_pad_y"])
+    else:
+        crop_y_min, crop_y_max = float(yr.min()), float(yr.max())
+        log_fn("  QA: no width measured; the crop keeps the full field across the channel")
     cmask = ((xr >= crop_x_min) & (xr <= crop_x_max) &
              (yr >= crop_y_min) & (yr <= crop_y_max))
     xc_pts, yc_pts, zc_pts = xr[cmask], yr[cmask], zr[cmask]
@@ -696,21 +937,44 @@ def run_pvisual(file_path: str, params: dict = None, log_fn=print) -> dict:
             # each slice. Describes within-scan longitudinal depth variation.
             "channel_depth_slice_std_central80": float(depth_slice_std_c80),
             "opening_width":      float(opening_width),
-            "opening_width_conf": _core_std(width_x),
+            "opening_width_conf": float(lg["opening_width_sd"]),
             "opening_length":     float(opening_length),
-            "opening_length_conf": _core_std(length_y),
+            "opening_length_conf": float(ll["opening_length_sd"]),
             "floor_width":        float(floor_width),
-            # Standard deviation of the per-slice floor widths over the CENTRAL 80%
-            # of the channel length, after EXCLUDING the first and last 10% of slices
-            # (the end regions). _core_std trims by SLICE POSITION, not by value, so
-            # this is an end-excluded longitudinal SD -- NOT a value-based trimmed
-            # SD and NOT a confidence interval. It describes within-scan longitudinal
-            # width variation. floor_width_frac = 0.90 (crossing at 90% of depth).
+            # Standard deviation of the floor widths of the grid lines across the
+            # central 80 % of the channel length (the rounded ends excluded). It
+            # describes within-scan longitudinal width variation, NOT a confidence
+            # interval. floor_width_frac = 0.90 (crossing at 90 % of depth).
             "floor_width_slice_std_central80": float(mean_width_conf),
+            "floor_width_line_std":          float(mean_width_conf),
             "floor_width_conf":              float(mean_width_conf),  # LEGACY ALIAS
             "floor_width_slice_std_trimmed": float(mean_width_conf),  # LEGACY ALIAS
             "floor_width_frac":   float(floor_frac),
-            "draft_angle_deg":    float(draft_angle),
+            "mid_width":          float(mid_width),
+            "mid_width_line_std": float(lg["mid_width_sd"]),
+            # Mid-wall angle from the vertical: least-squares line through the wall
+            # positions at 25-75 % of depth on each grid line, median over the lines
+            # and both walls (negative = undercut). draft_angle_deg is this value.
+            "wall_angle_deg":        float(wall_angle),
+            "wall_angle_left_deg":   float(lg["wall_angle_left"]),
+            "wall_angle_right_deg":  float(lg["wall_angle_right"]),
+            "wall_angle_line_std":   float(lg["wall_angle_sd"]),
+            "wall_angle_resolved":   bool(lg["wall_angle_resolved"]),
+            "draft_angle_deg":       float(wall_angle),
+            # chord between the wall positions at the floor and opening levels (the
+            # 'draft' of MaRQ 0.9), kept as a secondary value
+            "chord_angle_deg":       float(chord_angle),
+            # corner rounding: how far the wall lies inside the extended mid-wall line
+            # at the floor level (floor corner) and outside it at the opening level
+            # (rim corner), per corner, median over the lines and both walls
+            "floor_corner_um":       float(lg["floor_corner"]),
+            "rim_corner_um":         float(lg["rim_corner"]),
+            "line_cell_um":          float(lg["cell"]),
+            "line_step_um":          float(lg["step"]),
+            "n_lines":               int(lg["n_lines"]),
+            "line_valid_floor":      float(lg["valid_floor"]),
+            "line_valid_opening":    float(lg["valid_opening"]),
+            "line_valid_wall":       float(lg["valid_wall"]),
             "z_search_frac":      float(floor_frac),
         },
         "grids": {
@@ -739,17 +1003,24 @@ def run_pvisual(file_path: str, params: dict = None, log_fn=print) -> dict:
                          "y_min": float(crop_y_min), "y_max": float(crop_y_max)},
         },
         "profile": {
-            # aggregate mean cross-section on which the reported floor width is
-            # measured (auditable without the raw cloud). yc = transverse centers,
-            # zb = median height per transverse bin (field at z=0, channel below).
+            # aggregate mean cross-section on which the depth is measured (auditable
+            # without the raw cloud). yc = transverse centers, zb = median height per
+            # transverse bin (field at z=0, channel below). The edges are the median
+            # wall positions of the grid lines at the two width levels.
             "yc": yc, "zb": zb,
             "floor_level":     float(floor_level),
             "floor_threshold": float(-floor_frac * mean_depth),
             "open_threshold":  float(-open_frac * mean_depth),
-            "floor_edge_left":  float(cen_y_f - floor_width / 2) if np.isfinite(floor_width) else float("nan"),
-            "floor_edge_right": float(cen_y_f + floor_width / 2) if np.isfinite(floor_width) else float("nan"),
-            "open_edge_left":   float(cen_y_o - opening_width / 2) if np.isfinite(opening_width) else float("nan"),
-            "open_edge_right":  float(cen_y_o + opening_width / 2) if np.isfinite(opening_width) else float("nan"),
+            "floor_edge_left":  float(lg["wall_left"][kF]),
+            "floor_edge_right": float(lg["wall_right"][kF]),
+            "open_edge_left":   float(lg["wall_left"][kO]),
+            "open_edge_right":  float(lg["wall_right"][kO]),
+            # median wall positions of the grid lines at each depth fraction, and
+            # the depth fractions of the mid-wall fit
+            "wall_fractions": [float(f) for f in fr],
+            "wall_left":  [float(v) for v in lg["wall_left"]],
+            "wall_right": [float(v) for v in lg["wall_right"]],
+            "wall_band":  [float(f) for f in WALL_BAND],
         },
         "cropped_cloud": np.column_stack([xc_pts, yc_pts, zc_pts]),
         "roughness": {

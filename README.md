@@ -9,10 +9,11 @@ internet connection.
 
 Two workflows share one loading and preprocessing framework:
 
-- **Single surface.** Levels the field, aligns the channel axis, detects floor and
-  opening, and reports width, depth, draft and ISO 25178 roughness of the floor and
-  the field, with the mean cross-section and the depth of every slice. Exports a
-  levelled, aligned crop of the channel.
+- **Single surface.** Levels the field, aligns the channel axis, and reports the
+  floor, mid-depth and opening widths, the depth, the wall angle, the rounding of
+  the floor and rim corners, the length and ISO 25178 roughness of the floor and the
+  field, with the mean cross-section, the widths along the channel and the depth of
+  every slice. Exports a levelled, aligned crop of the channel.
 - **Two surfaces.** Registers two crops on a common grid and computes the height
   correlation RQ, the directional slope correlations RQdx and RQdy, and RQd, the
   full-surface slope-magnitude correlation over the channel interior shared by the
@@ -91,12 +92,27 @@ first lines read "Format: X3P (ISO 25178-72)" and the reported depth is 60 µm.
    Skip rows 0. Units are those of the file. Changed values are marked; **Paper
    defaults** restores them; **Save** and **Load** write and read a JSON parameter
    file; the values are remembered in the browser.
-3. Click **Analyse surface**. The results bar shows width, depth and roughness; the
-   tabs show *Alignment*, *Channel Detection*, *Profiles* (the mean cross-section
-   with the floor, floor-width and opening levels and the detected edges, the depth
-   of every slice, the centre line, and the width and length per slice), *3D View*
-   and *Roughness*. The log lists the residual tilt, the draft angle, the per-slice
-   spread and any quality-control flag.
+3. Click **Analyse surface**. The results bar shows the widths, the depth, the wall
+   angle, the corner rounding, the lengths and the roughness; the tabs show
+   *Alignment*, *Channel Detection*, *Profiles* (the mean cross-section with the
+   floor-width and opening levels, the wall positions and the mid-wall lines, the
+   depth of every slice, the centre line, and the width and length per grid line),
+   *3D View* and *Roughness*. The log lists the residual tilt, the wall angle of each
+   wall, the corner rounding, the grid lines used and any quality-control flag.
+
+   How the geometry is read: the depth comes from the mean cross-section of the
+   whole channel. The widths, the wall angle and the corner rounding are read on grid
+   lines across the channel (cells of one voxel, lines two voxels apart, over the
+   central 80 % of the channel): on every line the wall at a level is where the height
+   profile first rises above it moving out from the centre line, interpolated between
+   the two grid points around it, and each value is the median over the lines. The
+   widths are taken at 90, 50 and 10 % of the depth. The wall angle is a straight line
+   through the wall positions at 25 to 75 % of the depth, measured from the vertical
+   (negative for an undercut); a wall within 3° of the vertical is reported as below
+   3°, because it then spans too few cells to be resolved. The corner rounding is how
+   far the wall lies inside that line at the floor level and outside it at the opening
+   level. The length is read on lines along the channel, each end from the outside in,
+   and the exported crop spans the two ends plus the crop pad.
 4. **Crop** saves the levelled, aligned, voxel-thinned crop (x y z in micrometres,
    field at z = 0, channel along x, centred). **Use as A** and **Use as B** place the
    same crop directly in the comparison slots. These crops are the inputs of
@@ -136,8 +152,8 @@ lateral resolution.
   or in the current theme, at a chosen size; the figure is rebuilt at that size so
   labels and line widths stay legible. On every plot the camera icon saves a PNG as
   shown and the disk icon an SVG.
-- **Results JSON**: every number, every parameter and the per-slice series of the
-  session, with the software and runtime versions.
+- **Results JSON**: every number, every parameter and the per-line and per-slice
+  series of the session, with the software and runtime versions.
 - **Results CSV**: one row per analysed surface and one per comparison.
 
 ## Files

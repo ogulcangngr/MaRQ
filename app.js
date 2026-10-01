@@ -1,7 +1,7 @@
 /* MaRQ (Microchannel and Replication Quality Analyzer): main application logic */
 
 const APP = {
-  name: "MaRQ", full: "Microchannel and Replication Quality Analyzer", version: "0.9",
+  name: "MaRQ", full: "Microchannel and Replication Quality Analyzer", version: "1.0",
   repo: "https://github.com/ogulcangngr/MaRQ", doi: "10.5281/zenodo.22813916",
   plotlyVersion: "2.35.2", pyodideVersion: "0.26.4",
   paper: "M. O. Güngör, J. Charmet, E. Yıldırım, A 3D measurement workflow for assessing replication quality " +
@@ -461,13 +461,14 @@ const fmtPm = (v, e, d = 2) => (v == null || isNaN(v)) ? "–" :
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 const TIPS = {
-  floor_width: "Width of the mean cross-section at the floor level (90 % of the depth by default). The figure the nominal width is compared with.",
-  width_sd: "Standard deviation of the per-slice floor widths over the central 80 % of the channel length: within-scan variation, not an uncertainty of the mean.",
-  opening_width: "Width of the mean cross-section near the field (10 % of the depth by default), with the SD of the per-slice widths.",
+  floor_width: "Channel width at the floor level (90 % of the depth by default): median over the grid lines across the central 80 % of the channel, each wall position interpolated between grid points. The figure the nominal width is compared with.",
+  width_sd: "Standard deviation of the grid-line floor widths over the central 80 % of the channel length: within-scan variation, not an uncertainty of the median.",
+  opening_width: "Channel width near the field (10 % of the depth by default), median of the grid lines, with their SD.",
   depth: "Median height of the deepest 5 % of the mean cross-section bins, below the field at z = 0.",
-  draft: "Wall angle from vertical between the floor-width level and the opening level.",
-  floor_length: "Extent of the along-channel profile at the floor level, with the SD of the per-slice lengths.",
-  opening_length: "Extent of the along-channel profile at the opening level.",
+  draft: "Mid-wall angle from the vertical: a straight line through the wall positions at 25-75 % of the depth on every grid line, median over the lines and both walls (left and right in brackets). Below 3° the wall spans too few grid cells to be resolved.",
+  corners: "Corner rounding: how far the wall lies inside the extended mid-wall line at the floor level (floor corner) and outside it at the opening level (rim corner), per corner.",
+  floor_length: "Channel length along the centre line at the floor level: median of the grid lines along the channel near its centre line, each end read from the outside in, with their SD.",
+  opening_length: "Channel length along the centre line at the opening level.",
   orientation: "Whether the feature was a depression, or a protrusion rotated to a depression (a proper rotation, so handedness is kept).",
   RQ:   "Pearson correlation of the two height maps over the channel-interior mask.",
   RQdx: "Pearson correlation of the signed slopes along the channel (∂Z/∂x) over the mask.",
@@ -504,15 +505,20 @@ function renderPvisual(result, retheme) {
     ? `<tr><td>${label}</td><td>${fmt(r.Sa, 2)}</td><td>${fmt(r.Sq, 2)}</td><td>${fmt(r.Sz, 1)}</td><td>${fmt(r.Ssk, 2)}</td><td>${fmt(r.Sku, 2)}</td></tr>`
     : `<tr><td>${label}</td><td colspan="5" class="rt-na">–</td></tr>`;
   const fname = files["1"] ? files["1"].name : "";
+  const wa = ch.wall_angle_deg != null ? ch.wall_angle_deg : ch.draft_angle_deg;
+  const wallTxt = (ch.wall_angle_resolved === false && wa != null && !isNaN(wa)) ? "< 3°"
+    : fmt(wa, 2) + "°" + (ch.wall_angle_left_deg != null
+        ? ` <span class="metric-pm">(${fmt(ch.wall_angle_left_deg, 1)}, ${fmt(ch.wall_angle_right_deg, 1)})</span>` : "");
 
   showResults(`
     <div class="result-head">Surface: <b title="${esc(fname)}">${esc(fname)}</b></div>
     <div class="geom-grid">
-      ${stat(`Floor width <small>${floorPct}% depth, mean cross-section</small>`, fmt(ch.floor_width) + UM, TIPS.floor_width)}
-      ${stat(`Width SD along channel <small>central 80% of slices</small>`, fmt(ch.floor_width_conf) + UM, TIPS.width_sd)}
+      ${stat(`Floor width <small>${floorPct}% depth, median of grid lines</small>`, fmt(ch.floor_width) + UM, TIPS.floor_width)}
+      ${stat(`Width SD along channel <small>grid lines, central 80%</small>`, fmt(ch.floor_width_conf) + UM, TIPS.width_sd)}
       ${stat("Opening width", fmtPm(ch.opening_width, ch.opening_width_conf) + UM, TIPS.opening_width)}
       ${stat("Channel depth", fmt(ch.mean_depth) + UM, TIPS.depth)}
-      ${stat("Wall draft angle", fmt(ch.draft_angle_deg, 2) + "°", TIPS.draft)}
+      ${stat("Wall angle <small>mid-wall, from vertical</small>", wallTxt, TIPS.draft)}
+      ${stat("Corner rounding <small>floor / rim</small>", `${fmt(ch.floor_corner_um, 1)} / ${fmt(ch.rim_corner_um, 1)}` + UM, TIPS.corners)}
       ${stat(`Floor length <small>${floorPct}% depth</small>`, fmtPm(ch.mean_length, ch.mean_length_conf) + UM, TIPS.floor_length)}
       ${stat("Opening length", fmtPm(ch.opening_length, ch.opening_length_conf) + UM, TIPS.opening_length)}
       ${stat("Orientation", `<span style="font-size:12px;font-weight:600;">${orient}</span>`, TIPS.orientation)}
@@ -806,7 +812,9 @@ function exportCSV() {
   if (session.analyses.length) {
     lines.push("# analysed surfaces (micrometres; roughness per ISO 25178 on plane-removed residuals)");
     lines.push(["file", "time", "floor_width", "floor_width_sd_central80", "opening_width", "opening_width_sd",
-                "depth", "depth_sd_central80", "draft_deg", "floor_length", "floor_length_sd", "opening_length",
+                "depth", "depth_sd_central80", "wall_angle_deg", "wall_angle_left_deg", "wall_angle_right_deg",
+                "wall_angle_resolved", "chord_angle_deg", "floor_corner_um", "rim_corner_um", "mid_width",
+                "floor_length", "floor_length_sd", "opening_length",
                 "orientation", "floor_Sa", "floor_Sq", "floor_Sz", "floor_Ssk", "floor_Sku",
                 "fieldL_Sa", "fieldL_Sq", "fieldL_Sz", "fieldR_Sa", "fieldR_Sq", "fieldR_Sz",
                 "voxel_size", "field_k", "crop_pad_x", "crop_pad_y", "opening_frac", "floor_width_frac",
@@ -814,8 +822,10 @@ function exportCSV() {
                 "margin", "display_cell", "smooth_sigma", "n_slices", "skip_rows"].join(","));
     session.analyses.forEach((a) => {
       const c = a.channel, p = a.parameters, fl = R(a.roughness.floor), l = R(a.roughness.surf_left), r = R(a.roughness.surf_right);
-      lines.push([a.file, a.time, c.floor_width, c.floor_width_slice_std_central80, c.opening_width, c.opening_width_conf,
-                  c.mean_depth, c.channel_depth_slice_std_central80, c.draft_angle_deg, c.mean_length, c.mean_length_conf,
+      lines.push([a.file, a.time, c.floor_width, c.floor_width_line_std, c.opening_width, c.opening_width_conf,
+                  c.mean_depth, c.channel_depth_slice_std_central80, c.wall_angle_deg, c.wall_angle_left_deg,
+                  c.wall_angle_right_deg, c.wall_angle_resolved, c.chord_angle_deg, c.floor_corner_um, c.rim_corner_um,
+                  c.mid_width, c.mean_length, c.mean_length_conf,
                   c.opening_length, a.rotation.converted ? "protrusion_rotated" : "depression",
                   fl.Sa, fl.Sq, fl.Sz, fl.Ssk, fl.Sku, l.Sa, l.Sq, l.Sz, r.Sa, r.Sq, r.Sz,
                   p.voxel_size, p.field_k, p.crop_pad_x, p.crop_pad_y, p.opening_frac, p.floor_width_frac,
