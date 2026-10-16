@@ -31,7 +31,8 @@ https://doi.org/10.5281/zenodo.22813916 (restricted until the article is publish
 The page has to come from an HTTP server (a `file://` page cannot start the Python
 worker), so a small local server is started for you:
 
-- **Windows:** double-click `MaRQ.bat`.
+- **Windows:** extract the zip first (right-click, Extract All), then double-click
+  `MaRQ.bat`; it does not run from inside the zip.
 - **macOS:** double-click `MaRQ.command` (the first time: right-click, Open).
   **Linux:** `sh MaRQ.command`.
 - **Any system with Python 3:** `python run_marq.py` in this folder.

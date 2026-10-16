@@ -38,6 +38,11 @@ so every downstream number was recomputed.
   falls back to the channel extent and the log says so.
 - The per-slice width and length overlays are replaced by the per-line values; the
   per-slice depth is unchanged. run_pvisual also accepts a point array (tests).
+- Windows launcher `MaRQ.bat` (2026-10-16): the window stays open with a message
+  when Python is missing (the Microsoft Store placeholder is no longer taken for
+  Python), when MaRQ is started from inside the zip, or when the server stops with
+  an error; the `py` launcher is found again; Windows line endings. No analysis
+  change.
 
 ## 0.9 (2026-09-30)
 
