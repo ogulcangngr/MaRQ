@@ -1,11 +1,13 @@
 # MaRQ: the Microchannel and Replication Quality Analyzer
 
+*Türkçe: [README.tr.md](README.tr.md)*
+
 MaRQ measures microchannels in optical-profilometry point clouds and grades how
 faithfully a channel has been replicated from a mould insert into a moulded part.
-It runs entirely in the browser: the analysis core is Python (NumPy, SciPy)
-executed through Pyodide, so nothing is installed and no measurement data leave
-your computer. With the runtime bundled in `vendor/` it also works without an
-internet connection.
+It runs entirely on your computer: the analysis core is Python (NumPy, SciPy)
+executed in the browser engine through Pyodide, so nothing is installed and no
+measurement data leave the computer. With the runtime bundled in `vendor/` it also
+works without an internet connection. The interface is in English or Turkish.
 
 Two workflows share one loading and preprocessing framework:
 
@@ -17,7 +19,7 @@ Two workflows share one loading and preprocessing framework:
 - **Two surfaces.** Registers two crops on a common grid and computes the height
   correlation RQ, the directional slope correlations RQdx and RQdy, and RQd, the
   full-surface slope-magnitude correlation over the channel interior shared by the
-  two surfaces, with the height error map E_Z and the slope error map E_d. A batch
+  two surfaces, with maps of the height difference and of the slope error. A batch
   mode compares one reference with several surfaces.
 
 RQd and the software are described in: M. O. Güngör, J. Charmet, E. Yıldırım,
@@ -38,15 +40,18 @@ Nothing has to be installed, Python included. Extract the zip, open this folder 
   `sh ` in Terminal, drag `MaRQ.command` into the window and press Return.
 - **Linux:** `sh MaRQ.sh` in a terminal in this folder.
 
-A small window shows *MaRQ is running at http://127.0.0.1:8000/* and the browser opens
-MaRQ (Chrome, Edge, Firefox or Safari, current versions). Keep the window open while you
-work and close it to stop MaRQ. If no browser opens, type the address yourself.
+A small console window shows *MaRQ is running at http://127.0.0.1:8000/*, and MaRQ opens
+in a window of its own: the application mode of Chrome or Edge, without address bar or
+tabs (Edge comes with every Windows 10 and 11). Without either browser MaRQ opens in a
+tab of the default browser (a current Firefox or Safari works too); `MaRQ.exe --tab`
+asks for a tab on purpose. Keep the console window open while you work and close it to
+stop MaRQ. If nothing opens, type the address into a browser yourself.
 
 The page has to come from an HTTP server (a `file://` page cannot start the analysis
 worker; double-clicking `index.html` shows a red notice saying so). The launchers are
 small programs built from `launcher/main.go` with `tools/build_launchers.py` (Go, no
 dependencies): they serve this folder on 127.0.0.1 only, with fixed content types, and
-open the browser. `MaRQ.exe` is the Windows build; `MaRQ.command` and `MaRQ.sh` start
+open the window. `MaRQ.exe` is the Windows build; `MaRQ.command` and `MaRQ.sh` start
 the right one in `launchers/` for macOS (Apple silicon or Intel) or Linux (x86-64 or
 Arm), and fall back to Python 3 when it does not run. `MaRQ.bat` does the same on
 Windows, and `python run_marq.py` works anywhere Python 3 is installed. Any static
@@ -55,61 +60,94 @@ server works too (`npx serve`, the Live Server extension of VS Code). The archiv
 `tests/e2e_check.py` drives a running MaRQ in Chromium, Firefox or WebKit and checks
 it against the sample data of the archive.
 
-**Offline.** `vendor/` holds Plotly.js and the Pyodide runtime with NumPy and SciPy
-(84 MB; versions and licences in `vendor/README.md`), so the first start needs no
+**Offline.** `vendor/` holds Plotly.js, three.js and the Pyodide runtime with NumPy and
+SciPy (84 MB; versions and licences in `vendor/README.md`), so the first start needs no
 download and the status bar reads "Ready (offline bundle)". If `vendor/` is missing,
 for example after a source-only download, the page falls back to the CDNs and needs
 internet for the first start; `python tools/fetch_vendor.py` restores the bundle.
 
 ## The window
 
-The sidebar holds the workflow strip (three steps), the single-surface input, the
-comparison inputs with the batch list, the export buttons and the parameters. The
-centre shows tabs that appear as results become available and, below them, the
-results bar with the numbers. The right panel is the Analysis Log, streamed live,
-with every step and quality-control value. The header has the height palette, the
-3D detail, the theme, buttons to hide the sidebar and the log, and About. A running
-analysis can be cancelled; the engine restarts in a few seconds.
+- **Ribbon** (top): the commands, grouped as *Surface* (Open, Analyse, Keep as A,
+  Keep as B, Save crop), *Comparison* (Open A, Open B, Compare, the batch), *Export*,
+  *View* and *Setup* (Settings, Log). The command a first-time user most likely needs
+  next is outlined in red.
+- **Browser** (left): the inputs (the scan to analyse, surface A, surface B; click a row
+  to open a file, or drop a file on it) and every view of each result. Click a view to
+  show it.
+- **Properties** (left, below): the measured values of the result on screen, with an
+  explanation of each on hover.
+- **Viewport** (centre): the view selected in the browser, its title and details above,
+  the navigation bar below. A file dropped anywhere on the window is opened as the
+  scan to analyse.
+- **Status bar** (bottom): the progress of a run (click it for the live analysis log
+  with every step and quality-control value), the coordinates under the cursor, whether
+  the settings are the paper's, and whether the runtime is the offline bundle.
+- **Title bar**: the language (English, Türkçe), the light or dark theme, help and About.
+  Without a choice MaRQ follows the language and the theme of the system.
+
+The panes can be resized by dragging their borders, and every size follows the window,
+so the layout keeps its proportions on a laptop and on a large monitor. A running
+analysis can be cancelled (*Cancel* in the ribbon); the engine restarts in a few
+seconds.
+
+**Navigating.** In the 3D views, drag with the left button to turn the surface about the
+point under the cursor (Z stays up), drag with the right or middle button (or Shift and
+the left button) to pan, and use the wheel to zoom towards the cursor; a double-click fits
+the surface. The view cube in the corner shows the orientation, and a click on one of its
+faces turns the view to that side. The navigation bar below the view has the home view,
+fit, zoom in and out, the top, front (along the channel) and right (cross-section) views,
+an orthographic projection with a scale bar, and a PNG snapshot. Keys: H home, F fit,
++ and − zoom, 1 top, 2 front, 3 right, O orthographic or perspective. In the 2D plots,
+drag to pan and use the wheel or the + and − buttons to zoom; the box tool zooms into a
+drawn box, and a double-click resets the view.
 
 The maps and the 3D views are drawn on square display cells (a few micrometres,
 chosen automatically and reported in the log); they are for display only, the
 numbers come from the points and, for the comparison, from the common grid at the
-stated spacing. The 3D views keep the true proportions of the channel (no vertical
-exaggeration). With **1:1 axes** (header, on by default) every 2D plot whose two
-axes are lengths uses the same scale on both, so the channel keeps its shape and a
-variation is shown in proportion to the channel's size; switch it off to let each
-axis fill the panel when a small variation has to be read.
+stated spacing. The 3D views show the true proportions of the channel unless *Depth
+scale* (View) stretches the heights, ×2 to ×10, to show shallow features. With
+**True proportions** (View, on by default) every 2D plot whose two axes are lengths uses
+the same scale on both, so the channel keeps its shape and a variation is shown in
+proportion to the channel's size; switch it off to let each axis fill the panel when a
+small variation has to be read. **Link the maps** zooms and pans the six comparison maps
+together; **Link the 3D views** keeps one camera for surface A, surface B and the slope
+error. *Colours* sets the colour scale of the height maps and *3D detail* the mesh of
+the 3D views.
 
 ## Input formats
 
 - Delimited text point clouds: `.txt`, `.xyz`, `.asc`, `.csv`, three columns x y z,
-  any common delimiter, header rows skipped with *Skip rows*. Units are those of the
-  file; the paper's data are in micrometres.
+  any common delimiter, header rows skipped with *Header rows to skip* (Settings). Units
+  are those of the file; the paper's data are in micrometres.
 - ISO 25178-72 X3P files (`.x3p`), converted to micrometres on loading.
 
 To test the X3P path without an instrument file, run `python tests/make_test_x3p.py`.
 It writes `tests/test_channel.x3p`, a synthetic 1.2 mm by 0.5 mm surface with a
-parabolic channel 200 µm wide and 60 µm deep on a 10 µm grid. Analyse it with Crop
-pad X 100, Crop pad Y 50 and Edge margin 20, the rest at their defaults; the log's
-first lines read "Format: X3P (ISO 25178-72)" and the reported depth is 60 µm.
+parabolic channel 200 µm wide and 60 µm deep on a 10 µm grid. Analyse it with *Crop
+margin along the channel* 100, *Crop margin across the channel* 50 and *Edge margin* 20,
+the rest at their defaults; the log's first lines read "Format: X3P (ISO 25178-72)" and
+the reported depth is 60 µm.
 
 ## Workflow A: one surface
 
-1. Drop the file on **Point cloud to analyse** (or use Browse).
-2. Leave the parameters at the interface defaults; they are the values used in the
-   paper: Voxel size 5, Field band 2.5 MAD, Crop pad X 180, Crop pad Y 100, Opening
-   level fraction 0.10, Floor width fraction 0.90, Roughness eval area (floor) 0.5,
-   Floor eval length 4000, Field eval width 400, Field eval length 4000; Advanced:
-   Edge margin 100, Display cell size 0 (auto), Smooth sigma 0, Profile slices 80,
-   Skip rows 0. Units are those of the file. Changed values are marked; **Paper
-   defaults** restores them; **Save** and **Load** write and read a JSON parameter
-   file; the values are remembered in the browser.
-3. Click **Analyse surface**. The results bar shows the widths, the depth, the wall
-   angle, the corner rounding, the lengths and the roughness; the tabs show
-   *Alignment*, *Channel Detection*, *Profiles* (the mean cross-section with the
-   floor-width and opening levels, the wall positions and the mid-wall lines, the
-   depth of every slice, the centre line, and the width and length per grid line),
-   *3D View* and *Roughness*. The log lists the residual tilt, the wall angle of each
+1. **Open** the point cloud (or drop it on the window).
+2. Leave the settings at their defaults; they are the values used in the paper.
+   *Settings* (ribbon) lists them: Voxel size 5, Field band 2.5 median absolute
+   deviations, Crop margin along the channel 180, Crop margin across the channel 100,
+   Opening level 0.10 and Floor level 0.90 of the depth, Floor roughness strip width 0.5
+   of the channel width, Floor roughness strip length 4000, Field roughness strip width
+   400 and length 4000; under *Advanced*: Edge margin 100, Display cell size 0
+   (automatic), Display smoothing 0, Depth profile slices 80, Header rows to skip 0.
+   Units are those of the file. Changed values are marked and the status bar says how
+   many differ from the paper; *Paper defaults* restores them; *Save* and *Load* write
+   and read a JSON settings file; the values are remembered on the computer.
+3. **Analyse**. The properties show the widths, the depth, the wall angle, the corner
+   rounding, the lengths, the roughness and the alignment; the browser lists the views:
+   *Alignment*, *Channel detection*, *Profiles* (the mean cross-section with the
+   floor-width and opening levels, the wall positions and the mid-wall lines, and the
+   depth of every slice; the width and length per grid line; the centre lines), *3D
+   view* and *Roughness areas*. The log lists the residual tilt, the wall angle of each
    wall, the corner rounding, the grid lines used and any quality-control flag.
 
    How the geometry is read: the depth comes from the mean cross-section of the
@@ -124,35 +162,36 @@ first lines read "Format: X3P (ISO 25178-72)" and the reported depth is 60 µm.
    3°, because it then spans too few cells to be resolved. The corner rounding is how
    far the wall lies inside that line at the floor level and outside it at the opening
    level. The length is read on lines along the channel, each end from the outside in,
-   and the exported crop spans the two ends plus the crop pad.
-4. **Crop** saves the levelled, aligned, voxel-thinned crop (x y z in micrometres,
-   field at z = 0, channel along x, centred). **Use as A** and **Use as B** place the
+   and the exported crop spans the two ends plus the crop margin.
+4. **Save crop** saves the levelled, aligned, voxel-thinned crop (x y z in micrometres,
+   field at z = 0, channel along x, centred). **Keep as A** and **Keep as B** place the
    same crop directly in the comparison slots. These crops are the inputs of
    Workflow B.
 
 ## Workflow B: two surfaces
 
-1. Fill **Surface A** (the reference) and **Surface B** (the compared surface) with
-   crops, either with *Use as A* and *Use as B* after analysing each surface or by
-   loading crop files. For replication quality the reference is the insert and the
-   compared surface is the part; for tool degradation both are the same insert at
+1. Fill surface A (the reference) and surface B (the compared surface) with crops,
+   either with *Keep as A* and *Keep as B* after analysing each surface or with *Open A*
+   and *Open B* for crop files. For replication quality the reference is the insert and
+   the compared surface is the part; for tool degradation both are the same insert at
    two shots, the earlier one as A.
-2. Under **Comparison Parameters** keep Grid spacing 5 µm and Smooth sigma 0, the
-   paper's values. A sigma of 0 means the one-cell Gaussian filter of the RQd
-   definition. The channel-interior fraction (0.20) and the 180-degree orientation
-   check are fixed in the core.
-3. Click **Compare A with B**. The four cards are RQ, RQdx, RQdy and RQd, each with
-   its RMSE; a line states the orientation kept for B, the grid and the size of the
-   channel-interior mask. The tool reports the numbers and the maps and leaves their
-   interpretation to the user; the paper defines no acceptance thresholds. *Comparison 3D* shows the two
-   surfaces and the slope error E_d drawn on surface B; *Comparison Maps* shows the
-   height and slope-magnitude maps of both surfaces with the error maps E_Z (signed)
-   and E_d (unsigned) and the outline of the channel-interior mask. The log states which
-   orientation of B was kept, the valid-cell fraction and the mask size; its metrics
-   table is that of the kept orientation.
-4. **Batch**: choose several files under *Batch: compare A with several surfaces* and
-   click **Run batch**. A table lists RQ, RQdx, RQdy and RQd for every file; *Show*
-   re-runs one pair for its figures.
+2. In *Settings*, under *Comparison*, keep Grid spacing 5 µm and Smoothing before the
+   slopes 0, the paper's values. A smoothing of 0 means the one-cell Gaussian filter of
+   the RQd definition. The channel-interior fraction (0.20) and the 180-degree
+   orientation check are fixed in the core.
+3. **Compare**. The properties show RQd, RQ, RQdx and RQdy, each with its RMSE, and
+   state the orientation kept for B, the grid and the size of the channel-interior
+   mask. The tool reports the numbers and the maps and leaves their interpretation to
+   the user; the paper defines no acceptance thresholds. The views are *Surface A* and
+   *Surface B* in 3D, the *Slope error* drawn in 3D on surface B, and the *Height and
+   slope maps*: the height and slope-magnitude maps of both surfaces, the signed height
+   difference B − A and the unsigned slope error, with the outline of the
+   channel-interior mask. The log states which orientation of B was kept, the
+   valid-cell fraction and the mask size; its metrics table is that of the kept
+   orientation.
+4. **Batch**: choose several files with *Batch files…* and click **Run batch**. The
+   *Batch results* view lists RQ, RQdx, RQdy and RQd for every file; *Show* re-runs one
+   pair for its figures.
 
 RQd is defined at a stated grid cell size. Values computed at different cell sizes
 are not comparable; the paper reports RQd at 5 µm, chosen from the instrument's
@@ -160,29 +199,36 @@ lateral resolution.
 
 ## Exports
 
-- **Figure…**: any figure as SVG or PNG (2× or 3×), in the light theme for documents
-  or in the current theme, at a chosen size; the figure is rebuilt at that size so
-  labels and line widths stay legible. On every plot the camera icon saves a PNG as
-  shown and the disk icon an SVG.
-- **Results JSON**: every number, every parameter and the per-line and per-slice
+- **Figure**: any figure as SVG or PNG (2× or 3×), in the light theme for documents
+  or in the current theme, with its text in the interface language, English or Turkish,
+  at a chosen size; the figure is rebuilt at that size, with axes and a colour bar, so
+  labels and line widths stay legible. The camera button below a view saves it as a
+  PNG as it is on screen.
+- **Results JSON**: every number, every setting and the per-line and per-slice
   series of the session, with the software and runtime versions.
 - **Results CSV**: one row per analysed surface and one per comparison.
+
+The JSON and CSV files are in English with decimal points in either interface language,
+so they read the same in every spreadsheet and script.
 
 ## Files
 
 | File | Role |
 |---|---|
 | `index.html`, `style.css`, `app.js` | Interface and main-thread logic |
+| `viewer3d.js` | The 3D viewport (three.js) |
+| `i18n.js` | Interface languages (Turkish strings) |
 | `worker.js` | Web worker that boots Pyodide and runs the analyses |
 | `pvisual_core.py` | Single-surface module: levelling, alignment, geometry, roughness, crop export |
 | `rq_gradient_core.py` | Paired module: registration, RQ, RQdx, RQdy, RQd, error maps |
 | `x3p_loader.py` | ISO 25178-72 X3P reader |
-| `plots.py` | Plotly figure builders |
+| `plots.py` | Plotly figure builders, and their translation |
 | `MaRQ.exe`, `MaRQ.command`, `MaRQ.sh`, `launchers/` | Launchers that need nothing installed (Windows; macOS; Linux), built from `launcher/main.go` by `tools/build_launchers.py` |
 | `MaRQ.bat`, `run_marq.py` | Fallback launchers through Python 3 |
-| `tests/e2e_check.py` | Browser test of a running MaRQ against the sample data |
-| `vendor/` | Bundled Plotly.js and Pyodide runtime with NumPy and SciPy, for offline use |
+| `tests/e2e_check.py`, `tests/e2e_synthetic.py` | Browser tests of a running MaRQ, against the sample data or a synthetic channel |
+| `vendor/` | Bundled Plotly.js, three.js and the Pyodide runtime with NumPy and SciPy, for offline use |
 | `tools/fetch_vendor.py` | Re-downloads and verifies the bundle at the pinned versions |
+| `tools/make_icons.py` | Renders the icon (`logo.svg`) into every size the launchers and the page use |
 | `tests/make_test_x3p.py` | Synthetic X3P generator for testing the loader |
 
 ## Citing
@@ -194,8 +240,8 @@ machine-readable form; GitHub's "Cite this repository" button uses it.
 
 Copyright (C) 2026 Mehmet Oğulcan Güngör. MaRQ is free software released under the
 GNU General Public License, version 3 (`LICENSE`). The bundled third-party components
-keep their own licences: Plotly.js (MIT), Pyodide (MPL-2.0), NumPy, SciPy and OpenBLAS
-(BSD-3-Clause); see `vendor/README.md`.
+keep their own licences: Plotly.js and three.js (MIT), Pyodide (MPL-2.0), NumPy, SciPy
+and OpenBLAS (BSD-3-Clause); see `vendor/README.md`.
 
 ## Funding
 

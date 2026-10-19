@@ -54,9 +54,10 @@ def _live_log(buf):
   post({ type: "ready" });
 }
 
-// Theme, 3D mesh budget and height palette travel with every request.
+// Theme, 3D mesh budget, height palette and language travel with every request.
 function setView(data) {
   pyodide.globals.set("_theme", data.theme || "dark");
+  pyodide.globals.set("_lang", data.lang || "en");
   pyodide.globals.set("_q3d", data.quality || 0);
   pyodide.globals.set("_cs", data.palette || "Viridis");
   pyodide.globals.set("_equal_axes", data.equal !== false);
@@ -67,6 +68,7 @@ function setView(data) {
 const PY_PVISUAL_OUTPUT = `
 set_theme(_theme)
 set_equal(_equal_axes)
+set_language(_lang)
 _figs = build_pvisual_figs(_result, _q3d or None, _cs)
 _output_json = figures_to_json({
     "log":            list(_log_lines),
@@ -84,6 +86,7 @@ _output_json = figures_to_json({
 const PY_GRADIENT_OUTPUT = `
 set_theme(_theme)
 set_equal(_equal_axes)
+set_language(_lang)
 _figs2 = build_gradient_figs(_result2, _q3d or None, _cs)
 _output2_json = figures_to_json({
     "log":     list(_log_lines2),
@@ -202,6 +205,7 @@ _m_json = figures_to_json(_result2["metrics"])
       pyodide.runPython(`
 set_theme(_theme)
 set_equal(_equal_axes)
+set_language(_lang)
 _one = build_one_fig(_fig_kind, _fig_key, _result if _fig_kind == "pvisual" else _result2, _q3d or None, _cs)
 _one_json = figures_to_json(_one)
 `);

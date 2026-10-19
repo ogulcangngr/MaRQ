@@ -1,7 +1,9 @@
-"""Start MaRQ locally: serves this folder over HTTP and opens the browser.
+"""Start MaRQ locally: serves this folder over HTTP and opens MaRQ in its own window (the
+application mode of Chrome or Edge), or in a browser tab when neither is installed.
 
     python run_marq.py            # picks a free port from 8000 upward
     python run_marq.py 8080       # a specific port
+    python run_marq.py --tab      # a browser tab instead of a window
 
 Nothing is installed and nothing leaves the computer; the server only hands the
 browser the files of this folder. With the vendor/ bundle present the application
@@ -10,7 +12,9 @@ runs without an internet connection. Stop with Ctrl+C.
 import http.server
 import mimetypes
 import os
+import shutil
 import socket
+import subprocess
 import sys
 import threading
 import webbrowser
@@ -56,11 +60,36 @@ def free_port(start):
     raise SystemExit("no free port found")
 
 
+def open_window(url):
+    """MaRQ in a window of its own (the application mode of Chrome or Edge); False when
+    neither is installed, and the caller opens a browser tab instead."""
+    args = [f"--app={url}", "--start-maximized"]
+    if sys.platform == "darwin":
+        for app in ("Google Chrome", "Microsoft Edge", "Chromium", "Brave Browser"):
+            path = f"/Applications/{app}.app"
+            if os.path.exists(path):
+                subprocess.Popen(["open", "-na", path, "--args", *args])
+                return True
+        return False
+    if sys.platform == "win32":
+        bases = [os.environ.get(v) for v in ("ProgramFiles", "ProgramFiles(x86)", "LocalAppData")]
+        found = [os.path.join(b, r) for r in (r"Google\Chrome\Application\chrome.exe", r"Microsoft\Edge\Application\msedge.exe")
+                 for b in bases if b]
+    else:
+        found = [shutil.which(b) for b in ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "microsoft-edge")]
+    for exe in found:
+        if exe and os.path.exists(exe):
+            subprocess.Popen([exe, *args])
+            return True
+    return False
+
+
 def main():
     if not (os.path.exists(os.path.join(HERE, "index.html")) and os.path.exists(os.path.join(HERE, "worker.js"))):
         raise SystemExit("The MaRQ files (index.html, worker.js) are not next to run_marq.py; "
                          "extract the downloaded zip first and start MaRQ from its software folder.")
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else free_port(8000)
+    nums = [a for a in sys.argv[1:] if a != "--tab"]
+    port = int(nums[0]) if nums else free_port(8000)
     try:
         server = http.server.ThreadingHTTPServer(("127.0.0.1", port), Handler)
     except OSError as e:
@@ -72,7 +101,8 @@ def main():
                          "vendor/ not found, Plotly and Pyodide will come from their CDNs (internet needed)"))
     print("Press Ctrl+C in this window to stop.")
     if not os.environ.get("MARQ_NO_BROWSER"):                # tests start the server alone
-        threading.Timer(0.6, lambda: webbrowser.open(url)).start()
+        tab = os.environ.get("MARQ_BROWSER_TAB") or "--tab" in sys.argv
+        threading.Timer(0.6, lambda: (not tab and open_window(url)) or webbrowser.open(url)).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:

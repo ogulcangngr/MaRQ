@@ -58,6 +58,46 @@ so every downstream number was recomputed.
 - Icon (2026-10-19): the MaRQ logo is the icon of `MaRQ.exe` (with its name and version
   in the file properties; `launcher/winres/`, `launcher/icon/`) and of the browser tab
   (`favicon.ico`, `logo.svg`, `apple-touch-icon.png`).
+- Interface redesign (2026-10-19, branch `ui-redesign`). No analysis change: the sample
+  data give the same numbers in Chromium, Firefox and WebKit.
+  - A CAD-style workspace: a command ribbon (Surface, Comparison, Export, View, Setup);
+    a browser tree on the left with the inputs and every view of each result; a
+    properties panel with the measured values; one viewport with a caption; a status bar
+    with the progress, a live coordinate readout, the settings state and the runtime.
+    The analysis parameters moved to a Settings dialog. The panes can be resized and the
+    sizes are remembered; every size scales with the window, so the proportions are the
+    same on a laptop and on a large monitor.
+  - Colours: white in the light theme, the greys of Visual Studio Code in the dark
+    theme (which follows the system setting until chosen), red only for the primary
+    commands, the selection and the key results.
+  - 3D viewport (`viewer3d.js`, three.js r169 in `vendor/three/`): left-drag turns about
+    the point under the cursor with Z kept up, right-, middle- or Shift-drag pans, the
+    wheel zooms towards the cursor, a double-click fits; a view cube, preset views
+    (home, top, front, right; keys H, 1, 2, 3, F), orthographic projection with a scale
+    bar (O), depth scale ×1 to ×10, a colour bar and a PNG snapshot. The three
+    comparison views share one camera. Plotly draws the 3D views if WebGL or the
+    module is unavailable.
+  - 2D plots: drag pans and the wheel zooms; a box-zoom tool; the six comparison maps
+    zoom and pan together, also at true proportions (Plotly cannot link axes that keep
+    1:1, so MaRQ copies the ranges); plots follow the size of their pane.
+  - Labels in words instead of symbols (Height, Difference B − A, Slope A, Slope error;
+    RQ<sub>d</sub> typeset); plot titles moved to the viewport caption.
+  - Colour scales are passed as explicit stops: Plotly.js does not know Plasma, Magma,
+    Inferno or Turbo by name, so in 1.0 before this change those palettes, and the
+    Inferno scale of the slope maps, fell back to a default scale.
+  - The launchers open MaRQ in a window of its own (the application mode of Chrome or
+    Edge, without address bar or tabs; Edge comes with every Windows 10 and 11), or in
+    a browser tab when neither is installed or with `--tab`.
+  - New icon: a scanned surface receding into the distance, cut along a channel whose
+    cross-section forms the red μ (`tools/make_icons.py` renders every size).
+  - Languages: English and Turkish (`i18n.js`), chosen in the title bar; without a choice
+    MaRQ follows the browser language. Everything on screen is translated, the figures
+    included (`plots.localise`: the builders write English and the finished figure is
+    translated piece by piece); Turkish numbers take the decimal comma. The terms follow
+    the thesis (iç kalıp, kalıplanmış parça, kopyalama kalitesi). Exported figures can be
+    written in either language; the CSV and JSON exports stay in English with decimal
+    points.
+  - Zoom in and out buttons below every plot and 3D view (keys + and −).
 
 ## 0.9 (2026-09-30)
 

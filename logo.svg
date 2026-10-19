@@ -1,15 +1,53 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
-  <defs>
-    <linearGradient id="maGrad" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#7C6CF5"/>
-      <stop offset="1" stop-color="#3D9CFF"/>
-    </linearGradient>
-  </defs>
-  <rect x="4" y="4" width="92" height="92" rx="26" fill="url(#maGrad)"/>
-  <g fill="none" stroke="#FFFFFF" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
-    <!-- left stem with descender tail -->
-    <path d="M36 25 V80"/>
-    <!-- u-bowl + right stem -->
-    <path d="M64 25 V56 Q64 67 50 67 Q36 67 36 56"/>
-  </g>
+<!-- MaRQ icon: a scanned surface (white wire grid) receding into the distance, cut at the front
+     along a microchannel whose cross-section, in red, forms the letter mu. -->
+<defs>
+<linearGradient id="marq-blk" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#16161A"/>
+<stop offset="1" stop-color="#050506"/>
+</linearGradient>
+<linearGradient id="marq-solid" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#0E0E10"/>
+<stop offset="1" stop-color="#060607"/>
+</linearGradient>
+<linearGradient id="marq-glow" gradientUnits="userSpaceOnUse" x1="0" y1="40" x2="0" y2="72">
+<stop offset="0" stop-color="#F0524D" stop-opacity="0"/>
+<stop offset="1" stop-color="#F0524D" stop-opacity=".55"/>
+</linearGradient>
+<linearGradient id="marq-redS" gradientUnits="userSpaceOnUse" x1="0" y1="30" x2="0" y2="90">
+<stop offset="0" stop-color="#FF5A55"/>
+<stop offset="1" stop-color="#D3262C"/>
+</linearGradient>
+<clipPath id="marq-cl">
+<rect x="4" y="4" width="92" height="92" rx="22"/>
+</clipPath>
+</defs>
+<rect x="4" y="4" width="92" height="92" rx="22" fill="url(#marq-blk)"/>
+<g clip-path="url(#marq-cl)">
+<polyline points="31.00,17.40 42.78,17.40 43.84,25.76 45.06,27.28 54.94,27.28 56.16,25.76 57.22,17.40 69.00,17.40" fill="none" stroke="#FFFFFF" stroke-opacity="0.071" stroke-width="0.86" stroke-linejoin="round"/>
+<polyline points="28.00,19.20 41.64,19.20 42.87,28.88 44.28,30.64 55.72,30.64 57.13,28.88 58.36,19.20 72.00,19.20" fill="none" stroke="#FFFFFF" stroke-opacity="0.099" stroke-width="0.89" stroke-linejoin="round"/>
+<polyline points="24.50,21.30 40.31,21.30 41.74,32.52 43.37,34.56 56.63,34.56 58.26,32.52 59.69,21.30 75.50,21.30" fill="none" stroke="#FFFFFF" stroke-opacity="0.136" stroke-width="0.92" stroke-linejoin="round"/>
+<polyline points="20.00,24.00 38.60,24.00 40.28,37.20 42.20,39.60 57.80,39.60 59.72,37.20 61.40,24.00 80.00,24.00" fill="none" stroke="#FFFFFF" stroke-opacity="0.195" stroke-width="0.97" stroke-linejoin="round"/>
+<polyline points="14.50,27.30 36.51,27.30 38.50,42.92 40.77,45.76 59.23,45.76 61.50,42.92 63.49,27.30 85.50,27.30" fill="none" stroke="#FFFFFF" stroke-opacity="0.282" stroke-width="1.02" stroke-linejoin="round"/>
+<polyline points="8.00,31.20 34.04,31.20 36.39,49.68 39.08,53.04 60.92,53.04 63.61,49.68 65.96,31.20 92.00,31.20" fill="none" stroke="#FFFFFF" stroke-opacity="0.409" stroke-width="1.08" stroke-linejoin="round"/>
+<path d="M0.00 36.00 L31.00 17.40" stroke="#FFFFFF" stroke-opacity="0.330" stroke-width="0.98"/>
+<path d="M7.75 36.00 L33.95 17.40" stroke="#FFFFFF" stroke-opacity="0.330" stroke-width="0.98"/>
+<path d="M15.50 36.00 L36.89 17.40" stroke="#FFFFFF" stroke-opacity="0.330" stroke-width="0.98"/>
+<path d="M23.25 36.00 L39.84 17.40" stroke="#FFFFFF" stroke-opacity="0.330" stroke-width="0.98"/>
+<path d="M76.75 36.00 L60.16 17.40" stroke="#FFFFFF" stroke-opacity="0.330" stroke-width="0.98"/>
+<path d="M84.50 36.00 L63.11 17.40" stroke="#FFFFFF" stroke-opacity="0.330" stroke-width="0.98"/>
+<path d="M92.25 36.00 L66.06 17.40" stroke="#FFFFFF" stroke-opacity="0.330" stroke-width="0.98"/>
+<path d="M100.00 36.00 L69.00 17.40" stroke="#FFFFFF" stroke-opacity="0.330" stroke-width="0.98"/>
+<path d="M31.00 36.00 L42.78 17.40" stroke="#FFFFFF" stroke-opacity="0.330" stroke-width="0.98"/>
+<path d="M69.00 36.00 L57.22 17.40" stroke="#FFFFFF" stroke-opacity="0.330" stroke-width="0.98"/>
+<path d="M37.00 62.00 L45.06 27.28" stroke="#FFFFFF" stroke-opacity="0.330" stroke-width="0.98"/>
+<path d="M45.67 62.00 L48.35 27.28" stroke="#FFFFFF" stroke-opacity="0.330" stroke-width="0.98"/>
+<path d="M54.33 62.00 L51.65 27.28" stroke="#FFFFFF" stroke-opacity="0.330" stroke-width="0.98"/>
+<path d="M63.00 62.00 L54.94 27.28" stroke="#FFFFFF" stroke-opacity="0.330" stroke-width="0.98"/>
+<polygon points="0.00,36.00 31.00,36.00 33.80,58.00 37.00,62.00 63.00,62.00 66.20,58.00 69.00,36.00 100.00,36.00 100,100 0,100" fill="url(#marq-solid)"/>
+<polygon points="31,36 33.8,58 37,62 63,62 66.2,58 69,36" fill="url(#marq-glow)"/>
+<path d="M0 36 H31 L33.8 58 Q35 62 37 62 H63 Q65 62 66.2 58 L69 36 H100" fill="none" stroke="url(#marq-redS)" stroke-width="6.5" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M31 36 L34.18 82" stroke="url(#marq-redS)" stroke-width="6.5" stroke-linecap="round"/>
+</g>
+<rect x="4.75" y="4.75" width="90.5" height="90.5" rx="21.25" fill="none" stroke="#fff" stroke-opacity=".07" stroke-width="1.5"/>
 </svg>

@@ -16,6 +16,9 @@ on:
       - "index.html"
       - "app.js"
       - "worker.js"
+      - "viewer3d.js"
+      - "style.css"
+      - "plots.py"
       - "tests/**"
       - ".github/workflows/launchers.yml"
 

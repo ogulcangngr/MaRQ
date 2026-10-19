@@ -9,25 +9,46 @@ axes are labelled accordingly.
 """
 import json
 import math
+import re
 import numpy as np
 from scipy.ndimage import binary_erosion
 
 # ── Theme and palette ──────────────────────────────────────────────────────────
 
 _THEMES = {
-    "dark":  dict(BG="#0D1117", PANEL="#161B22", CARD="#21262D", BORDER="#30363D",
-                  TEXT="#C9D1D9", TEXT2="#8B949E", BLUE="#58A6FF", RED="#F85149",
-                  GREEN="#3FB950", YELLOW="#D29922", PURPLE="#A371F7", MASK="#2BFF7A"),
-    "light": dict(BG="#FFFFFF", PANEL="#FFFFFF", CARD="#EEF1F4", BORDER="#D0D7DE",
-                  TEXT="#1F2328", TEXT2="#57606A", BLUE="#0969DA", RED="#CF222E",
+    # dark: the greys of Visual Studio Code's dark theme; light: white with neutral greys
+    "dark":  dict(BG="#1E1E1E", PANEL="#1E1E1E", CARD="#2D2D30", BORDER="#454545",
+                  TEXT="#D4D4D4", TEXT2="#9D9D9D", BLUE="#4FA3F7", RED="#F14C4C",
+                  GREEN="#4EC98B", YELLOW="#E2B341", PURPLE="#B48EF0", MASK="#2BFF7A"),
+    "light": dict(BG="#FFFFFF", PANEL="#FFFFFF", CARD="#EDEDEF", BORDER="#CFCFD4",
+                  TEXT="#1F1F1F", TEXT2="#5C5C62", BLUE="#1F6FD1", RED="#D32F2F",
                   GREEN="#1A7F37", YELLOW="#9A6700", PURPLE="#8250DF", MASK="#00A040"),
 }
+# Colour scales as explicit stop lists (sampled from matplotlib; Earth from Plotly), because
+# Plotly.js knows only some names (not Plasma, Magma, Inferno or Turbo) and the 3D viewport
+# needs the stops too.
+_SCALES = {
+    "Viridis": [[0, "#440154"], [0.0625, "#48186A"], [0.125, "#472D7B"], [0.1875, "#424086"], [0.25, "#3B528B"], [0.3125, "#33638D"], [0.375, "#2C728E"], [0.4375, "#26828E"], [0.5, "#21918C"], [0.5625, "#1FA088"], [0.625, "#28AE80"], [0.6875, "#3FBC73"], [0.75, "#5EC962"], [0.8125, "#84D44B"], [0.875, "#ADDC30"], [0.9375, "#D8E219"], [1, "#FDE725"]],
+    "Cividis": [[0, "#00224E"], [0.0625, "#002E6A"], [0.125, "#1A386F"], [0.1875, "#32436D"], [0.25, "#434E6C"], [0.3125, "#535A6D"], [0.375, "#61656F"], [0.4375, "#6F7073"], [0.5, "#7D7C78"], [0.5625, "#8C8878"], [0.625, "#9B9476"], [0.6875, "#ABA072"], [0.75, "#BCAE6C"], [0.8125, "#CDBB63"], [0.875, "#DEC958"], [0.9375, "#F0D846"], [1, "#FEE838"]],
+    "Plasma": [[0, "#0D0887"], [0.0625, "#310597"], [0.125, "#4C02A1"], [0.1875, "#6600A7"], [0.25, "#7E03A8"], [0.3125, "#9511A1"], [0.375, "#AA2395"], [0.4375, "#BC3587"], [0.5, "#CC4778"], [0.5625, "#DA5A6A"], [0.625, "#E66C5C"], [0.6875, "#F0804E"], [0.75, "#F89540"], [0.8125, "#FDAC33"], [0.875, "#FDC527"], [0.9375, "#F8DF25"], [1, "#F0F921"]],
+    "Magma": [[0, "#000004"], [0.0625, "#0A0822"], [0.125, "#1D1147"], [0.1875, "#36106B"], [0.25, "#51127C"], [0.3125, "#6A1C81"], [0.375, "#832681"], [0.4375, "#9C2E7F"], [0.5, "#B73779"], [0.5625, "#D0416F"], [0.625, "#E75263"], [0.6875, "#F56B5C"], [0.75, "#FC8961"], [0.8125, "#FEA772"], [0.875, "#FEC488"], [0.9375, "#FDE2A3"], [1, "#FCFDBF"]],
+    "Inferno": [[0, "#000004"], [0.0625, "#0B0724"], [0.125, "#210C4A"], [0.1875, "#3D0965"], [0.25, "#57106E"], [0.3125, "#71196E"], [0.375, "#8A226A"], [0.4375, "#A32C61"], [0.5, "#BC3754"], [0.5625, "#D24644"], [0.625, "#E45A31"], [0.6875, "#F1731D"], [0.75, "#F98E09"], [0.8125, "#FCAC11"], [0.875, "#F9CB35"], [0.9375, "#F2EA69"], [1, "#FCFFA4"]],
+    "Turbo": [[0, "#30123B"], [0.03125, "#392A73"], [0.0625, "#4040A2"], [0.09375, "#4456C7"], [0.125, "#466BE3"], [0.1562, "#4680F6"], [0.1875, "#4294FF"], [0.2188, "#37A8FA"], [0.25, "#28BCEB"], [0.2812, "#1CCDD8"], [0.3125, "#18DDC2"], [0.3438, "#1FE9AF"], [0.375, "#32F298"], [0.4062, "#4EF97D"], [0.4375, "#6DFE62"], [0.4688, "#8BFF4B"], [0.5, "#A4FC3C"], [0.5312, "#B9F635"], [0.5625, "#CDEC34"], [0.5938, "#DFDF37"], [0.625, "#EECF3A"], [0.6562, "#F8BE39"], [0.6875, "#FDAC34"], [0.7188, "#FE962B"], [0.75, "#FB7E21"], [0.7812, "#F46617"], [0.8125, "#EB500E"], [0.8438, "#DF3F08"], [0.875, "#D02F05"], [0.9062, "#BE2102"], [0.9375, "#A91601"], [0.9688, "#920B01"], [1, "#7A0403"]],
+    "Diverging": [[0, "#053061"], [0.0625, "#175290"], [0.125, "#2A71B2"], [0.1875, "#3F8EC0"], [0.25, "#6BACD1"], [0.3125, "#9BC9E0"], [0.375, "#C2DDEC"], [0.4375, "#E0ECF3"], [0.5, "#F7F6F6"], [0.5625, "#FBE5D8"], [0.625, "#FBCCB4"], [0.6875, "#F5AA89"], [0.75, "#E48066"], [0.8125, "#D05548"], [0.875, "#BA2832"], [0.9375, "#930E26"], [1, "#67001F"]],
+    "Earth": [[0, "#000082"], [0.1, "#00B4B4"], [0.2, "#28D228"], [0.4, "#E6E632"], [0.6, "#784614"], [1, "#FFFFFF"]],
+}
+
+
+def _scale(name):
+    return _SCALES.get(str(name), _SCALES["Viridis"])
+
+
 _T = dict(_THEMES["dark"])          # active theme colours
-_CS = "Viridis"                     # height colour scale (palette selector)
+_CS = _scale("Viridis")             # height colour scale (palette selector)
 EQUAL = True                        # 1:1 axis scales on the 2D plots: a µm on x is a µm on y
 
-SLOPE_CS = "Inferno"                # slope-magnitude maps and the slope error E_d
-DIFF_CS  = "RdBu"                   # signed height error E_Z
+SLOPE_CS = _scale("Inferno")        # slope-magnitude maps and the slope error
+DIFF_CS  = _scale("Diverging")      # signed height difference B - A: blue below, red above
 FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
 U = "µm"
 
@@ -45,7 +66,7 @@ def set_theme(name):
 def set_palette(name):
     """Colour scale of every height map (2D and 3D)."""
     global _CS
-    _CS = str(name) if name else "Viridis"
+    _CS = _scale(name or "Viridis")
 
 
 def set_equal(flag):
@@ -173,7 +194,7 @@ def _panel_title(text, xaxis, yaxis, size=12):
 def _heatmap(x, y, z, cs, name, cbar=None, nd=2, **kw):
     d = {"type": "heatmap", "x": x, "y": y, "z": _arr(z, nd), "colorscale": cs,
          "name": name, "hoverongaps": False,
-         "hovertemplate": "x %{x:.0f}<br>y %{y:.0f}<br>%{z:.2f}<extra>" + name + "</extra>",
+         "hovertemplate": "<b>" + name + "</b><br>x %{x:.0f} µm, y %{y:.0f} µm<br>%{z:.3f}<extra></extra>",
          "showscale": cbar is not None}
     if cbar is not None:
         d["colorbar"] = cbar
@@ -242,8 +263,8 @@ def make_rotation_fig(result):
 
     layout = _base(margin={"t": 80, "b": 55, "l": 65, "r": 80})
     layout.update({
-        "title": _title(f"Levelling and alignment  |  φ = {rot['phi']:.2f}°   "
-                        f"residual tilt XZ {rot['xz_tilt']:.2f}°  YZ {rot['yz_tilt']:.2f}°   "
+        "title": _title(f"Levelling and alignment  |  rotation φ = {rot['phi']:.2f}°, "
+                        f"residual tilt {rot['xz_tilt']:.2f}° (XZ) and {rot['yz_tilt']:.2f}° (YZ), "
                         f"axis variance {rot['var_pct']:.1f} %"),
         "xaxis":  _axis(f"X ({U})", domain=[0.0, 0.40]),
         "yaxis":  _axis(f"Y ({U})", scaleanchor="x"),
@@ -263,11 +284,11 @@ def make_rotation_fig(result):
     return {
         "data": [
             _heatmap(bg["XI"][0].tolist(), bg["YI"][:, 0].tolist(), bg["ZI"], _CS, "before",
-                     cbar=_cbar(f"Z ({U})", x=0.415, xanchor="left", tickfont={"size": 9},
-                                title={"text": f"Z ({U})", "side": "top", "font": {"size": 10}}),
+                     cbar=_cbar(f"Height ({U})", x=0.415, xanchor="left", tickfont={"size": 9},
+                                title={"text": f"Height ({U})", "side": "top", "font": {"size": 10}}),
                      xaxis="x", yaxis="y"),
             _heatmap(ag["XI"][0].tolist(), ag["YI"][:, 0].tolist(), ag["ZI"], _CS, "after",
-                     cbar=_cbar(f"Z ({U})", x=1.01, xanchor="left"), xaxis="x2", yaxis="y2"),
+                     cbar=_cbar(f"Height ({U})", x=1.01, xanchor="left"), xaxis="x2", yaxis="y2"),
         ],
         "layout": layout,
     }
@@ -305,8 +326,8 @@ def make_channel_fig(result):
     layout["yaxis"] = _axis(f"Y, cross-channel ({U})", scaleanchor="x")
 
     data = [
-        _heatmap(ag["XI"][0].tolist(), ag["YI"][:, 0].tolist(), ag["ZI"], _CS, "height",
-                 cbar=_cbar(f"Z ({U})", x=1.01, xanchor="left"), showlegend=False),
+        _heatmap(ag["XI"][0].tolist(), ag["YI"][:, 0].tolist(), ag["ZI"], _CS, "Height",
+                 cbar=_cbar(f"Height ({U})", x=1.01, xanchor="left"), showlegend=False),
         {"type": "scatter", "x": (list(rx) + list(rx[::-1])),
          "y": (list(cy + 2 * cy_s) + list((cy - 2 * cy_s)[::-1])),
          "fill": "toself", "fillcolor": _rgba(C("RED"), 0.18), "line": {"width": 0},
@@ -513,7 +534,7 @@ def make_cross_section_fig(result):
                              f"opening {ch['opening_width']:.1f} {U}, depth {depth:.1f} {U}"
                              + (f", wall angle {wall:.1f}°" if wall is not None and np.isfinite(wall) else ""))
     layout["xaxis"]  = _axis(f"Y, across the channel ({U})", range=xr, anchor="y")
-    layout["yaxis"]  = _axis(f"Z ({U})", domain=[0.58, 1.0], **_eq("x"))
+    layout["yaxis"]  = _axis(f"Height ({U})", domain=[0.58, 1.0], **_eq("x"))
     layout["xaxis2"] = _axis(f"X, along the channel ({U})", anchor="y2")
     layout["yaxis2"] = _axis(f"Local depth ({U})", domain=[0.0, 0.36], anchor="x2", **_eq("x2"))
     return {"data": data, "layout": layout}
@@ -546,12 +567,12 @@ def make_3d_fig(result, max_cells=None, colorscale=None):
         "data": [
             {"type": "surface", "x": xi_c.tolist(), "y": yi_c.tolist(),
              "z": _arr(ZI[::S, ::S], 2), "colorscale": cs, "showscale": True,
-             "lighting": _LIGHTING, "name": "channel",
+             "lighting": _LIGHTING, "name": "Height",
              "hovertemplate": "x %{x:.0f}<br>y %{y:.0f}<br>z %{z:.1f}<extra></extra>",
-             "colorbar": _cbar(f"Z ({U})", thickness=14)},
+             "colorbar": _cbar(f"Height ({U})", thickness=14)},
         ],
         "layout": _layout3d(title, _scene(aspect, f"X, channel axis ({U})",
-                                          f"Y, cross-channel ({U})", f"Z ({U})",
+                                          f"Y, cross-channel ({U})", f"Height ({U})",
                                           zdtick=Z_DTICK_3D)),
     }
 
@@ -585,8 +606,8 @@ def make_roughness_fig(result):
                 "name": _legend(entry, name), "hovertemplate": _hover(entry, name)}
 
     data = [
-        _heatmap(xi_c.tolist(), yi_c.tolist(), ZI, _CS, "height",
-                 cbar=_cbar(f"Z ({U})", x=1.01, xanchor="left"), showlegend=False),
+        _heatmap(xi_c.tolist(), yi_c.tolist(), ZI, _CS, "Height",
+                 cbar=_cbar(f"Height ({U})", x=1.01, xanchor="left"), showlegend=False),
         _rect(rgh["regions"]["floor"],      C("GREEN"), "Floor",       rgh["floor"]),
         _rect(rgh["regions"]["surf_left"],  C("BLUE"),  "Field left",  rgh["surf_left"]),
         _rect(rgh["regions"]["surf_right"], C("RED"),   "Field right", rgh["surf_right"]),
@@ -614,26 +635,27 @@ def _surface_fig(result, which, max_cells=None):
     exag = f"   (Z exaggerated ×{zex})" if zex > 1 else ""
 
     if which == "A":
-        trace = {"z": _arr(ZA[::S, ::S], 2), "colorscale": _CS, "name": "surface A",
-                 "colorbar": _cbar(f"Z ({U})", thickness=14)}
-        title = "Surface A, the reference: height" + exag
+        trace = {"z": _arr(ZA[::S, ::S], 2), "colorscale": _CS, "name": "Surface A",
+                 "colorbar": _cbar(f"Height ({U})", thickness=14)}
+        title = "Surface A, the reference  |  height" + exag
     elif which == "B":
-        trace = {"z": _arr(ZB[::S, ::S], 2), "colorscale": _CS, "name": "surface B",
-                 "colorbar": _cbar(f"Z ({U})", thickness=14)}
-        title = ("Surface B, the compared surface: height" +
+        trace = {"z": _arr(ZB[::S, ::S], 2), "colorscale": _CS, "name": "Surface B",
+                 "colorbar": _cbar(f"Height ({U})", thickness=14)}
+        title = ("Surface B, the compared surface  |  height" +
                  (", rotated 180° about Z to match A" if m.get("z_flip") else "") + exag)
     else:
         ED = np.asarray(g["error_map"], float)
         ed_hi = float(np.nanpercentile(ED, 99)) if np.isfinite(ED).any() else 1.0
         trace = {"z": _arr(ZB[::S, ::S], 2), "surfacecolor": _arr(ED[::S, ::S], 4),
-                 "colorscale": SLOPE_CS, "cmin": 0, "cmax": ed_hi, "name": "E_d",
-                 "colorbar": _cbar("E_d (µm/µm)", thickness=14)}
-        title = "Slope-magnitude error E_d = | |∇Z_B| − |∇Z_A| | drawn on surface B" + exag
+                 "colorscale": SLOPE_CS, "cmin": 0, "cmax": ed_hi, "name": "Slope error",
+                 "colorbar": _cbar("Slope error (µm/µm)", thickness=14)}
+        title = ("Slope error on surface B  |  the absolute difference of the slope magnitudes "
+                 "of B and A, drawn on the shape of B" + exag)
 
     trace.update({"type": "surface", "x": x, "y": y, "showscale": True, "lighting": _LIGHTING,
                   "hovertemplate": "x %{x:.0f}<br>y %{y:.0f}<br>z %{z:.1f}<extra></extra>"})
     return {"data": [trace],
-            "layout": _layout3d(title, _scene(aspect, f"X ({U})", f"Y ({U})", f"Z ({U})"))}
+            "layout": _layout3d(title, _scene(aspect, f"X ({U})", f"Y ({U})", f"Height ({U})"))}
 
 
 def make_gradient_3d_cloud1_fig(result, max_cells=None):
@@ -683,12 +705,12 @@ def make_gradient_maps_fig(result):
     stacked = EQUAL and (x_range / max(y_range, 1e-9) > 2.5)      # long channel at true scale: one map per row
     small = {"xanchor": "left", "thickness": 10, "tickfont": {"size": 9}}
     #        z    colourscale  zmin  zmax  name       decimals
-    P = {"ZA": (ZA, _CS,      z0,   z1,   "Z_A",     1),
-         "ZB": (ZB, _CS,      z0,   z1,   "Z_B",     1),
-         "EZ": (EZ, DIFF_CS,  -ez,  ez,   "E_Z",     1),
-         "GA": (GA, SLOPE_CS, 0.0,  g1,   "|∇Z_A|",  3),
-         "GB": (GB, SLOPE_CS, 0.0,  g1,   "|∇Z_B|",  3),
-         "ED": (ED, SLOPE_CS, 0.0,  ed,   "E_d",     3)}
+    P = {"ZA": (ZA, _CS,      z0,   z1,   "Height A",          1),
+         "ZB": (ZB, _CS,      z0,   z1,   "Height B",          1),
+         "EZ": (EZ, DIFF_CS,  -ez,  ez,   "Difference B − A",  1),
+         "GA": (GA, SLOPE_CS, 0.0,  g1,   "Slope A",           3),
+         "GB": (GB, SLOPE_CS, 0.0,  g1,   "Slope B",           3),
+         "ED": (ED, SLOPE_CS, 0.0,  ed,   "Slope error",       3)}
     if stacked:
         order = ["ZA", "ZB", "EZ", "GA", "GB", "ED"]
         gap = 0.028; h = (1 - 5 * gap) / 6
@@ -698,11 +720,12 @@ def make_gradient_maps_fig(result):
         def span(r0, r1):
             top, bot = rows[r0][1], rows[r1][0]
             return {"y": (top + bot) / 2, "len": top - bot}
-        cb = {"ZA": _cbar(f"Z ({U})",     x=0.945, nticks=4, **span(1, 2), **small),
-              "EZ": _cbar(f"E_Z ({U})",   x=0.945, nticks=3, **span(3, 3), **small),
-              "GA": _cbar("|∇Z| (µm/µm)", x=0.945, nticks=4, **span(4, 5), **small),
-              "ED": _cbar("E_d (µm/µm)",  x=0.945, nticks=3, **span(6, 6), **small)}
-        ylabel  = {key: P[key][4] for key in order}
+        cb = {"ZA": _cbar(f"Height ({U})",  x=0.945, nticks=4, **span(1, 2), **small),
+              "EZ": _cbar(f"B − A ({U})",   x=0.945, nticks=3, **span(3, 3), **small),
+              "GA": _cbar("Slope (µm/µm)",  x=0.945, nticks=4, **span(4, 5), **small),
+              "ED": _cbar("Error (µm/µm)",  x=0.945, nticks=3, **span(6, 6), **small)}
+        short = {"ZA": "Height A", "ZB": "Height B", "EZ": "B − A", "GA": "Slope A", "GB": "Slope B", "ED": "Error"}
+        ylabel  = {key: short[key] for key in order}
         headers = []
         title_note = "  |  1:1"
     else:
@@ -710,19 +733,20 @@ def make_gradient_maps_fig(result):
         cols = {1: [0.0, 0.42], 2: [0.57, 0.99]}
         rows = {1: [0.70, 1.0], 2: [0.35, 0.65], 3: [0.0, 0.30]}
         pos  = {"ZA": (1, 1), "GA": (1, 2), "ZB": (2, 1), "GB": (2, 2), "EZ": (3, 1), "ED": (3, 2)}
-        cb = {"ZA": _cbar(f"Z ({U})",     x=0.43, y=0.675, len=0.62, **small),
-              "EZ": _cbar(f"E_Z ({U})",   x=0.43, y=0.15,  len=0.30, **small),
-              "GA": _cbar("|∇Z| (µm/µm)", x=1.0,  y=0.675, len=0.62, **small),
-              "ED": _cbar("E_d (µm/µm)",  x=1.0,  y=0.15,  len=0.30, **small)}
-        row_label = {1: "Surface A", 2: "Surface B", 3: "Error"}
+        cb = {"ZA": _cbar(f"Height ({U})",  x=0.43, y=0.675, len=0.62, **small),
+              "EZ": _cbar(f"B − A ({U})",   x=0.43, y=0.15,  len=0.30, **small),
+              "GA": _cbar("Slope (µm/µm)",  x=1.0,  y=0.675, len=0.62, **small),
+              "ED": _cbar("Error (µm/µm)",  x=1.0,  y=0.15,  len=0.30, **small)}
+        row_label = {1: "Surface A", 2: "Surface B", 3: "Difference"}
         ylabel  = {key: (f"{row_label[pos[key][0]]}<br>Y ({U})" if pos[key][1] == 1 else None) for key in order}
-        headers = [_panel_title(f"Height Z ({U})", "x", "y"),
-                   _panel_title("Slope magnitude |∇Z| (µm/µm)", "x2", "y2")]
+        headers = [_panel_title(f"Height ({U})", "x", "y"),
+                   _panel_title("Slope magnitude (µm/µm)", "x2", "y2")]
         title_note = "" if not EQUAL else "  |  1:1"
     nrows = max(r for r, c in pos.values())
 
     layout = _base(margin={"t": 70 if headers else 55, "b": 50, "l": 75, "r": 75}, showlegend=False)
-    layout["title"] = _title("Height and slope maps on the common grid  |  green outline: metric mask" + title_note)
+    layout["title"] = _title("Height and slope maps on the common grid  |  green outline: the channel "
+                             "interior over which the correlations are computed" + title_note)
     data = []
     for k, key in enumerate(order, 1):
         z, cs, zmin, zmax, name, nd = P[key]
@@ -775,7 +799,7 @@ def build_figs(kind, result, max_cells=None, palette=None, equal=None):
         set_palette(palette)
     if equal is not None:
         set_equal(equal)
-    return {key: fn(result, max_cells) for key, fn in BUILDERS[kind].items()}
+    return {key: localise(fn(result, max_cells)) for key, fn in BUILDERS[kind].items()}
 
 
 def build_one_fig(kind, key, result, max_cells=None, palette=None, equal=None):
@@ -783,7 +807,196 @@ def build_one_fig(kind, key, result, max_cells=None, palette=None, equal=None):
         set_palette(palette)
     if equal is not None:
         set_equal(equal)
-    return BUILDERS[kind][key](result, max_cells)
+    return localise(BUILDERS[kind][key](result, max_cells))
+
+
+# ── Languages ──────────────────────────────────────────────────────────────────
+# The builders write English. For another language the finished figure is translated piece
+# by piece: titles split at "  |  ", line breaks, runs of spaces and ", ", and each piece is
+# looked up whole or matched against a template whose {} stand for numbers. Numbers then
+# take the decimal comma, and Plotly's own number formatting (ticks, hover) follows through
+# layout.separators.
+
+_LANG = "en"
+
+
+def set_language(lang):
+    """Language of the figure texts: "en" (default) or "tr"."""
+    global _LANG
+    _LANG = "tr" if str(lang or "").lower().startswith("tr") else "en"
+
+
+_TR = {
+    "Centre X per grid line along the channel": "Kanal boyunca her ızgara çizgisinde merkez X",
+    "Centre Y per grid line across the channel": "Kanal enine her ızgara çizgisinde merkez Y",
+    "Crop box (exported channel)": "Kırpma kutusu (dışa aktarılan kanal)",
+    "Difference B − A": "Fark B − A",
+    "Difference": "Fark",
+    "Field left": "Sol düzlem",
+    "Field right": "Sağ düzlem",
+    "Field": "Düzlem",
+    "Floor": "Taban",
+    "Floor length edges": "Taban uzunluğu uçları",
+    "Floor length per grid line along the channel": "Kanal boyunca her ızgara çizgisinde taban uzunluğu",
+    "Floor length": "Taban uzunluğu",
+    "Floor width edges": "Taban genişliği kenarları",
+    "Floor width per grid line across the channel": "Kanal enine her ızgara çizgisinde taban genişliği",
+    "Floor width": "Taban genişliği",
+    "Height": "Yükseklik",
+    "Height A": "Yükseklik A",
+    "Height B": "Yükseklik B",
+    "Mean cross-section": "Ortalama kesit",
+    "Slope A": "Eğim A",
+    "Slope B": "Eğim B",
+    "Slope error": "Eğim hatası",
+    "Surface A": "A yüzeyi",
+    "Surface B": "B yüzeyi",
+    "Error": "Hata",
+    "after": "sonra",
+    "before": "önce",
+    "centre X ±2 SD": "merkez X ±2 SS",
+    "centre Y ±2 SD": "merkez Y ±2 SS",
+    "mask": "maske",
+    "Slice without a valid floor": "Geçerli tabanı olmayan dilim",
+    "No data": "Veri yok",
+    "Before: raw scan": "Önce: ham tarama",
+    "After: field levelled": "Sonra: düzlem yataylandı",
+    "channel along X": "kanal X boyunca",
+    "protrusion rotated to a depression": "çıkıntı çukura döndürüldü",
+    "channel axis": "kanal ekseni",
+    "Centre X (µm)": "Merkez X (µm)",
+    "Centre Y (µm)": "Merkez Y (µm)",
+    "Error (µm/µm)": "Hata (µm/µm)",
+    "Floor length (µm)": "Taban uzunluğu (µm)",
+    "Floor length (µm) (free scale)": "Taban uzunluğu (µm) (serbest ölçek)",
+    "Floor width (µm)": "Taban genişliği (µm)",
+    "Height (µm)": "Yükseklik (µm)",
+    "Local depth (µm)": "Yerel derinlik (µm)",
+    "Slope (µm/µm)": "Eğim (µm/µm)",
+    "Slope error (µm/µm)": "Eğim hatası (µm/µm)",
+    "Slope magnitude (µm/µm)": "Eğim büyüklüğü (µm/µm)",
+    "Roughness evaluation areas (ISO 25178, plane-removed)": "Pürüzlülük değerlendirme alanları (ISO 25178, düzlem çıkarılmış)",
+    "X, along the channel (µm)": "X, kanal boyunca (µm)",
+    "X, channel axis (µm)": "X, kanal ekseni (µm)",
+    "X, position along the channel (µm)": "X, kanal boyunca konum (µm)",
+    "Y, across the channel (µm)": "Y, kanal enine (µm)",
+    "Y, cross-channel (µm)": "Y, kanala dik (µm)",
+    "Y, position across the channel (µm)": "Y, kanal enine konum (µm)",
+    "Height and slope maps on the common grid": "Ortak ızgarada yükseklik ve eğim haritaları",
+    "green outline: the channel interior over which the correlations are computed":
+        "yeşil çizgi: korelasyonların hesaplandığı kanal içi",
+    "Levelling and alignment": "Yataylama ve hizalama",
+    "Channel detection on the aligned surface": "Hizalanmış yüzeyde kanal tespiti",
+    "crop box for export": "dışa aktarma için kırpma kutusu",
+    "Channel centre line": "Kanal merkez çizgisi",
+    "Cropped channel": "Kırpılmış kanal",
+    "Longitudinal centre per grid line along the channel": "Kanal boyunca her ızgara çizgisinde boyuna merkez",
+    "Mean cross-section and local depth": "Ortalama kesit ve yerel derinlik",
+    "Slope error on surface B": "B yüzeyinde eğim hatası",
+    "the absolute difference of the slope magnitudes of B and A": "B ve A eğim büyüklüklerinin mutlak farkı",
+    "drawn on the shape of B": "B'nin biçimi üzerinde gösterilir",
+    "the reference": "referans",
+    "the compared surface": "karşılaştırılan yüzey",
+    "height": "yükseklik",
+    "rotated 180° about Z to match A": "A'ya uyması için Z ekseni etrafında 180° döndürüldü",
+    "Local depth per slice": "Dilim başına yerel derinlik",
+    "Mid-wall lines (25–75 % of depth)": "Orta duvar çizgileri (derinliğin %25–75'i)",
+}
+
+# templates: {} matches a number with its unit; the Turkish order may differ
+_TR_TPL = [
+    ("floor edges on the grid lines at {} % of depth", "derinliğin %{} düzeyinde ızgara çizgilerindeki taban kenarları"),
+    ("mean Y = {}", "ortalama Y = {}"),
+    ("mean X = {}", "ortalama X = {}"),
+    ("SD over the central 80 % of the grid lines {}", "ızgara çizgilerinin ortadaki %80'inde SS {}"),
+    ("SD {}", "SS {}"),
+    ("floor width {}", "taban genişliği {}"),
+    ("length {}", "uzunluk {}"),
+    ("depth {}", "derinlik {}"),
+    ("opening {}", "ağız {}"),
+    ("wall angle {}", "duvar açısı {}"),
+    ("Floor width and length per grid line at {} % of depth", "Derinliğin %{} düzeyinde her ızgara çizgisinde taban genişliği ve uzunluğu"),
+    ("W = {}", "G = {}"),
+    ("L = {} (median ± SD of the lines)", "U = {} (çizgilerin ortancası ± SS)"),
+    ("rotation φ = {}", "dönme φ = {}"),
+    ("residual tilt {} (XZ) and {} (YZ)", "kalan eğiklik {} (XZ) ve {} (YZ)"),
+    ("axis variance {} %", "eksen varyansı %{}"),
+    ("median of the lines {}", "çizgilerin ortancası {}"),
+    ("Floor level {}", "Taban seviyesi {}"),
+    ("Floor width {} ({} % of depth)", "Taban genişliği {} (derinlik %{})"),
+    ("Opening width {} ({} % of depth)", "Ağız genişliği {} (derinlik %{})"),
+    ("Floor-width level ({} % of depth)", "Taban genişliği seviyesi (derinlik %{})"),
+    ("Opening level ({} % of depth)", "Ağız seviyesi (derinlik %{})"),
+    ("Local depth per slice (SD, central 80 %: {})", "Dilim başına yerel derinlik (SS, ortadaki %80: {})"),
+    ("Mean depth {}", "Ortalama derinlik {}"),
+    ("Mean {}", "Ortalama {}"),
+    ("Mid-wall lines (25–75 % of depth), wall angle {}", "Orta duvar çizgileri (derinliğin %25–75'i), duvar açısı {}"),
+    ("width ±1 SD over {} lines", "genişlik ±1 SS, {} çizgi üzerinden"),
+    ("length ±1 SD over {} lines", "uzunluk ±1 SS, {} çizgi üzerinden"),
+    ("{}: no data", "{}: veri yok"),
+    ("(Z exaggerated ×{})", "(Z ×{} büyütüldü)"),
+]
+# the most specific template first ("length ±1 SD over {} lines" before "length {}")
+_TR_RX = [(re.compile("^" + re.escape(en).replace(r"\{\}", "(.+?)") + "$"), tr, (", " in en or "  " in en))
+          for en, tr in sorted(_TR_TPL, key=lambda p: -len(p[0].replace("{}", "")))]
+_SPLIT = re.compile(r"(\s+\|\s+|<br>|</?b>|<extra></extra>|\s{3,}|, )")
+
+
+def _decimal(s):
+    """Decimal comma and thousands point, for Turkish."""
+    s = re.sub(r"(?<=\d),(?=\d{3}(?!\d))", "\x01", s)
+    s = re.sub(r"(?<=\d)\.(?=\d)", ",", s)
+    return s.replace("\x01", ".")
+
+
+def _tr_piece(p, whole=False):
+    """One piece of text; with whole=True only exact entries and templates that themselves
+    contain a separator are tried, so a long title is not caught by a short template."""
+    core = p.strip()
+    if not core:
+        return p, False
+    out = _TR.get(core)
+    if out is None:
+        for rx, tr, multi in _TR_RX:
+            if whole and not multi:
+                continue
+            m = rx.match(core)
+            if m:
+                out = tr.format(*m.groups())
+                break
+    if out is None:
+        return p.replace(core, _decimal(core)), False
+    return p.replace(core, _decimal(out)), True
+
+
+def _tr_text(s):
+    if _LANG == "en" or not isinstance(s, str):
+        return s
+    out, hit = _tr_piece(s, whole=True)
+    if hit:
+        return out
+    parts = _SPLIT.split(s)
+    return "".join(p if (i % 2 == 1) else _tr_piece(p)[0] for i, p in enumerate(parts))
+
+
+def localise(fig):
+    """Translate the texts of one figure in place (no change in English)."""
+    if _LANG == "en":
+        return fig
+
+    def walk(o):
+        if isinstance(o, dict):
+            for k, v in o.items():
+                if k in ("text", "name", "hovertemplate") and isinstance(v, str):
+                    o[k] = _tr_text(v)
+                else:
+                    walk(v)
+        elif isinstance(o, list):
+            for v in o:
+                walk(v)
+    walk(fig)
+    fig.setdefault("layout", {})["separators"] = ",."
+    return fig
 
 
 def build_pvisual_figs(result, max_cells=None, palette=None, equal=None):

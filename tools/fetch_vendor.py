@@ -6,6 +6,8 @@ runs without internet access ("offline bundle").
 
 Files (versions pinned; change the constants to upgrade, then re-run):
   vendor/plotly-<PLOTLY_VERSION>.min.js           Plotly.js (MIT)          from cdn.plot.ly
+  vendor/three/three.module.min.js                three.js (MIT), the 3D   from cdn.jsdelivr.net
+                                                  viewport
   vendor/pyodide/pyodide.js, pyodide.asm.js,      Pyodide (MPL-2.0)        from cdn.jsdelivr.net
                  pyodide.asm.wasm, python_stdlib.zip, pyodide-lock.json
   vendor/pyodide/<wheels>                         numpy, scipy and their   listed in pyodide-lock.json,
@@ -21,10 +23,12 @@ import sys
 import urllib.request
 
 PLOTLY_VERSION  = "2.35.2"
+THREE_VERSION   = "0.169.0"
 PYODIDE_VERSION = "0.26.4"
 PACKAGES        = ["numpy", "scipy"]          # transitive dependencies are added from the lock file
 
 PLOTLY_URL  = f"https://cdn.plot.ly/plotly-{PLOTLY_VERSION}.min.js"
+THREE_URL   = f"https://cdn.jsdelivr.net/npm/three@{THREE_VERSION}/build/three.module.min.js"
 PYODIDE_CDN = f"https://cdn.jsdelivr.net/pyodide/v{PYODIDE_VERSION}/full/"
 CORE_FILES  = ["pyodide.js", "pyodide.asm.js", "pyodide.asm.wasm", "python_stdlib.zip", "pyodide-lock.json"]
 
@@ -71,6 +75,8 @@ def main():
     ok = True
     print("Plotly.js")
     ok &= fetch(PLOTLY_URL, os.path.join(VENDOR, f"plotly-{PLOTLY_VERSION}.min.js"))
+    print("three.js")
+    ok &= fetch(THREE_URL, os.path.join(VENDOR, "three", "three.module.min.js"))
 
     print("Pyodide core")
     for name in CORE_FILES:

@@ -1,13 +1,18 @@
-// MaRQ launcher: serves the MaRQ folder on this computer (127.0.0.1 only) and opens the
-// browser. It needs nothing installed; the analysis itself runs in the browser.
+// MaRQ launcher: serves the MaRQ folder on this computer (127.0.0.1 only) and opens MaRQ in a
+// window of its own. It needs nothing installed; the analysis itself runs in the browser engine.
+//
+// The window is the application mode of Chrome or Edge (no address bar, no tabs; Edge comes
+// with every Windows 10 and 11). Without either, MaRQ opens in a tab of the default browser.
 //
 // Build for every system with tools/build_launchers.py. Usage:
 //
 //	MaRQ.exe                 picks a free port from 8000 upward
 //	MaRQ.exe 8080            a specific port
 //	MaRQ.exe --dir PATH      serve another MaRQ folder
+//	MaRQ.exe --tab           open a tab of the default browser instead of a window
 //
-// MARQ_NO_BROWSER=1 starts the server without opening a browser (tests).
+// MARQ_NO_BROWSER=1 starts the server without opening a browser (tests); MARQ_BROWSER_TAB=1
+// is the same as --tab.
 package main
 
 import (
@@ -105,6 +110,65 @@ func listen(port int) (net.Listener, error) {
 	return net.Listen("tcp", "127.0.0.1:0") // any free port
 }
 
+// appBrowser finds a Chromium-based browser that can show a page as an application window.
+func appBrowser() (string, bool) {
+	switch runtime.GOOS {
+	case "windows":
+		var bases []string
+		for _, v := range []string{"ProgramFiles", "ProgramFiles(x86)", "LocalAppData"} {
+			if b := os.Getenv(v); b != "" {
+				bases = append(bases, b)
+			}
+		}
+		for _, rel := range []string{`Google\Chrome\Application\chrome.exe`, `Microsoft\Edge\Application\msedge.exe`,
+			`BraveSoftware\Brave-Browser\Application\brave.exe`, `Chromium\Application\chrome.exe`} {
+			for _, b := range bases {
+				if p := filepath.Join(b, rel); fileExists(p) {
+					return p, true
+				}
+			}
+		}
+	case "darwin":
+		home, _ := os.UserHomeDir()
+		for _, app := range []string{"Google Chrome.app", "Microsoft Edge.app", "Chromium.app", "Brave Browser.app"} {
+			for _, dir := range []string{"/Applications", filepath.Join(home, "Applications")} {
+				if p := filepath.Join(dir, app); fileExists(p) {
+					return p, true
+				}
+			}
+		}
+	default:
+		for _, b := range []string{"google-chrome", "google-chrome-stable", "chromium", "chromium-browser",
+			"microsoft-edge", "microsoft-edge-stable", "brave-browser"} {
+			if p, err := exec.LookPath(b); err == nil {
+				return p, true
+			}
+		}
+	}
+	return "", false
+}
+
+func fileExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
+}
+
+// openWindow shows MaRQ in an application window; false when no suitable browser is found.
+func openWindow(url string) bool {
+	p, ok := appBrowser()
+	if !ok {
+		return false
+	}
+	args := []string{"--app=" + url, "--start-maximized"}
+	var cmd *exec.Cmd
+	if runtime.GOOS == "darwin" {
+		cmd = exec.Command("open", append([]string{"-na", p, "--args"}, args...)...)
+	} else {
+		cmd = exec.Command(p, args...)
+	}
+	return cmd.Start() == nil
+}
+
 func openBrowser(url string) error {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
@@ -168,7 +232,7 @@ func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	port, dirArg := 0, ""
+	port, dirArg, tab := 0, "", os.Getenv("MARQ_BROWSER_TAB") != ""
 	args := os.Args[1:]
 	for i := 0; i < len(args); i++ {
 		a := args[i]
@@ -176,14 +240,16 @@ func main() {
 		case a == "--dir" && i+1 < len(args):
 			dirArg = args[i+1]
 			i++
+		case a == "--tab":
+			tab = true
 		case a == "-h" || a == "--help":
-			fmt.Println("MaRQ launcher " + version + ": serves the MaRQ folder on 127.0.0.1 and opens the browser.")
-			fmt.Println("Usage: MaRQ [port] [--dir FOLDER]")
+			fmt.Println("MaRQ launcher " + version + ": serves the MaRQ folder on 127.0.0.1 and opens MaRQ in its own window.")
+			fmt.Println("Usage: MaRQ [port] [--dir FOLDER] [--tab]")
 			return
 		default:
 			n, err := strconv.Atoi(a)
 			if err != nil || n < 1 || n > 65535 {
-				fail("Unknown argument: " + a + "\nUsage: MaRQ [port] [--dir FOLDER]")
+				fail("Unknown argument: " + a + "\nUsage: MaRQ [port] [--dir FOLDER] [--tab]")
 			}
 			port = n
 		}
@@ -225,7 +291,10 @@ func main() {
 
 	if os.Getenv("MARQ_NO_BROWSER") == "" {
 		time.Sleep(300 * time.Millisecond)
-		if err := openBrowser(url); err != nil {
+		if !tab && openWindow(url) {
+			fmt.Println("  MaRQ opens in its own window now. If it does not, open Chrome, Edge,")
+			fmt.Println("  Firefox or Safari yourself and go to   " + url)
+		} else if err := openBrowser(url); err != nil {
 			fmt.Println("  The browser could not be opened automatically. Open Chrome, Edge, Firefox")
 			fmt.Println("  or Safari yourself and go to   " + url)
 		} else {
