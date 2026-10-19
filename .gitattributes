@@ -1,3 +1,8 @@
 *.bat text eol=crlf
 *.command text eol=lf
 *.sh text eol=lf
+*.exe binary
+*.syso binary
+*.ico binary
+*.png binary
+launchers/* binary

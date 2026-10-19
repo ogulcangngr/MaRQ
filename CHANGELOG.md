@@ -43,6 +43,21 @@ so every downstream number was recomputed.
   Python), when MaRQ is started from inside the zip, or when the server stops with
   an error; the `py` launcher is found again; Windows line endings. No analysis
   change.
+- Launchers that need nothing installed (2026-10-19): `MaRQ.exe` (Windows) and
+  `launchers/` binaries for macOS (Apple silicon, Intel) and Linux (x86-64, Arm),
+  built from `launcher/main.go` with `tools/build_launchers.py`. They serve the folder
+  on 127.0.0.1 with fixed content types (a Windows registry that maps `.js` to
+  `text/plain` no longer stops the worker), pick a free port, open the browser, and
+  keep their window open with a plain message when the zip was not extracted or a
+  port is taken. `MaRQ.command` / `MaRQ.sh` pick the binary for the system, clear the
+  macOS download quarantine of the folder, and fall back to Python; `MaRQ.bat` starts
+  `MaRQ.exe` and falls back to Python; `run_marq.py` uses the same fixed content types.
+  The page shows a red notice when it is opened as a file, when the browser lacks
+  WebAssembly or workers, or when the analysis engine cannot be loaded.
+  `tests/e2e_check.py` checks a running MaRQ in a browser. No analysis change.
+- Icon (2026-10-19): the MaRQ logo is the icon of `MaRQ.exe` (with its name and version
+  in the file properties; `launcher/winres/`, `launcher/icon/`) and of the browser tab
+  (`favicon.ico`, `logo.svg`, `apple-touch-icon.png`).
 
 ## 0.9 (2026-09-30)
 

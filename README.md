@@ -28,21 +28,32 @@ https://doi.org/10.5281/zenodo.22813916 (restricted until the article is publish
 
 ## Running MaRQ
 
-The page has to come from an HTTP server (a `file://` page cannot start the Python
-worker), so a small local server is started for you:
+Nothing has to be installed, Python included. Extract the zip, open this folder and:
 
-- **Windows:** extract the zip first (right-click, Extract All), then double-click
-  `MaRQ.bat`; it does not run from inside the zip.
-- **macOS:** double-click `MaRQ.command` (the first time: right-click, Open).
-  **Linux:** `sh MaRQ.command`.
-- **Any system with Python 3:** `python run_marq.py` in this folder.
+- **Windows 10/11:** double-click `MaRQ.exe`. If *Windows protected your PC* appears,
+  click *More info*, *Run anyway* (the program is not code-signed).
+- **macOS 12+:** double-click `MaRQ.command`. The first time macOS asks to confirm:
+  on macOS 15+ open *System Settings*, *Privacy & Security*, *Open Anyway*; on older
+  versions Control-click the file and choose *Open*. If it still does not start, type
+  `sh ` in Terminal, drag `MaRQ.command` into the window and press Return.
+- **Linux:** `sh MaRQ.sh` in a terminal in this folder.
 
-The launcher serves the folder on `127.0.0.1`, opens the browser and prints the
-address; press Ctrl+C or close the window to stop. Python only serves the files, the
-analysis runs in the browser. Without Python, any static server does the same job
-(`npx serve` from Node.js, the Live Server extension of VS Code, `git clone` then
-`python -m http.server 8000` as before). Browsers: Chrome, Edge or Firefox, current
-versions.
+A small window shows *MaRQ is running at http://127.0.0.1:8000/* and the browser opens
+MaRQ (Chrome, Edge, Firefox or Safari, current versions). Keep the window open while you
+work and close it to stop MaRQ. If no browser opens, type the address yourself.
+
+The page has to come from an HTTP server (a `file://` page cannot start the analysis
+worker; double-clicking `index.html` shows a red notice saying so). The launchers are
+small programs built from `launcher/main.go` with `tools/build_launchers.py` (Go, no
+dependencies): they serve this folder on 127.0.0.1 only, with fixed content types, and
+open the browser. `MaRQ.exe` is the Windows build; `MaRQ.command` and `MaRQ.sh` start
+the right one in `launchers/` for macOS (Apple silicon or Intel) or Linux (x86-64 or
+Arm), and fall back to Python 3 when it does not run. `MaRQ.bat` does the same on
+Windows, and `python run_marq.py` works anywhere Python 3 is installed. Any static
+server works too (`npx serve`, the Live Server extension of VS Code). The archive's
+`HOW_TO_RUN.txt` lists the messages a first start can bring and what to do about each.
+`tests/e2e_check.py` drives a running MaRQ in Chromium, Firefox or WebKit and checks
+it against the sample data of the archive.
 
 **Offline.** `vendor/` holds Plotly.js and the Pyodide runtime with NumPy and SciPy
 (84 MB; versions and licences in `vendor/README.md`), so the first start needs no
@@ -167,7 +178,9 @@ lateral resolution.
 | `rq_gradient_core.py` | Paired module: registration, RQ, RQdx, RQdy, RQd, error maps |
 | `x3p_loader.py` | ISO 25178-72 X3P reader |
 | `plots.py` | Plotly figure builders |
-| `run_marq.py`, `MaRQ.bat`, `MaRQ.command` | Local launcher (serves the folder, opens the browser) |
+| `MaRQ.exe`, `MaRQ.command`, `MaRQ.sh`, `launchers/` | Launchers that need nothing installed (Windows; macOS; Linux), built from `launcher/main.go` by `tools/build_launchers.py` |
+| `MaRQ.bat`, `run_marq.py` | Fallback launchers through Python 3 |
+| `tests/e2e_check.py` | Browser test of a running MaRQ against the sample data |
 | `vendor/` | Bundled Plotly.js and Pyodide runtime with NumPy and SciPy, for offline use |
 | `tools/fetch_vendor.py` | Re-downloads and verifies the bundle at the pinned versions |
 | `tests/make_test_x3p.py` | Synthetic X3P generator for testing the loader |

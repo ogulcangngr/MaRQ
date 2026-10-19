@@ -54,6 +54,37 @@ let _lastPairNames  = null;
 const session = { started: new Date().toISOString(), analyses: [], comparisons: [] };
 let _exportRequest = null;
 
+// ── Start-up checks ────────────────────────────────────────────────────────────
+
+// What stops MaRQ from starting in this browser, said in words a first-time user can act on.
+const START_HELP = "Start MaRQ with its launcher in the software folder: double-click MaRQ.exe " +
+  "(Windows) or MaRQ.command (macOS), or run sh MaRQ.sh (Linux); see README.md.";
+function startupProblem() {
+  if (location.protocol === "file:")
+    return "MaRQ was opened as a file (index.html), so the browser blocks its analysis engine. " +
+           "Close this tab. " + START_HELP;
+  if (typeof WebAssembly !== "object" || typeof Worker !== "function" || typeof fetch !== "function")
+    return "This browser cannot run MaRQ: it lacks WebAssembly or Web Workers. " +
+           "Use a current Chrome, Edge, Firefox or Safari.";
+  return null;
+}
+function showStartupBanner(msg) {
+  let b = document.getElementById("startup-banner");
+  if (!b) {
+    b = document.createElement("div");
+    b.id = "startup-banner";
+    b.setAttribute("role", "alert");
+    b.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:9999;padding:14px 18px;" +
+      "background:#b3261e;color:#fff;font:15px/1.45 system-ui,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.35)";
+    document.body.appendChild(b);
+  }
+  b.textContent = msg;
+}
+const ENGINE_HELP = "The analysis engine could not be loaded. If MaRQ comes from the downloaded " +
+  "package, check that the folder software/vendor is complete (extract the whole zip again if " +
+  "unsure); without it MaRQ needs an internet connection. A current Chrome, Edge, Firefox or " +
+  "Safari is needed, and the computer needs about 1 GB of free memory.";
+
 // ── Worker bootstrap ───────────────────────────────────────────────────────────
 
 function startWorker() {
@@ -93,6 +124,7 @@ function startWorker() {
       case "error":
         if (e.data.log && e.data.log.length) e.data.log.forEach(appendLog);
         appendLog("ERROR: " + message);
+        if (!ready) showStartupBanner(ENGINE_HELP + " (" + message + ")");
         setStatus("Error, see the log", "error");
         setRunning(false);
         break;
@@ -101,6 +133,7 @@ function startWorker() {
 
   worker.onerror = (e) => {
     appendLog("Worker error: " + e.message);
+    if (!ready) showStartupBanner(ENGINE_HELP + (e.message ? " (" + e.message + ")" : ""));
     setStatus("Worker error", "error");
     setRunning(false);
   };
@@ -974,6 +1007,18 @@ window.addEventListener("DOMContentLoaded", () => {
     if (l.log)     document.getElementById("app").classList.add("hide-log");
   } catch {}
   applyPageTheme(_theme);
+  const problem = startupProblem();
+  if (problem) {
+    showStartupBanner(problem);
+    setStatus("MaRQ cannot start here, see the message at the top", "error");
+    return;
+  }
+  if (typeof Plotly === "undefined")
+    window.addEventListener("load", () => {
+      if (typeof Plotly === "undefined")
+        showStartupBanner("The plotting library could not be loaded: the folder software/vendor " +
+          "is incomplete and there is no internet connection. Extract the whole zip again.");
+    });
   startWorker();
   setupDropZone("file1-zone", "1");
   setupDropZone("fileA-zone", "A");

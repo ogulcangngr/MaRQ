@@ -1,0 +1,46 @@
+{
+  "RT_GROUP_ICON": {
+    "APP": { "0000": "../icon/marq.ico" }
+  },
+  "RT_MANIFEST": {
+    "#1": {
+      "0409": {
+        "identity": { "name": "MaRQ", "version": "1.0.0.0" },
+        "description": "MaRQ launcher",
+        "minimum-os": "win10",
+        "execution-level": "as invoker",
+        "ui-access": false,
+        "auto-elevate": false,
+        "dpi-awareness": "system",
+        "disable-theming": false,
+        "disable-window-filtering": false,
+        "high-resolution-scrolling-aware": false,
+        "ultra-high-resolution-scrolling-aware": false,
+        "long-path-aware": true,
+        "printer-driver-isolation": false,
+        "gdi-scaling": false,
+        "segment-heap": false,
+        "use-common-controls-v6": false
+      }
+    }
+  },
+  "RT_VERSION": {
+    "#1": {
+      "0000": {
+        "fixed": { "file_version": "1.0.0.0", "product_version": "1.0.0.0" },
+        "info": {
+          "0409": {
+            "Comments": "Serves the MaRQ folder on this computer (127.0.0.1) and opens the browser. Source: launcher/main.go",
+            "FileDescription": "MaRQ, the Microchannel and Replication Quality Analyzer",
+            "FileVersion": "1.0",
+            "InternalName": "MaRQ",
+            "LegalCopyright": "GNU General Public License v3",
+            "OriginalFilename": "MaRQ.exe",
+            "ProductName": "MaRQ",
+            "ProductVersion": "1.0"
+          }
+        }
+      }
+    }
+  }
+}
