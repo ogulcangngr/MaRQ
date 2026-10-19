@@ -6,6 +6,8 @@ name: Launcher check
 on:
   workflow_dispatch:
   push:
+    branches: [main, ci-launchers]
+    tags-ignore: ["**"]
     paths:
       - "launcher/**"
       - "launchers/**"
@@ -32,8 +34,8 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Test tools (Playwright browsers)
@@ -55,7 +57,7 @@ jobs:
           echo "URL=$(grep -o 'http://127.0.0.1:[0-9]*/' launcher.log | head -1)" >> "$GITHUB_ENV"
       - name: Content types
         run: |
-          curl -sI "${URL}worker.js" | tee /dev/stderr | grep -qi "content-type: text/javascript"
+          h=$(curl -sI "${URL}worker.js"); echo "$h"; echo "$h" | grep -qi "content-type: text/javascript"
           curl -sI "${URL}vendor/pyodide/pyodide.asm.wasm" | grep -qi "content-type: application/wasm"
       - name: Analyse a synthetic channel in the browsers, offline
         run: for b in ${{ matrix.browsers }}; do python tests/e2e_synthetic.py "$URL" --browser "$b" || exit 1; done
