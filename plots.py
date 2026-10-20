@@ -178,6 +178,18 @@ def _cbar(text, **kw):
     return d
 
 
+def _sym_ticks(v):
+    """Ticks of a colour bar from -v to v: 0 and one or two round values (1, 2 or 5 times a
+    power of ten) on each side. With few ticks Plotly's own step can fall outside the bar
+    and leave only the 0."""
+    if not (np.isfinite(v) and v > 0):
+        return {}
+    k = int(np.floor(np.log10(v))) - 1
+    step = next(s * 10.0 ** e for e in range(k, k + 3) for s in (1, 2, 5) if np.floor(v / (s * 10.0 ** e) + 1e-9) <= 2)
+    n = int(np.floor(v / step + 1e-9))
+    return {"tickmode": "array", "tickvals": [round(i * step, 10) for i in range(-n, n + 1)]}
+
+
 def _ann(text, x, y, xref="paper", yref="paper", size=11, color=None, **kw):
     d = {"text": text, "x": x, "y": y, "xref": xref, "yref": yref, "showarrow": False,
          "font": {"size": size, "color": color or C("TEXT2")}}
@@ -792,6 +804,9 @@ def make_gradient_maps_fig(result, which=None):
         headers = [_panel_title(f"Height ({U})", "x", "y"),
                    _panel_title("Slope magnitude (µm/µm)", "x2", "y2")]
         title_note = "" if not EQUAL else "  |  1:1"
+    if "EZ" in cb:                                   # the signed difference: 0 and round values each side
+        cb["EZ"].pop("nticks", None)
+        cb["EZ"].update(_sym_ticks(ez))
     nrows = max(r for r, c in pos.values())
 
     layout = _base(margin={"t": 70 if headers else 55, "b": 50, "l": 75, "r": 75}, showlegend=False)
