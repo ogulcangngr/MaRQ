@@ -1,6 +1,9 @@
 # Starts MaRQ with its bundled launcher on Windows, macOS (Apple silicon, Intel) and Linux,
-# as a user would, and analyses a synthetic channel in real browsers with the internet
-# blocked. Run by hand (Actions tab, "Run workflow") or on changes to the launchers.
+# as a user would, analyses a synthetic channel in real browsers with the internet blocked,
+# goes through the interface (comparison, maps, cross-sections, 3D, report, language,
+# sessions), and checks that the launchers, the Python one included, keep one MaRQ per folder
+# and stop when the last window closes. Run by hand (Actions tab, "Run workflow") or on
+# changes to the application.
 name: Launcher check
 
 on:
@@ -19,6 +22,7 @@ on:
       - "viewer3d.js"
       - "style.css"
       - "plots.py"
+      - "i18n.js"
       - "tests/**"
       - ".github/workflows/launchers.yml"
 
@@ -64,3 +68,9 @@ jobs:
           curl -sI "${URL}vendor/pyodide/pyodide.asm.wasm" | grep -qi "content-type: application/wasm"
       - name: Analyse a synthetic channel in the browsers, offline
         run: for b in ${{ matrix.browsers }}; do python tests/e2e_synthetic.py "$URL" --browser "$b" || exit 1; done
+      - name: The interface in the browsers, offline
+        run: for b in ${{ matrix.browsers }}; do python tests/e2e_features.py "$URL" --browser "$b" || exit 1; done
+      - name: "Launcher: one MaRQ per folder, stops when its last window closes"
+        run: python tests/launcher_check.py ${{ matrix.start }}
+      - name: "Python launcher: the same"
+        run: python tests/launcher_check.py --python

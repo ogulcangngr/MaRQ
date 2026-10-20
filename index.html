@@ -21,6 +21,29 @@
 </head>
 <body>
 
+<!-- the node of one surface analysis in the tree (a copy for every analysis) -->
+<template id="tpl-analysis">
+  <div class="tnode group open analysis">
+    <div class="trow anode"><svg class="ico tw"><use href="#i-chev"/></svg><svg class="ico"><use href="#i-file"/></svg><span class="tlabel aname" data-i18n-skip></span><span class="tmeta aslot" data-i18n-skip></span><button class="tx aremove" title="Remove this analysis from the session"><svg class="ico"><use href="#i-x"/></svg></button></div>
+    <div class="tchildren">
+      <div class="trow leaf" data-view="rotation"><svg class="ico"><use href="#i-map"/></svg><span class="tlabel">Alignment</span></div>
+      <div class="trow leaf" data-view="channel"><svg class="ico"><use href="#i-map"/></svg><span class="tlabel">Channel detection</span></div>
+      <div class="tnode group open">
+        <div class="trow"><svg class="ico tw"><use href="#i-chev"/></svg><span class="tlabel">Profiles</span></div>
+        <div class="tchildren">
+          <div class="trow leaf" data-view="xsection"><svg class="ico"><use href="#i-chart"/></svg><span class="tlabel">Cross-section and depth</span></div>
+          <div class="trow leaf" data-view="xsview"><svg class="ico"><use href="#i-xsect"/></svg><span class="tlabel">Cross-section at a position</span></div>
+          <div class="trow leaf" data-view="widthlength"><svg class="ico"><use href="#i-chart"/></svg><span class="tlabel">Width and length</span></div>
+          <div class="trow leaf" data-view="ycenter"><svg class="ico"><use href="#i-chart"/></svg><span class="tlabel">Centre line</span></div>
+          <div class="trow leaf" data-view="xcenter"><svg class="ico"><use href="#i-chart"/></svg><span class="tlabel">Longitudinal centre</span></div>
+        </div>
+      </div>
+      <div class="trow leaf" data-view="view3d"><svg class="ico"><use href="#i-cube"/></svg><span class="tlabel">3D view</span></div>
+      <div class="trow leaf" data-view="roughness"><svg class="ico"><use href="#i-map"/></svg><span class="tlabel">Roughness areas</span></div>
+    </div>
+  </div>
+</template>
+
 <!-- ── Icons ──────────────────────────────────────────────────────────────────── -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <defs>
@@ -60,6 +83,10 @@
     <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.6 3.6 5.5 3.6 8.5s-1.1 5.9-3.6 8.5M12 3.5C9.5 6.1 8.4 9 8.4 12s1.1 5.9 3.6 8.5"/></symbol>
     <symbol id="i-zoomin" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.3 15.3L20 20M7.8 10.5h5.4M10.5 7.8v5.4"/></symbol>
     <symbol id="i-zoomout" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.3 15.3L20 20M7.8 10.5h5.4"/></symbol>
+    <symbol id="i-ruler" viewBox="0 0 24 24"><path d="M3.5 15.5l12-12 5 5-12 12z"/><path d="M7 12l2 2M9.5 9.5l1.5 1.5M12 7l2 2M14.5 4.5l1.5 1.5"/></symbol>
+    <symbol id="i-section" viewBox="0 0 24 24"><path d="M3 17c3 0 3-6 6-6s3 4 6 4 3-8 6-8"/><path d="M3 20.5h18" stroke-dasharray="2 2"/></symbol>
+    <symbol id="i-report" viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 12h7M9 15.5h7M9 9h3"/></symbol>
+    <symbol id="i-xsect" viewBox="0 0 24 24"><path d="M3 7h5l1.5 8h5L16 7h5"/><path d="M12 3v18" stroke-dasharray="2 2"/></symbol>
     <symbol id="i-x" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
   </defs>
 </svg>
@@ -71,12 +98,25 @@
     <div class="tb-left">
       <img id="header-logo" src="logo.svg" alt="">
       <span class="app-name">MaRQ</span>
+      <div class="tb-menu">
+        <button id="file-menu-btn" class="tb-menu-btn" aria-haspopup="true" aria-expanded="false">File</button>
+        <div id="file-menu" class="menu" role="menu" style="display:none">
+          <button role="menuitem" data-cmd="open-cloud"><svg class="ico"><use href="#i-open"/></svg><span>Open a point cloud…</span><kbd data-i18n-skip>Ctrl+O</kbd></button>
+          <button role="menuitem" data-cmd="open-session"><svg class="ico"><use href="#i-open"/></svg><span>Open a session…</span></button>
+          <button role="menuitem" data-cmd="save-session"><svg class="ico"><use href="#i-save"/></svg><span>Save the session…</span><kbd data-i18n-skip>Ctrl+S</kbd></button>
+          <div class="menu-sep"></div>
+          <button role="menuitem" data-cmd="report"><svg class="ico"><use href="#i-report"/></svg><span>Report…</span></button>
+          <button role="menuitem" data-cmd="figure"><svg class="ico"><use href="#i-figure"/></svg><span>Export a figure…</span></button>
+          <button role="menuitem" data-cmd="json"><svg class="ico"><use href="#i-json"/></svg><span>Results as JSON</span></button>
+          <button role="menuitem" data-cmd="csv"><svg class="ico"><use href="#i-table"/></svg><span>Results as CSV</span></button>
+        </div>
+      </div>
       <span class="tb-sep"></span>
       <span id="doc-title" data-i18n-skip>Microchannel and Replication Quality Analyzer</span>
     </div>
     <div class="tb-right">
       <label class="tb-lang" title="Interface language"><svg class="ico"><use href="#i-globe"/></svg>
-        <select id="lang-select" data-i18n-skip><option value="en">English</option><option value="tr">Türkçe</option></select></label>
+        <select id="lang-select" data-i18n-skip aria-label="Interface language"><option value="en">English</option><option value="tr">Türkçe</option></select></label>
       <button id="theme-toggle" class="tb-btn" title="Switch between the light and the dark theme">
         <svg class="ico ico-sun"><use href="#i-sun"/></svg><svg class="ico ico-moon"><use href="#i-moon"/></svg>
       </button>
@@ -107,10 +147,12 @@
 
     <div class="rgroup">
       <div class="rtools">
-        <button class="rtool" id="open-a" onclick="document.getElementById('fileA-input').click()" title="Open a crop file as surface A, the reference">
-          <svg class="ico"><use href="#i-open"/></svg><span>Open A</span></button>
-        <button class="rtool" id="open-b" onclick="document.getElementById('fileB-input').click()" title="Open a crop file as surface B, the compared surface">
-          <svg class="ico"><use href="#i-open"/></svg><span>Open B</span></button>
+        <div class="rpair">
+          <button class="rtool" id="open-a" onclick="document.getElementById('fileA-input').click()" title="Open a crop file as surface A, the reference">
+            <svg class="ico"><use href="#i-open"/></svg><span>Open A</span></button>
+          <button class="rtool" id="open-b" onclick="document.getElementById('fileB-input').click()" title="Open a crop file as surface B, the compared surface">
+            <svg class="ico"><use href="#i-open"/></svg><span>Open B</span></button>
+        </div>
         <button class="rtool primary" id="run-gradient" disabled onclick="runGradient()" title="Compare surface B with surface A: RQ, RQdx, RQdy and RQd">
           <svg class="ico"><use href="#i-compare"/></svg><span>Compare</span></button>
         <div class="rstack" id="batch-zone">
@@ -127,8 +169,12 @@
 
     <div class="rgroup">
       <div class="rtools">
-        <button class="rtool" id="export-figure" disabled onclick="openExportDialog()" title="Any figure as SVG or PNG, in the current or the light theme, at a chosen size">
-          <svg class="ico"><use href="#i-figure"/></svg><span>Figure</span></button>
+        <div class="rpair">
+          <button class="rtool" id="export-figure" disabled onclick="openExportDialog()" title="Any figure as SVG or PNG, in the current or the light theme, at a chosen size">
+            <svg class="ico"><use href="#i-figure"/></svg><span>Figure</span></button>
+          <button class="rtool" id="export-report" disabled onclick="makeReport()" title="A printable page per result: the numbers, the settings and the main figures (PDF or HTML)">
+            <svg class="ico"><use href="#i-report"/></svg><span>Report</span></button>
+        </div>
         <div class="rstack">
           <button class="rsmall" id="export-json" disabled onclick="exportJSON()" title="Every number and every setting of this session">
             <svg class="ico"><use href="#i-json"/></svg><span>Results JSON</span></button>
@@ -180,10 +226,12 @@
 
     <div class="rgroup">
       <div class="rtools">
-        <button class="rtool" id="settings-open" title="Analysis settings (the paper defaults unless changed)">
-          <svg class="ico"><use href="#i-settings"/></svg><span>Settings</span><i id="settings-dot" class="dot" style="display:none"></i></button>
-        <button class="rtool" id="toggle-log" title="Show or hide the analysis log">
-          <svg class="ico"><use href="#i-log"/></svg><span>Log</span></button>
+        <div class="rpair">
+          <button class="rtool" id="settings-open" title="Analysis settings (the paper defaults unless changed)">
+            <svg class="ico"><use href="#i-settings"/></svg><span>Settings</span><i id="settings-dot" class="dot" style="display:none"></i></button>
+          <button class="rtool" id="toggle-log" title="Show or hide the analysis log">
+            <svg class="ico"><use href="#i-log"/></svg><span>Log</span></button>
+        </div>
       </div>
       <div class="rlabel">Setup</div>
     </div>
@@ -218,24 +266,7 @@
             </div>
           </div>
 
-          <div class="tnode group open" data-group="surface" id="tree-surface" style="display:none">
-            <div class="trow"><svg class="ico tw"><use href="#i-chev"/></svg><span class="tlabel">Surface analysis</span><span class="tmeta" id="tree-surface-name" data-i18n-skip></span></div>
-            <div class="tchildren">
-              <div class="trow leaf" data-view="rotation"><svg class="ico"><use href="#i-map"/></svg><span class="tlabel">Alignment</span></div>
-              <div class="trow leaf" data-view="channel"><svg class="ico"><use href="#i-map"/></svg><span class="tlabel">Channel detection</span></div>
-              <div class="tnode group open">
-                <div class="trow"><svg class="ico tw"><use href="#i-chev"/></svg><span class="tlabel">Profiles</span></div>
-                <div class="tchildren">
-                  <div class="trow leaf" data-view="xsection"><svg class="ico"><use href="#i-chart"/></svg><span class="tlabel">Cross-section and depth</span></div>
-                  <div class="trow leaf" data-view="widthlength"><svg class="ico"><use href="#i-chart"/></svg><span class="tlabel">Width and length</span></div>
-                  <div class="trow leaf" data-view="ycenter"><svg class="ico"><use href="#i-chart"/></svg><span class="tlabel">Centre line</span></div>
-                  <div class="trow leaf" data-view="xcenter"><svg class="ico"><use href="#i-chart"/></svg><span class="tlabel">Longitudinal centre</span></div>
-                </div>
-              </div>
-              <div class="trow leaf" data-view="view3d"><svg class="ico"><use href="#i-cube"/></svg><span class="tlabel">3D view</span></div>
-              <div class="trow leaf" data-view="roughness"><svg class="ico"><use href="#i-map"/></svg><span class="tlabel">Roughness areas</span></div>
-            </div>
-          </div>
+          <div id="tree-analyses"></div>
 
           <div class="tnode group open" data-group="compare" id="tree-compare" style="display:none">
             <div class="trow"><svg class="ico tw"><use href="#i-chev"/></svg><span class="tlabel">Comparison</span><span class="tmeta">A and B</span></div>
@@ -243,7 +274,9 @@
               <div class="trow leaf" data-view="gradA"><svg class="ico"><use href="#i-cube"/></svg><span class="tlabel">Surface A</span></div>
               <div class="trow leaf" data-view="gradB"><svg class="ico"><use href="#i-cube"/></svg><span class="tlabel">Surface B</span></div>
               <div class="trow leaf" data-view="gradE"><svg class="ico"><use href="#i-cube"/></svg><span class="tlabel">Slope error</span></div>
-              <div class="trow leaf" data-view="gradmaps"><svg class="ico"><use href="#i-map"/></svg><span class="tlabel">Height and slope maps</span></div>
+              <div class="trow leaf" data-view="gradheight"><svg class="ico"><use href="#i-map"/></svg><span class="tlabel">Height maps</span></div>
+              <div class="trow leaf" data-view="gradslope"><svg class="ico"><use href="#i-map"/></svg><span class="tlabel">Slope maps</span></div>
+              <div class="trow leaf" data-view="gradxs"><svg class="ico"><use href="#i-xsect"/></svg><span class="tlabel">Cross-sections of A and B</span></div>
               <div class="trow leaf" data-view="batch" id="tree-batch" style="display:none"><svg class="ico"><use href="#i-table"/></svg><span class="tlabel">Batch results</span></div>
             </div>
           </div>
@@ -291,13 +324,36 @@
         <div class="vp-layer plot-container" id="plot-profiles-xcenter"></div>
         <div class="vp-layer plot-container" id="plot-profiles-widthlength"></div>
         <div class="vp-layer plot-container" id="plot-roughness"></div>
-        <div class="vp-layer plot-container" id="plot-gradmaps"></div>
-        <div class="vp-layer html-view" id="batch-view"></div>
+        <div class="vp-layer plot-container" id="plot-gradheight"></div>
+        <div class="vp-layer plot-container" id="plot-gradslope"></div>
+
+        <!-- cross-sections across the channel, at a chosen position -->
+        <div class="vp-layer" id="xs-view">
+          <div class="xs-bar">
+            <span class="xs-lab">Position along the channel</span>
+            <input type="range" id="xs-slider" min="0" max="1000" step="1" value="500" aria-label="Position along the channel">
+            <label class="xs-num"><input type="number" id="xs-frac" min="0" max="1" step="0.01" value="0.5"><span>of the length</span></label>
+            <label class="xs-num"><input type="number" id="xs-um" min="0" step="1"><span>µm from the start</span></label>
+            <button class="btn btn-mini" onclick="exportXs()" title="The cross-section as a CSV file">CSV</button>
+          </div>
+          <div id="xs-info" class="xs-info" data-i18n-skip></div>
+          <div id="xs-plot"></div>
+        </div>
+        <div class="vp-layer html-view" id="batch-view" data-i18n-skip></div>
 
         <!-- 3D views: one viewport for all of them -->
         <div class="vp-layer" id="viewer3d">
           <div id="colorbar3d" class="colorbar3d"></div>
           <div id="scalebar3d" class="scalebar3d"><div class="sb-line"></div><span class="sb-text"></span></div>
+          <div id="badge3d" class="badge3d" data-i18n-skip></div>
+          <div id="tool-hint" class="tool-hint" data-i18n-skip></div>
+          <div id="section-panel" style="display:none">
+            <div class="sp-head"><b id="sp-title" data-i18n-skip>Section</b><span id="sp-detail" data-i18n-skip></span><span class="sb-flex"></span>
+              <button class="btn btn-mini" id="sp-open" style="display:none" onclick="openXsFromPanel()" title="Open this position in the cross-section view, with a slider along the channel">Cross-section view</button>
+              <button class="btn btn-mini" onclick="exportSection()" title="The profile as a CSV file">CSV</button>
+              <button class="tx" onclick="closeSection()" title="Close"><svg class="ico"><use href="#i-x"/></svg></button></div>
+            <div id="section-plot"></div>
+          </div>
         </div>
 
         <!-- navigation bar -->
@@ -320,6 +376,10 @@
             <button class="navbtn" data-act="right" title="Right view: the cross-section of the channel (3)"><svg class="ico"><use href="#i-right"/></svg></button>
             <span class="nav-sep"></span>
             <button class="navbtn toggle" data-act="ortho" title="Orthographic projection: no perspective, as in a drawing (O)"><svg class="ico"><use href="#i-persp"/></svg></button>
+            <span class="nav-sep"></span>
+            <button class="navbtn toggle" data-act="measure" title="Measure: click two points on the surface for their distance (M)"><svg class="ico"><use href="#i-ruler"/></svg></button>
+            <button class="navbtn toggle" data-act="section" title="Section: click two points on the surface for the height profile between them (S)"><svg class="ico"><use href="#i-section"/></svg></button>
+            <button class="navbtn toggle" data-act="xsect" title="Cross-section: click one point on the surface for the profile across the channel through it (C)"><svg class="ico"><use href="#i-xsect"/></svg></button>
           </span>
           <span class="nav-sep"></span>
           <button class="navbtn" data-act="snapshot" title="Save this view as a PNG image"><svg class="ico"><use href="#i-camera"/></svg></button>
@@ -332,6 +392,14 @@
         </div>
 
         <div id="drop-overlay"><div>Drop the point cloud to open it</div></div>
+
+        <!-- errors, said in words -->
+        <div id="vp-notice" role="alert" style="display:none">
+          <svg class="ico"><use href="#i-info"/></svg>
+          <div class="vn-text"><b id="vn-title" data-i18n-skip></b><span id="vn-body" data-i18n-skip></span></div>
+          <button class="btn btn-mini" onclick="toggleLog(true)">Show the log</button>
+          <button class="tx" onclick="hideNotice()" title="Close"><svg class="ico"><use href="#i-x"/></svg></button>
+        </div>
       </div>
     </main>
   </div>
@@ -348,13 +416,14 @@
   </footer>
 
   <!-- hidden file pickers -->
-  <input type="file" id="file1-input" accept=".txt,.xyz,.asc,.csv,.x3p" style="display:none" onchange="handleFileInput('file1-input', '1', 'file1-name')">
+  <input type="file" id="file1-input" accept=".txt,.xyz,.asc,.csv,.x3p,.marq" style="display:none" onchange="handleFileInput('file1-input', '1', 'file1-name')">
   <input type="file" id="fileA-input" accept=".txt,.xyz,.asc,.csv,.x3p" style="display:none" onchange="handleFileInput('fileA-input', 'A', 'fileA-name')">
   <input type="file" id="fileB-input" accept=".txt,.xyz,.asc,.csv,.x3p" style="display:none" onchange="handleFileInput('fileB-input', 'B', 'fileB-name')">
+  <input type="file" id="session-input" accept=".marq" style="display:none" onchange="handleSessionInput(this)">
   <input type="file" id="batch-input" multiple accept=".txt,.xyz,.asc,.csv,.x3p" style="display:none" onchange="handleBatchInput()">
 
   <!-- ── Settings dialog (analysis parameters) ──────────────────────────────── -->
-  <div class="modal" id="modal-settings" style="display:none">
+  <div class="modal" id="modal-settings" role="dialog" aria-modal="true" style="display:none">
     <div class="modal-box wide">
       <div class="modal-head"><span>Analysis settings</span><button class="tx" onclick="closeModal('modal-settings')" title="Close"><svg class="ico"><use href="#i-x"/></svg></button></div>
       <div class="modal-toolbar">
@@ -372,58 +441,58 @@
           <div class="param-grid">
             <div class="param-card">
               <div class="param-card-top"><span class="param-label">Voxel size (0 = automatic)</span>
-                <input class="param-input" type="number" id="p-voxel" value="5"></div>
+                <input class="param-input" type="number" min="0" id="p-voxel" value="5"></div>
               <span class="param-hint">Grid cell size for downsampling; 0 picks it from the point density.</span>
             </div>
             <div class="param-card">
               <div class="param-card-top"><span class="param-label">Field band (× median absolute deviation)</span>
-                <input class="param-input" type="number" id="p-fieldk" value="2.5" step="0.5"></div>
+                <input class="param-input" type="number" min="0.1" id="p-fieldk" value="2.5" step="0.5"></div>
               <span class="param-hint">How tightly the flat field plane is fitted. Lower is a stricter field selection. Levelling and orientation are referenced to this field.</span>
             </div>
             <div class="param-card">
               <div class="param-card-top"><span class="param-label">Crop margin along the channel</span>
-                <input class="param-input" type="number" id="p-cropx" value="180"></div>
+                <input class="param-input" type="number" min="0" id="p-cropx" value="180"></div>
               <span class="param-hint">Extra distance beyond the detected channel length at each end of the crop box, in point cloud units.</span>
             </div>
             <div class="param-card">
               <div class="param-card-top"><span class="param-label">Crop margin across the channel</span>
-                <input class="param-input" type="number" id="p-cropy" value="100"></div>
+                <input class="param-input" type="number" min="0" id="p-cropy" value="100"></div>
               <span class="param-hint">Extra distance beyond the detected channel width on each side of the crop box, in point cloud units.</span>
             </div>
             <div class="param-card">
               <div class="param-card-top"><span class="param-label">Opening level (fraction of depth)</span>
                 <span class="range-wrap"><input type="range" min="0.02" max="0.3" step="0.02" id="p-ofrac" value="0.1"
-                       oninput="document.getElementById('p-ofrac-val').textContent=parseFloat(this.value).toFixed(2)">
+                       oninput="rangeLabel(this)">
                 <span id="p-ofrac-val" class="range-val">0.10</span></span></div>
               <span class="param-hint">Depth fraction where the opening width and length are read. 0.10 is the top 10 % of the depth, close to where the channel meets the flat surface.</span>
             </div>
             <div class="param-card">
               <div class="param-card-top"><span class="param-label">Floor level (fraction of depth)</span>
                 <span class="range-wrap"><input type="range" min="0.6" max="0.95" step="0.05" id="p-flfrac" value="0.90"
-                       oninput="document.getElementById('p-flfrac-val').textContent=parseFloat(this.value).toFixed(2)">
+                       oninput="rangeLabel(this)">
                 <span id="p-flfrac-val" class="range-val">0.90</span></span></div>
               <span class="param-hint">Depth fraction for the floor width, the channel bottom where the nominal width is defined. 0.90 is the bottom 10 % of the depth.</span>
             </div>
             <div class="param-card">
               <div class="param-card-top"><span class="param-label">Floor roughness strip width (fraction)</span>
                 <span class="range-wrap"><input type="range" min="0.1" max="0.9" step="0.05" id="p-rfloor" value="0.5"
-                       oninput="document.getElementById('p-rfloor-val').textContent=parseFloat(this.value).toFixed(2)">
+                       oninput="rangeLabel(this)">
                 <span id="p-rfloor-val" class="range-val">0.50</span></span></div>
               <span class="param-hint">Width of the floor roughness strip as a fraction of the channel width (its central part).</span>
             </div>
             <div class="param-card">
               <div class="param-card-top"><span class="param-label">Floor roughness strip length</span>
-                <input class="param-input" type="number" id="p-rfloorlen" value="4000"></div>
+                <input class="param-input" type="number" min="1" id="p-rfloorlen" value="4000"></div>
               <span class="param-hint">Length of the floor roughness strip along the channel, centred on the channel.</span>
             </div>
             <div class="param-card">
               <div class="param-card-top"><span class="param-label">Field roughness strip width</span>
-                <input class="param-input" type="number" id="p-rfwidth" value="400"></div>
+                <input class="param-input" type="number" min="1" id="p-rfwidth" value="400"></div>
               <span class="param-hint">Fixed width of the left and right field strips. Their position is found automatically, just past the raised channel lip, on clean flat field.</span>
             </div>
             <div class="param-card">
               <div class="param-card-top"><span class="param-label">Field roughness strip length</span>
-                <input class="param-input" type="number" id="p-rflen" value="4000"></div>
+                <input class="param-input" type="number" min="1" id="p-rflen" value="4000"></div>
               <span class="param-hint">Fixed length of the field strips along the channel, centred on the channel.</span>
             </div>
           </div>
@@ -432,27 +501,27 @@
             <div class="param-grid">
               <div class="param-card">
                 <div class="param-card-top"><span class="param-label">Edge margin</span>
-                  <input class="param-input" type="number" id="p-margin" value="100"></div>
+                  <input class="param-input" type="number" min="0" id="p-margin" value="100"></div>
                 <span class="param-hint">Distance from each edge of the scan discarded before the analysis, removing boundary artefacts.</span>
               </div>
               <div class="param-card">
                 <div class="param-card-top"><span class="param-label">Display cell size (0 = automatic)</span>
-                  <input class="param-input" type="number" id="p-cell" value="0" step="1"></div>
+                  <input class="param-input" type="number" min="0" id="p-cell" value="0" step="1"></div>
                 <span class="param-hint">Side of the square cells of the height maps and the 3D view, in point cloud units. Display only: the geometry and the roughness are computed from the points. 0 chooses the finest cell (never below the voxel size) that keeps each map within 160&thinsp;000 cells.</span>
               </div>
               <div class="param-card">
                 <div class="param-card-top"><span class="param-label">Display smoothing (cells)</span>
-                  <input class="param-input" type="number" id="p-sigma" value="0"></div>
+                  <input class="param-input" type="number" min="0" id="p-sigma" value="0"></div>
                 <span class="param-hint">Gaussian blur radius on the display grids, in cells; 0 switches smoothing off.</span>
               </div>
               <div class="param-card">
                 <div class="param-card-top"><span class="param-label">Depth profile slices</span>
-                  <input class="param-input" type="number" id="p-slices" value="80"></div>
+                  <input class="param-input" type="number" min="3" id="p-slices" value="80"></div>
                 <span class="param-hint">Number of slices along the channel for the local depth and its spread (the widths and the length are read on grid lines).</span>
               </div>
               <div class="param-card">
                 <div class="param-card-top"><span class="param-label">Header rows to skip</span>
-                  <input class="param-input" type="number" id="p-skiprows" value="0"></div>
+                  <input class="param-input" type="number" min="0" id="p-skiprows" value="0"></div>
                 <span class="param-hint">Number of header rows to skip when reading the point cloud file.</span>
               </div>
             </div>
@@ -463,17 +532,17 @@
           <div class="param-grid">
             <div class="param-card">
               <div class="param-card-top"><span class="param-label">Grid spacing (µm)</span>
-                <input class="param-input" type="number" id="g-spacing" value="5" step="1"></div>
+                <input class="param-input" type="number" min="0.1" id="g-spacing" value="5" step="1"></div>
               <span class="param-hint" data-i18n="settings.spacing">Cell size of the common grid. RQ<sub>d</sub> is defined at a stated cell size; keep the same value for every comparison so the correlations stay comparable.</span>
             </div>
             <div class="param-card">
               <div class="param-card-top"><span class="param-label">Smoothing before the slopes (µm)</span>
-                <input class="param-input" type="number" id="g-sigma" value="0"></div>
+                <input class="param-input" type="number" min="0" id="g-sigma" value="0"></div>
               <span class="param-hint">Gaussian blur before the slopes are computed. At least one grid cell is always applied, for stable slopes.</span>
             </div>
             <div class="param-card">
               <div class="param-card-top"><span class="param-label">Header rows to skip</span>
-                <input class="param-input" type="number" id="g-skiprows" value="0"></div>
+                <input class="param-input" type="number" min="0" id="g-skiprows" value="0"></div>
               <span class="param-hint">Number of header rows to skip when reading the point cloud files.</span>
             </div>
           </div>
@@ -484,7 +553,7 @@
   </div>
 
   <!-- ── Export dialog ───────────────────────────────────────────────────────── -->
-  <div class="modal" id="modal-export" style="display:none">
+  <div class="modal" id="modal-export" role="dialog" aria-modal="true" style="display:none">
     <div class="modal-box">
       <div class="modal-head"><span>Export a figure</span><button class="tx" onclick="closeModal('modal-export')" title="Close"><svg class="ico"><use href="#i-x"/></svg></button></div>
       <div class="modal-body">
@@ -529,8 +598,20 @@
     </div>
   </div>
 
+  <!-- ── Report dialog ───────────────────────────────────────────────────────── -->
+  <div class="modal" id="modal-report" role="dialog" aria-modal="true" style="display:none">
+    <div class="modal-box wide report-box">
+      <div class="modal-head"><span>Report</span><button class="tx" onclick="closeModal('modal-report')" title="Close"><svg class="ico"><use href="#i-x"/></svg></button></div>
+      <iframe id="report-frame" title="Report"></iframe>
+      <div class="modal-foot"><div class="btn-row">
+        <button class="btn" onclick="saveReportHtml()">Save as HTML</button>
+        <button class="btn btn-primary" onclick="printReport()">Print or save as PDF…</button>
+      </div></div>
+    </div>
+  </div>
+
   <!-- ── Help dialog ─────────────────────────────────────────────────────────── -->
-  <div class="modal" id="modal-help" style="display:none">
+  <div class="modal" id="modal-help" role="dialog" aria-modal="true" style="display:none">
     <div class="modal-box">
       <div class="modal-head"><span>Using MaRQ</span><button class="tx" onclick="closeModal('modal-help')" title="Close"><svg class="ico"><use href="#i-x"/></svg></button></div>
       <div class="modal-body about">
@@ -544,18 +625,24 @@
           <tr><td>Zoom</td><td>mouse wheel, towards the cursor; or the + and − buttons below the view</td></tr>
           <tr><td>Standard views</td><td>click a face of the view cube, or the buttons below the view</td></tr>
           <tr><td>Fit</td><td>double-click, or F</td></tr>
-          <tr><td>Keys</td><td>H home, F fit, + and − zoom, 1 top, 2 front, 3 right, O orthographic or perspective</td></tr>
+          <tr><td>Measure</td><td>the ruler below the view, then click two points of the surface (M)</td></tr>
+          <tr><td>Section</td><td>the profile button below the view, then click two points: the height profile between them opens below (S)</td></tr>
+          <tr><td>Cross-section</td><td>the cross-section button below the view, then click one point: the profile across the channel through it opens below (C)</td></tr>
+          <tr><td>Keys</td><td>H home, F fit, + and − zoom, 1 top, 2 front, 3 right, O orthographic or perspective, Esc clears the points</td></tr>
           <tr><th colspan="2">2D plots</th></tr>
           <tr><td>Pan</td><td>drag</td></tr>
           <tr><td>Zoom</td><td>mouse wheel; the + and − buttons; or the box tool below the plot</td></tr>
           <tr><td>Reset</td><td>double-click</td></tr>
+          <tr><th colspan="2">Sessions</th></tr>
+          <tr><td>Save</td><td>File, Save the session (Ctrl+S): every result, its settings and surfaces A and B in one .marq file</td></tr>
+          <tr><td>Open</td><td>File, Open a session, or drop the .marq file on the window: the results return without a new analysis</td></tr>
         </table>
       </div>
     </div>
   </div>
 
   <!-- ── About dialog ────────────────────────────────────────────────────────── -->
-  <div class="modal" id="modal-about" style="display:none">
+  <div class="modal" id="modal-about" role="dialog" aria-modal="true" style="display:none">
     <div class="modal-box">
       <div class="modal-head"><span>About MaRQ</span><button class="tx" onclick="closeModal('modal-about')" title="Close"><svg class="ico"><use href="#i-x"/></svg></button></div>
       <div class="modal-body about">

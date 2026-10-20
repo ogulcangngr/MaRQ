@@ -34,7 +34,7 @@ Nothing has to be installed, Python included. Extract the zip, open this folder 
 
 - **Windows 10/11:** double-click `MaRQ.exe`. If *Windows protected your PC* appears,
   click *More info*, *Run anyway* (the program is not code-signed).
-- **macOS 12+:** double-click `MaRQ.command`. The first time macOS asks to confirm:
+- **macOS 11+:** double-click `MaRQ.command`. The first time macOS asks to confirm:
   on macOS 15+ open *System Settings*, *Privacy & Security*, *Open Anyway*; on older
   versions Control-click the file and choose *Open*. If it still does not start, type
   `sh ` in Terminal, drag `MaRQ.command` into the window and press Return.
@@ -44,12 +44,37 @@ A small console window shows *MaRQ is running at http://127.0.0.1:8000/*, and Ma
 in a window of its own: the application mode of Chrome or Edge, without address bar or
 tabs (Edge comes with every Windows 10 and 11). Without either browser MaRQ opens in a
 tab of the default browser (a current Firefox or Safari works too); `MaRQ.exe --tab`
-asks for a tab on purpose. Keep the console window open while you work and close it to
-stop MaRQ. If nothing opens, type the address into a browser yourself.
+asks for a tab on purpose. Closing MaRQ's window stops MaRQ, and its console window closes
+too a few seconds later; closing the console also stops MaRQ (`MaRQ.exe --stay` keeps it
+running after its window is closed). If nothing opens, type the address into a browser yourself. Starting MaRQ
+again while it runs opens another window on the same MaRQ, so the settings, which the
+browser keeps per address, stay.
+
+**If MaRQ does not start**
+
+- *Windows protected your PC*: *More info*, *Run anyway*. Before extracting, right-click
+  the zip, *Properties*, tick *Unblock*: the extracted files are then not marked as
+  downloaded, and the question does not come back.
+- MaRQ.exe disappears or is blocked by antivirus software, or Smart App Control offers no
+  *Run anyway*: programs written in Go are sometimes taken for malware. Restore and allow
+  it, or install Python 3 and double-click `MaRQ.bat`, which then starts MaRQ with Python.
+- *The MaRQ files are not next to this program*: the zip was opened but not extracted, or
+  MaRQ.exe was copied somewhere else. Start it in the extracted folder; for an icon on the
+  Desktop make a shortcut (right-click MaRQ.exe, *Send to*, *Desktop*; on macOS, *Make
+  Alias*).
+- macOS asks whether Terminal may access the Downloads folder: answer *OK*, then start
+  MaRQ again. Extracting MaRQ to a folder outside Downloads avoids the question.
+- A folder synchronised by OneDrive, iCloud or Dropbox may hold only placeholders of the
+  files: extract MaRQ to a local folder.
+- A red notice at the top of MaRQ says what is missing: an `index.html` opened directly
+  (use the launcher), an incomplete `vendor/` folder (extract the whole zip again), or a
+  console window that was closed (start MaRQ again).
+- To update MaRQ, close its console window first: Windows cannot replace a running
+  `MaRQ.exe`.
 
 The page has to come from an HTTP server (a `file://` page cannot start the analysis
 worker; double-clicking `index.html` shows a red notice saying so). The launchers are
-small programs built from `launcher/main.go` with `tools/build_launchers.py` (Go, no
+small programs built from the Go sources in `launcher/` with `tools/build_launchers.py` (no
 dependencies): they serve this folder on 127.0.0.1 only, with fixed content types, and
 open the window. `MaRQ.exe` is the Windows build; `MaRQ.command` and `MaRQ.sh` start
 the right one in `launchers/` for macOS (Apple silicon or Intel) or Linux (x86-64 or
@@ -73,8 +98,13 @@ internet for the first start; `python tools/fetch_vendor.py` restores the bundle
   *View* and *Setup* (Settings, Log). The command a first-time user most likely needs
   next is outlined in red.
 - **Browser** (left): the inputs (the scan to analyse, surface A, surface B; click a row
-  to open a file, or drop a file on it) and every view of each result. Click a view to
-  show it.
+  to open a file, or drop a file on it) and every view of each result. Every analysed
+  point cloud has its own node with all its views, so an earlier analysis (surface A's,
+  say, after B was analysed and compared) can be opened again at any time. The analysis
+  on screen, its name in red, is the one *Keep as A*, *Keep as B*, *Save crop*, the
+  exports and the report use; A and B beside a name mark the analyses whose crops fill the
+  slots. The engine keeps the newest six analyses (an older one can still be viewed), and
+  the × of a node removes its analysis from the session.
 - **Properties** (left, below): the measured values of the result on screen, with an
   explanation of each on hover.
 - **Viewport** (centre): the view selected in the browser, its title and details above,
@@ -83,11 +113,13 @@ internet for the first start; `python tools/fetch_vendor.py` restores the bundle
 - **Status bar** (bottom): the progress of a run (click it for the live analysis log
   with every step and quality-control value), the coordinates under the cursor, whether
   the settings are the paper's, and whether the runtime is the offline bundle.
-- **Title bar**: the language (English, Türkçe), the light or dark theme, help and About.
-  Without a choice MaRQ follows the language and the theme of the system.
+- **Title bar**: the *File* menu (open a point cloud or a session, save the session, the
+  report and the exports), the language (English, Türkçe), the light or dark theme, help
+  and About. Without a choice MaRQ follows the language and the theme of the system.
 
-The panes can be resized by dragging their borders, and every size follows the window,
-so the layout keeps its proportions on a laptop and on a large monitor. A running
+The panes can be resized by dragging their borders. Below 1366 pixels every size shrinks
+with the window, so the ribbon and the panes keep their proportions on a small laptop
+screen; above, a wider window gives the viewport more room. A running
 analysis can be cancelled (*Cancel* in the ribbon); the engine restarts in a few
 seconds.
 
@@ -97,8 +129,14 @@ the left button) to pan, and use the wheel to zoom towards the cursor; a double-
 the surface. The view cube in the corner shows the orientation, and a click on one of its
 faces turns the view to that side. The navigation bar below the view has the home view,
 fit, zoom in and out, the top, front (along the channel) and right (cross-section) views,
-an orthographic projection with a scale bar, and a PNG snapshot. Keys: H home, F fit,
-+ and − zoom, 1 top, 2 front, 3 right, O orthographic or perspective. In the 2D plots,
+an orthographic projection (with a scale bar in the views along an axis), the tools and
+a PNG snapshot. Keys: H home, F fit, + and − zoom, 1 top, 2 front, 3 right, O orthographic
+or perspective, M measure, S section, C cross-section, Esc clears the points. **Measure**
+gives the distance between two clicked points of the surface, in the plane and in height;
+**Section** opens the height profile along the line between two clicked points below the
+view, and **Cross-section** the profile across the channel through one clicked point
+(surfaces A and B and the slope error in the comparison views), each with a CSV export.
+In the 2D plots,
 drag to pan and use the wheel or the + and − buttons to zoom; the box tool zooms into a
 drawn box, and a double-click resets the view.
 
@@ -118,7 +156,8 @@ the 3D views.
 ## Input formats
 
 - Delimited text point clouds: `.txt`, `.xyz`, `.asc`, `.csv`, three columns x y z,
-  any common delimiter, header rows skipped with *Header rows to skip* (Settings). Units
+  any common delimiter. Lines of text at the top (column names, instrument metadata) are
+  skipped by themselves; *Header rows to skip* (Settings) sets their number by hand. Units
   are those of the file; the paper's data are in micrometres.
 - ISO 25178-72 X3P files (`.x3p`), converted to micrometres on loading.
 
@@ -146,8 +185,13 @@ the reported depth is 60 µm.
    rounding, the lengths, the roughness and the alignment; the browser lists the views:
    *Alignment*, *Channel detection*, *Profiles* (the mean cross-section with the
    floor-width and opening levels, the wall positions and the mid-wall lines, and the
-   depth of every slice; the width and length per grid line; the centre lines), *3D
-   view* and *Roughness areas*. The log lists the residual tilt, the wall angle of each
+   depth of every slice; the cross-section at a position; the width and length per grid
+   line; the centre lines), *3D view* and *Roughness areas*. *Cross-section at a position*
+   shows the channel across at any point along it: a slider from one end of the channel
+   (the measured floor-level ends) to the other, or the position typed as a fraction of the
+   length (0 to 1) or in micrometres from the start; the profile is read from the points
+   within one voxel of the position, with the mean cross-section for comparison, and can be
+   saved as CSV. The log lists the residual tilt, the wall angle of each
    wall, the corner rounding, the grid lines used and any quality-control flag.
 
    How the geometry is read: the depth comes from the mean cross-section of the
@@ -183,10 +227,11 @@ the reported depth is 60 µm.
    state the orientation kept for B, the grid and the size of the channel-interior
    mask. The tool reports the numbers and the maps and leaves their interpretation to
    the user; the paper defines no acceptance thresholds. The views are *Surface A* and
-   *Surface B* in 3D, the *Slope error* drawn in 3D on surface B, and the *Height and
-   slope maps*: the height and slope-magnitude maps of both surfaces, the signed height
-   difference B − A and the unsigned slope error, with the outline of the
-   channel-interior mask. The log states which orientation of B was kept, the
+   *Surface B* in 3D, the *Slope error* drawn in 3D on surface B, the *Height maps* (A, B
+   and the signed difference B − A) and the *Slope maps* (the slope magnitudes of A and B
+   and the unsigned slope error), each with the outline of the channel-interior mask, and
+   the *Cross-sections of A and B* at a chosen position along the channel, as for one
+   surface. The two map views zoom and pan together. The log states which orientation of B was kept, the
    valid-cell fraction and the mask size; its metrics table is that of the kept
    orientation.
 4. **Batch**: choose several files with *Batch files…* and click **Run batch**. The
@@ -202,11 +247,25 @@ lateral resolution.
 - **Figure**: any figure as SVG or PNG (2× or 3×), in the light theme for documents
   or in the current theme, with its text in the interface language, English or Turkish,
   at a chosen size; the figure is rebuilt at that size, with axes and a colour bar, so
-  labels and line widths stay legible. The camera button below a view saves it as a
-  PNG as it is on screen.
+  labels and line widths stay legible; the six comparison maps can also be exported as one
+  figure. The camera button below a view saves it as a PNG as it is on screen.
 - **Results JSON**: every number, every setting and the per-line and per-slice
   series of the session, with the software and runtime versions.
 - **Results CSV**: one row per analysed surface and one per comparison.
+- **Report** (Export, or the File menu): one printable page per result, with the numbers
+  of the properties panel, the settings (those that differ from the paper's in bold) and
+  the main figures in the light theme. Print it or save it as PDF from the dialog, or save
+  it as an HTML file.
+- **Session** (File, *Save the session*, Ctrl+S): a `.marq` file with every result the
+  engine holds, the session record, the settings and surfaces A and B. *Open a session*,
+  or dropping the file on the window, brings the results back without a new analysis:
+  they can be viewed, exported, compared again and rebuilt in another theme or language.
+  The file holds data only (JSON and NumPy arrays), nothing that runs.
+
+Saving asks where: Chrome and Edge open the save dialog of the system, at the folder of
+the last save; Firefox and Safari save into their downloads folder, and the status bar
+names the file. Closing MaRQ while some results are saved neither as a session nor as
+JSON or CSV asks first.
 
 The JSON and CSV files are in English with decimal points in either interface language,
 so they read the same in every spreadsheet and script.
@@ -223,9 +282,10 @@ so they read the same in every spreadsheet and script.
 | `rq_gradient_core.py` | Paired module: registration, RQ, RQdx, RQdy, RQd, error maps |
 | `x3p_loader.py` | ISO 25178-72 X3P reader |
 | `plots.py` | Plotly figure builders, and their translation |
-| `MaRQ.exe`, `MaRQ.command`, `MaRQ.sh`, `launchers/` | Launchers that need nothing installed (Windows; macOS; Linux), built from `launcher/main.go` by `tools/build_launchers.py` |
+| `MaRQ.exe`, `MaRQ.command`, `MaRQ.sh`, `launchers/` | Launchers that need nothing installed (Windows; macOS; Linux), built from the Go sources in `launcher/` by `tools/build_launchers.py` |
 | `MaRQ.bat`, `run_marq.py` | Fallback launchers through Python 3 |
-| `tests/e2e_check.py`, `tests/e2e_synthetic.py` | Browser tests of a running MaRQ, against the sample data or a synthetic channel |
+| `tests/e2e_check.py`, `tests/e2e_synthetic.py`, `tests/e2e_features.py` | Browser tests of a running MaRQ: the numbers against the sample data or a synthetic channel, and the interface on a synthetic insert and part |
+| `tests/launcher_check.py` | Test of a launcher without a browser: what it serves, one MaRQ per folder, the stop when the last window closes |
 | `vendor/` | Bundled Plotly.js, three.js and the Pyodide runtime with NumPy and SciPy, for offline use |
 | `tools/fetch_vendor.py` | Re-downloads and verifies the bundle at the pinned versions |
 | `tools/make_icons.py` | Renders the icon (`logo.svg`) into every size the launchers and the page use |

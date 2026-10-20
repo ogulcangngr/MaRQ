@@ -3,7 +3,7 @@ message: "If you use MaRQ or these data, please cite the paper below and this ar
 type: software
 title: "MaRQ, the Microchannel and Replication Quality Analyzer: software and point clouds of the study"
 version: "1.0"
-date-released: "2026-10-01"
+date-released: "2026-10-20"
 license: GPL-3.0
 authors:
   - family-names: "Güngör"

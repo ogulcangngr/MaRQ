@@ -58,8 +58,9 @@ so every downstream number was recomputed.
 - Icon (2026-10-19): the MaRQ logo is the icon of `MaRQ.exe` (with its name and version
   in the file properties; `launcher/winres/`, `launcher/icon/`) and of the browser tab
   (`favicon.ico`, `logo.svg`, `apple-touch-icon.png`).
-- Interface redesign (2026-10-19, branch `ui-redesign`). No analysis change: the sample
-  data give the same numbers in Chromium, Firefox and WebKit.
+- Interface redesign (2026-10-19). No analysis change: the sample data give the same
+  numbers in Chromium, Firefox and WebKit. The earlier interface of 1.0 is that of
+  commit 030a690.
   - A CAD-style workspace: a command ribbon (Surface, Comparison, Export, View, Setup);
     a browser tree on the left with the inputs and every view of each result; a
     properties panel with the measured values; one viewport with a caption; a status bar
@@ -77,9 +78,8 @@ so every downstream number was recomputed.
     bar (O), depth scale ×1 to ×10, a colour bar and a PNG snapshot. The three
     comparison views share one camera. Plotly draws the 3D views if WebGL or the
     module is unavailable.
-  - 2D plots: drag pans and the wheel zooms; a box-zoom tool; the six comparison maps
-    zoom and pan together, also at true proportions (Plotly cannot link axes that keep
-    1:1, so MaRQ copies the ranges); plots follow the size of their pane.
+  - 2D plots: drag pans and the wheel zooms; a box-zoom tool; the comparison maps zoom
+    and pan together, also at true proportions; plots follow the size of their pane.
   - Labels in words instead of symbols (Height, Difference B − A, Slope A, Slope error;
     RQ<sub>d</sub> typeset); plot titles moved to the viewport caption.
   - Colour scales are passed as explicit stops: Plotly.js does not know Plasma, Magma,
@@ -98,6 +98,99 @@ so every downstream number was recomputed.
     written in either language; the CSV and JSON exports stay in English with decimal
     points.
   - Zoom in and out buttons below every plot and 3D view (keys + and −).
+- Review of the redesign (2026-10-20). No analysis change: the sample data give the
+  same numbers in Chromium, Firefox and WebKit.
+  - Sizes: the root size meant to follow the window never applied (the page reset it to
+    16 px), so the ribbon ran off windows narrower than about 1300 pixels. The interface
+    now shrinks to 13 px at 1024 pixels, and on windows up to 1440 pixels Open A / Open B
+    and Settings / Log become small stacked commands; the ribbon fits from 1024 pixels in
+    English and Turkish.
+  - Fonts of Visual Studio Code: Segoe UI (Windows), the system font (macOS), system-ui or
+    Ubuntu (Linux); numbers in Consolas or Menlo.
+  - Errors in words: a file that cannot be read (an image, an empty file, two columns, text
+    where numbers are expected, a damaged X3P) is named in a notice over the viewport, not
+    a Python traceback in the log. Header lines at the top of a text point cloud are
+    skipped by themselves. A scan whose channel is no deeper than the roughness of the
+    field gets a warning that its geometry means nothing. After a fatal engine error the
+    engine restarts by itself. When the server is gone (its window closed), MaRQ says so.
+  - Runs keep what they were started with: a file opened, a slot changed or a setting
+    edited during a run no longer renames the result or changes the settings recorded with
+    it. A display error no longer leaves MaRQ "running". Empty or out-of-range settings
+    stop the run and are marked in the Settings dialog.
+  - Batch: a pair that fails is a row with its error and the batch goes on; files sorted
+    naturally (2 before 10); *Show* runs the pair of the table; the step and the batch
+    position show in the status bar (the progress text stayed at step 1 before).
+  - 3D viewport: no data in the slope error is a hole, not the colour of zero; the hover
+    readout and the turning point need a real crossing of the surface (no values over
+    the background or through holes) and are read on the drawn triangles; a new result
+    starts at the home view; the depth scale is the dropdown's in every view, with a
+    badge when it is not ×1; the scale bar only in views straight along an axis; zoom
+    limits; two-finger touch and trackpad pinch; a lost graphics context comes back;
+    snapshots on the theme background with the colour bar.
+  - 2D plots: the zoom stays over a theme, palette or language change; snapshots on the
+    theme background.
+  - Cancel switches off the crop commands when the engine no longer holds the crop; the
+    batch table, the slider values (decimal comma), "Start" and "Starting…" follow the
+    language; keyboard shortcuts wait while a dialog is open; tree rows work from the
+    keyboard; the CSV gains the voxel size used, the alignment angles and the
+    opening-length spread.
+  - Launchers: a second start opens a window on the MaRQ already running from that folder
+    instead of a second server; the browser revalidates files by content tag, so a folder
+    from an older zip never gets newer cached files from another MaRQ; requests by
+    another host name, hidden files and folders are refused; the default browser comes
+    first when it is Chromium-based; on Linux, Ctrl+C no longer closes the browser; the
+    console window is titled; the macOS launchers are built with Go 1.24 and run from
+    macOS 11 (they needed macOS 13). `MaRQ.bat` works on network paths; `run_marq.py`
+    behaves like the Go launcher; README troubleshooting in English and Turkish.
+- New in the redesign (2026-10-20). No analysis change.
+  - Measure and Section in the 3D views: two clicks on the surface give their distance
+    (in the plane and in height), or the height profile along the line between them in a
+    panel below the view (surfaces A and B and the slope error in the comparison views),
+    with a CSV export.
+  - Sessions: *File*, *Save the session* (Ctrl+S) writes a `.marq` file with every result
+    the engine holds (JSON and NumPy arrays, no pickles; the grids the figures are drawn
+    from in single precision, the crop and every number in double precision), the
+    session record, the settings and surfaces A and B; *Open a session*, or a drop on the window, brings them
+    back without a new analysis, ready to export, compare again or rebuild.
+  - Report: one printable page per result (the properties, the settings with the changed
+    ones in bold, the main figures in the light theme), printed or saved as PDF from its
+    dialog, or saved as HTML.
+  - A *File* menu in the title bar; closing MaRQ with results saved neither as a session
+    nor as JSON or CSV asks first.
+  - Closing MaRQ's window stops MaRQ and closes its console window a few seconds later
+    (every page says it is alive every 20 s and goodbye when it closes; a reload says hello
+    again in time; on macOS the Terminal window of a double-clicked `MaRQ.command` closes
+    too); `--stay` keeps the launcher running.
+  - Every analysed point cloud has its own node in the browser with all its views, so the
+    analysis of surface A can be opened again after B was analysed and compared. The
+    analysis on screen is the one *Keep as A* or *B*, *Save crop*, the exports and the
+    report use; A and B mark the analyses whose crops fill the slots; a node can be removed
+    from the session. The engine holds the newest six analyses (an older one stays
+    viewable); a new theme or language rebuilds the analysis on screen at once and the
+    others when they are opened. Sessions keep every analysis held.
+  - The comparison maps are two views, *Height maps* (A, B, B − A) and *Slope maps* (A, B,
+    slope error), one map per row; the six-map figure of the paper stays in the export
+    dialog and the report. The three maps of a view are linked by Plotly itself and the
+    mask outline is drawn as ready line segments, so a zoom or pan moves all three at once
+    without the page stalling (a redraw took about 0.45 s, now about 0.15 s, once, after
+    the scrolling); *Link the maps* off gives each its own zoom, still at true proportions.
+  - Cross-sections across the channel: *Cross-section at a position* for every analysis and
+    *Cross-sections of A and B* for the comparison, with a slider from one end of the channel
+    to the other and the position as a fraction of the length or in µm from the start (the
+    profile from the points within one voxel of the position, with the mean cross-section;
+    on the common grid for A and B), and a one-click *Cross-section* tool in the 3D views
+    that opens the profile through the clicked point below the view. Both save as CSV.
+  - Saving asks where: the save dialog of the system in Chrome and Edge (at the folder of the
+    last save); the downloads folder, named in the status bar, in Firefox and Safari.
+  - Tests: `tests/e2e_features.py` goes through the interface on a synthetic insert and part
+    (comparison, maps, cross-sections, 3D, report, language, a session saved and opened
+    again) and `tests/launcher_check.py` checks a launcher without a browser (what it
+    serves, one MaRQ per folder, the stop after the last goodbye); both run in the GitHub
+    check on Windows, macOS and Linux. The check found that `run_marq.py` on Windows let a
+    second start take the port of the first; it now takes its port exclusively.
+  - Turkish: the field is *çevre yüzey* (it was *düzlem*, which also means a plane), the
+    Browser *Model ağacı*, the wall angle *yan duvar açısı*, Run batch *Toplu karşılaştır*;
+    MaRQ takes the suffixes of "mark" (MaRQ'ı, MaRQ'ın).
 
 ## 0.9 (2026-09-30)
 

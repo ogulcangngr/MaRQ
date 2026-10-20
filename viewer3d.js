@@ -4,7 +4,8 @@
    Mouse: left-drag orbits about the point under the cursor (Z stays up), right- or middle-drag
    (or Shift + left-drag) pans, the wheel zooms towards the cursor, a double-click fits the
    surface. The view cube in the top-right corner shows the orientation; a click on one of its
-   faces turns the view to that side.
+   faces turns the view to that side. With a tool on (setTool "measure" or "section"), a click
+   that does not move picks a point; two points give a distance or a section line.
 
    window.MarqViewer.create(container) returns a viewer; app.js gives it the surface traces that
    plots.py builds (x, y, z, optional surfacecolor, colour scale, cmin/cmax). */
@@ -60,7 +61,7 @@ function faceTexture(label, dark) {
   g.lineWidth = 4;
   g.strokeRect(2, 2, 124, 124);
   g.fillStyle = dark ? "#e0e0e0" : "#3a3a40";
-  g.font = `600 ${label.length > 6 ? 20 : 24}px 'Segoe UI', system-ui, sans-serif`;
+  g.font = `600 ${label.length > 6 ? 20 : 24}px -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", system-ui, Ubuntu, sans-serif`;
   g.textAlign = "center"; g.textBaseline = "middle";
   g.fillText(label, 64, 66);
   const t = new THREE.CanvasTexture(c);
@@ -75,7 +76,10 @@ class Viewer {
     this.dark = false;
     this.exag = 1;
     this.ortho = false;
-    this.listeners = { hover: [], change: [] };
+    this.listeners = { hover: [], change: [], lost: [], measure: [], section: [], marks: [], xsect: [] };
+    this.tool = null;
+    this.marks = [];
+    this.markEls = [];
     this.state = { target: new THREE.Vector3(), dist: 1000, az: VIEWS.home.az * DEG, el: VIEWS.home.el * DEG };
     this.anim = null;
     this.reserveRight = 95;                       // pixels kept free for the colour bar
@@ -107,11 +111,19 @@ class Viewer {
     this.mesh = null;
     this.grid = null;
 
+    // a lost graphics context (driver reset, sleep, too many contexts) comes back by itself; the
+    // view is drawn again then
+    this.lost = false;
+    this.canvas.addEventListener("webglcontextlost", (e) => { e.preventDefault(); this.lost = true; this._emit("lost", true); });
+    this.canvas.addEventListener("webglcontextrestored", () => { this.lost = false; this._emit("lost", false); this.render(); });
+
     this._buildCube();
     this._bindInput();
     this.resize();
     this._ro = new ResizeObserver(() => { this.resize(); });
     this._ro.observe(container);
+    this._onWinResize = () => this.resize();       // a move to a screen of another pixel density
+    window.addEventListener("resize", this._onWinResize);
   }
 
   // ── public ─────────────────────────────────────────────────────────────────
@@ -129,11 +141,112 @@ class Viewer {
     this.dark = !!dark;
     this.hemi.groundColor.set(dark ? 0x3a3a3a : 0x8a8a8a);
     this._buildCube();
+    this._drawMarks(false);
     this.render();
+  }
+
+  // ── tools ───────────────────────────────────────────────────────────────────
+  setTool(name) {
+    this.tool = name || null;
+    this.canvas.classList.toggle("tool", !!this.tool);
+    this.clearMarks();
+  }
+
+  clearMarks() {
+    this.marks = []; this.xline = null;
+    this._drawMarks();
+    this._emit("marks", null);
+  }
+
+  // a point of the surface for the tool on; the second gives the measurement or the section
+  _toolClick(px, py) {
+    const hit = this.pick(px, py);
+    if (!hit) return;
+    const o0 = this.origin;
+    if (this.tool === "xsect") {                 // one point: the line across the channel (along y) through it
+      const f = this.field;
+      this.marks = [{ x: hit.world.x, y: hit.world.y, z: hit.z, value: hit.value }];
+      this.xline = [{ x: hit.world.x, y: f.y0 }, { x: hit.world.x, y: f.y1 }];
+      this._drawMarks();
+      this._emit("xsect", { a: { x: hit.world.x + o0.x, y: hit.world.y + o0.y, z: hit.z } });
+      return;
+    }
+    if (this.marks.length >= 2) this.marks = [];
+    this.marks.push({ x: hit.world.x, y: hit.world.y, z: hit.z, value: hit.value });   // z in true units
+    this._drawMarks();
+    const o = this.origin, data = (m) => ({ x: m.x + o.x, y: m.y + o.y, z: m.z, value: m.value });
+    if (this.marks.length === 2) this._emit(this.tool, { a: data(this.marks[0]), b: data(this.marks[1]), ...this._measure() });
+    else this._emit("marks", { a: data(this.marks[0]) });
+  }
+
+  _measure() {
+    const [a, b] = this.marks, dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+    return { dist: Math.hypot(dx, dy, dz), dxy: Math.hypot(dx, dy), dz };
+  }
+
+  // the section line follows the surface; holes are left out
+  _surfacePath(a, b) {
+    const n = 240, out = [];
+    for (let i = 0; i <= n; i++) {
+      const x = a.x + (b.x - a.x) * i / n, y = a.y + (b.y - a.y) * i / n, h = this._heightAt(x, y);
+      if (h) out.push({ x, y, z: h.z });
+    }
+    return out.length > 1 ? out : [a, b];
+  }
+
+  _drawMarks(render = true) {
+    if (this.markLine) { this.scene.remove(this.markLine); this.markLine.geometry.dispose(); this.markLine.material.dispose(); this.markLine = null; }
+    this.markEls.forEach((e) => e.remove());
+    this.markEls = []; this.markLabel = null;
+    const pts = this.marks;
+    pts.forEach(() => { const d = document.createElement("div"); d.className = "mk-dot"; this.el.appendChild(d); this.markEls.push(d); });
+    const path = this.tool === "xsect" && this.xline && pts.length === 1 ? this._surfacePath(this.xline[0], this.xline[1])
+      : pts.length === 2 ? (this.tool === "section" ? this._surfacePath(pts[0], pts[1]) : pts) : null;
+    if (path) {
+      const geo = new THREE.BufferGeometry().setFromPoints(path.map((q) => new THREE.Vector3(q.x, q.y, q.z)));
+      const mat = new THREE.LineBasicMaterial({ color: this.dark ? 0xff6b6b : 0xd32f2f, depthTest: false, transparent: true });
+      this.markLine = new THREE.Line(geo, mat);
+      this.markLine.renderOrder = 999;
+      this.markLine.scale.z = this.exag;
+      this.scene.add(this.markLine);
+      if (this.tool === "measure" && pts.length === 2) {
+        const l = document.createElement("div");
+        l.className = "mk-label";
+        l.innerHTML = this.formatMeasure ? this.formatMeasure(this._measure()) : "";
+        this.el.appendChild(l); this.markEls.push(l); this.markLabel = l;
+      }
+    }
+    if (render) this.render();
+  }
+
+  // the points and the label follow the view
+  _placeMarks(cam) {
+    if (!this.markEls.length) return;
+    const proj = (q) => {
+      const v = new THREE.Vector3(q.x, q.y, q.z * this.exag).project(cam);
+      return [(v.x + 1) / 2 * this.w, (1 - v.y) / 2 * this.h, v.z < 1 && v.z > -1];
+    };
+    this.marks.forEach((q, i) => {
+      const [x, y, vis] = proj(q), e = this.markEls[i];
+      e.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
+      e.style.display = vis ? "" : "none";
+    });
+    if (this.markLabel && this.marks.length === 2) {
+      const [a, b] = this.marks, [x, y] = proj({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 });
+      this.markLabel.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
+    }
   }
 
   // trace: plotly-style surface {x:[nx], y:[ny], z:[[ny][nx]], surfacecolor?, colorscale, cmin?, cmax?}
   setSurface(trace, opts = {}) {
+    if (trace === this._trace && this.mesh) {          // the same surface again: only the camera
+      if (opts.camera) this.setCamera(opts.camera, false);
+      else if (!opts.keepCamera) this.view("home", false);
+      this.render();
+      return;
+    }
+    this._trace = trace;
+    if (this.marks.length) { this.marks = []; this._drawMarks(false); this._emit("marks", null); }
     if (this.mesh) { this.group.remove(this.mesh); this.mesh.geometry.dispose(); this.mesh.material.dispose(); this.mesh = null; }
     const xs = trace.x, ys = trace.y, Z = trace.z, Cv = trace.surfacecolor || null;
     const nx = xs.length, ny = ys.length;
@@ -149,9 +262,12 @@ class Viewer {
         const z = zr[i], k = j * nx + i;
         if (z === null || z === undefined || !isFinite(z)) continue;
         const v = cr ? cr[i] : z;
-        ok[k] = 1; zgrid[k] = z;
+        // a point without a colour value (no slope error where A has no data) is left out, as a
+        // hole, rather than drawn in the colour of the lowest value
+        if (v === null || v === undefined || !isFinite(v)) continue;
+        ok[k] = 1; zgrid[k] = z; vgrid[k] = v;
         if (z < zmin) zmin = z; if (z > zmax) zmax = z;
-        if (v !== null && v !== undefined && isFinite(v)) { vgrid[k] = v; if (v < vmin) vmin = v; if (v > vmax) vmax = v; }
+        if (v < vmin) vmin = v; if (v > vmax) vmax = v;
       }
     }
     if (!isFinite(zmin)) { zmin = 0; zmax = 1; }
@@ -166,26 +282,28 @@ class Viewer {
       col[k * 3] = lut[li * 3]; col[k * 3 + 1] = lut[li * 3 + 1]; col[k * 3 + 2] = lut[li * 3 + 2];
     }
     // two triangles per grid cell with four valid corners, one where three are valid
-    const idx = [];
+    const idx = new Uint32Array(Math.max(0, (nx - 1) * (ny - 1) * 6));
+    let m = 0;
+    const tri = (p, q, r) => { idx[m++] = p; idx[m++] = q; idx[m++] = r; };
     for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
       const a = j * nx + i, b = a + 1, c = a + nx, d = c + 1;
       const n = ok[a] + ok[b] + ok[c] + ok[d];
-      if (n === 4) { idx.push(a, b, d, a, d, c); }
+      if (n === 4) { tri(a, b, d); tri(a, d, c); }
       else if (n === 3) {
-        if (!ok[a]) idx.push(b, d, c); else if (!ok[b]) idx.push(a, d, c);
-        else if (!ok[c]) idx.push(a, b, d); else idx.push(a, b, c);
+        if (!ok[a]) tri(b, d, c); else if (!ok[b]) tri(a, d, c);
+        else if (!ok[c]) tri(a, b, d); else tri(a, b, c);
       }
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
     geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
-    geo.setIndex(new THREE.BufferAttribute(nx * ny > 65535 ? new Uint32Array(idx) : new Uint16Array(idx), 1));
+    geo.setIndex(new THREE.BufferAttribute(nx * ny > 65535 ? idx.slice(0, m) : Uint16Array.from(idx.subarray(0, m)), 1));
     geo.computeVertexNormals();
     const mat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
     this.mesh = new THREE.Mesh(geo, mat);
     this.mesh.scale.z = this.exag;
     this.group.add(this.mesh);
-    this.field = { xs, ys, nx, ny, cx, cy, zgrid, vgrid, zmin, zmax,
+    this.field = { xs, ys, nx, ny, cx, cy, zgrid, vgrid, ok, zmin, zmax,
                    dx: Math.abs(xs[1] - xs[0]) || 1, dy: Math.abs(ys[1] - ys[0]) || 1,
                    x0: Math.min(xs[0], xs[nx - 1]) - cx, x1: Math.max(xs[0], xs[nx - 1]) - cx,
                    y0: Math.min(ys[0], ys[ny - 1]) - cy, y1: Math.max(ys[0], ys[ny - 1]) - cy };
@@ -196,23 +314,33 @@ class Viewer {
   }
 
   setExaggeration(k) {
-    this.exag = Math.max(1, Number(k) || 1);
+    const e = Math.max(1, Number(k) || 1);
+    this.state.target.z *= e / this.exag;          // the same point stays in the middle
+    this.exag = e;
     if (this.mesh) this.mesh.scale.z = this.exag;
+    if (this.markLine) this.markLine.scale.z = this.exag;
     this.render();
+  }
+
+  // an orthographic view straight along an axis, where one scale holds across the picture
+  isAxisView() {
+    const r = (a) => Math.abs(Math.atan2(Math.sin(a * 2), Math.cos(a * 2))) < 0.6 * DEG;   // a multiple of 90°
+    const el = Math.abs(this.state.el);
+    return this.ortho && (el > EL_MAX - 0.2 * DEG || (el < 0.3 * DEG && r(this.state.az)));
   }
 
   setProjection(ortho) { this.ortho = !!ortho; this.render(); this._emit("change", this.getCamera()); }
 
+  // the camera, with the target height in true units: the depth scale is not part of it
   getCamera() {
     const s = this.state;
-    return { target: [s.target.x, s.target.y, s.target.z], dist: s.dist, az: s.az, el: s.el, ortho: this.ortho, exag: this.exag };
+    return { target: [s.target.x, s.target.y, s.target.z / this.exag], dist: s.dist, az: s.az, el: s.el, ortho: this.ortho };
   }
 
   setCamera(c, animate = true) {
     if (!c) return;
-    if (c.exag && c.exag !== this.exag) this.setExaggeration(c.exag);
     if (c.ortho !== undefined) this.ortho = !!c.ortho;
-    this._go({ target: new THREE.Vector3(...c.target), dist: c.dist, az: c.az, el: c.el }, animate);
+    this._go({ target: new THREE.Vector3(c.target[0], c.target[1], c.target[2] * this.exag), dist: c.dist, az: c.az, el: c.el }, animate);
   }
 
   // turn to a named view and fit the surface in it
@@ -226,7 +354,14 @@ class Viewer {
 
   // zoom about the centre of the view; f < 1 zooms in
   zoom(f, animate = true) {
-    this._go({ ...this.state, target: this.state.target.clone(), dist: this.state.dist * f }, animate);
+    this._go({ ...this.state, target: this.state.target.clone(), dist: this._clampDist(this.state.dist * f) }, animate);
+  }
+
+  // from a few grid cells across up to far beyond the whole surface
+  _clampDist(d) {
+    const f = this.field;
+    const lo = f ? Math.min(f.dx, f.dy) * 3 : 1e-3, hi = this._fitDist(this.state) * 25;
+    return Math.max(lo, Math.min(hi, d));
   }
 
   fit(animate = true) {
@@ -235,10 +370,20 @@ class Viewer {
     this._go(st, animate);
   }
 
-  snapshot() { this.render(); return this.canvas.toDataURL("image/png"); }
+  // the view without the view cube, copied to a 2D canvas (in device pixels) for a picture
+  snapshot() {
+    this.render(false);
+    const c = document.createElement("canvas");
+    c.width = this.canvas.width; c.height = this.canvas.height;
+    c.getContext("2d").drawImage(this.canvas, 0, 0);
+    this.render();
+    return c;
+  }
 
   resize() {
     const w = Math.max(10, this.el.clientWidth), h = Math.max(10, this.el.clientHeight);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    if (dpr !== this.renderer.getPixelRatio()) this.renderer.setPixelRatio(dpr);
     this.renderer.setSize(w, h, false);
     this.canvas.style.width = w + "px"; this.canvas.style.height = h + "px";
     this.w = w; this.h = h;
@@ -318,6 +463,7 @@ class Viewer {
       cam.position.copy(st.target).addScaledVector(back, D);
       cam.lookAt(st.target);
       cam.updateProjectionMatrix();
+      cam.updateMatrixWorld();
       return cam;
     }
     const cam = this.persp;
@@ -326,14 +472,15 @@ class Viewer {
     cam.position.copy(st.target).addScaledVector(back, st.dist);
     cam.lookAt(st.target);
     cam.updateProjectionMatrix();
+    cam.updateMatrixWorld();
     return cam;
   }
 
   // world size of one screen pixel at the target
   _pixelSize() { return 2 * this.state.dist * TAN / this.h; }
 
-  render() {
-    if (!this.w) return;
+  render(cube = true) {
+    if (!this.w || this.lost) return;
     const cam = this._camera();
     // key light from above-left of the viewer
     const { back, right, up } = this._dirs(this.state);
@@ -344,7 +491,8 @@ class Viewer {
     r.setViewport(0, 0, this.w, this.h);
     r.clear();
     r.render(this.scene, cam);
-    this._renderCube();
+    if (cube) this._renderCube();
+    this._placeMarks(cam);
     this._emitScale();
   }
 
@@ -361,19 +509,38 @@ class Viewer {
     return rc.ray;
   }
 
+  // height and colour value at (x, y) on the triangles the mesh draws, or null over a hole
   _heightAt(x, y) {
     const f = this.field;
     const fi = (x - (f.xs[0] - f.cx)) / (f.xs[1] - f.xs[0]), fj = (y - (f.ys[0] - f.cy)) / (f.ys[1] - f.ys[0]);
-    const i = Math.round(fi), j = Math.round(fj);
-    if (i < 0 || j < 0 || i >= f.nx || j >= f.ny) return null;
-    const k = j * f.nx + i, z = f.zgrid[k];
-    return isFinite(z) ? { z, v: f.vgrid[k], i, j } : null;
+    if (!(fi >= 0 && fj >= 0 && fi <= f.nx - 1 && fj <= f.ny - 1)) return null;
+    const i = Math.min(f.nx - 2, Math.floor(fi)), j = Math.min(f.ny - 2, Math.floor(fj));
+    const u = fi - i, v = fj - j;
+    const a = j * f.nx + i, b = a + 1, c = a + f.nx, d = c + 1, ok = f.ok;
+    // the triangle of the cell that holds the point, as split in setSurface
+    let T = null;
+    if (ok[a] + ok[b] + ok[c] + ok[d] === 4) T = u >= v ? [a, b, d] : [a, d, c];
+    else if (ok[a] + ok[b] + ok[c] + ok[d] === 3) T = !ok[a] ? [b, d, c] : !ok[b] ? [a, d, c] : !ok[c] ? [a, b, d] : [a, b, c];
+    if (!T) return null;
+    const P = (k) => [(k % f.nx) - i, Math.floor(k / f.nx) - j];
+    const [p0, p1, p2] = T.map(P);
+    const det = (p1[1] - p2[1]) * (p0[0] - p2[0]) + (p2[0] - p1[0]) * (p0[1] - p2[1]);
+    const w0 = ((p1[1] - p2[1]) * (u - p2[0]) + (p2[0] - p1[0]) * (v - p2[1])) / det;
+    const w1 = ((p2[1] - p0[1]) * (u - p2[0]) + (p0[0] - p2[0]) * (v - p2[1])) / det;
+    const w2 = 1 - w0 - w1;
+    if (w0 < -1e-6 || w1 < -1e-6 || w2 < -1e-6) return null;      // in the missing half of the cell
+    const z = w0 * f.zgrid[T[0]] + w1 * f.zgrid[T[1]] + w2 * f.zgrid[T[2]];
+    const val = w0 * f.vgrid[T[0]] + w1 * f.vgrid[T[1]] + w2 * f.vgrid[T[2]];
+    return { z, v: val };
   }
 
+  // the first point where the ray crosses the surface; the ray has to pass from one side of the
+  // surface to the other, so a ray through empty space or a hole finds nothing
   pick(px, py) {
-    if (!this.field) return null;
+    if (!this.field || this.lost) return null;
     const ray = this._ray(px, py), f = this.field, k = this.exag;
-    const box = new THREE.Box3(new THREE.Vector3(f.x0, f.y0, f.zmin * k), new THREE.Vector3(f.x1, f.y1, f.zmax * k));
+    const pad = Math.max((f.zmax - f.zmin) * k * 1e-3, Math.min(f.dx, f.dy) * 1e-2);
+    const box = new THREE.Box3(new THREE.Vector3(f.x0, f.y0, f.zmin * k - pad), new THREE.Vector3(f.x1, f.y1, f.zmax * k + pad));
     const p0 = ray.intersectBox(box, new THREE.Vector3());
     if (!p0) return null;
     const inside = box.containsPoint(ray.origin);
@@ -382,23 +549,20 @@ class Viewer {
     const p1 = far.intersectBox(box, new THREE.Vector3()) || start;
     const len = start.distanceTo(p1), stepLen = Math.min(f.dx, f.dy) * 0.5;
     const n = Math.min(4000, Math.ceil(len / stepLen) + 1);
+    const at = (t) => { const q = start.clone().addScaledVector(ray.direction, t), h = this._heightAt(q.x, q.y); return h ? { q, h, side: q.z - h.z * k > 0 } : null; };
     let prev = null;
     for (let s = 0; s <= n; s++) {
-      const p = start.clone().addScaledVector(ray.direction, len * s / n);
-      const h = this._heightAt(p.x, p.y);
-      if (h) {
-        const above = p.z - h.z * k;
-        if (above <= 0) {
-          let a = prev ? prev.t : len * s / n, b = len * s / n;
-          for (let it = 0; it < 12; it++) {                 // refine the crossing
-            const m = (a + b) / 2, q = start.clone().addScaledVector(ray.direction, m), hq = this._heightAt(q.x, q.y);
-            if (hq && q.z - hq.z * k <= 0) b = m; else a = m;
-          }
-          const q = start.clone().addScaledVector(ray.direction, b), hq = this._heightAt(q.x, q.y) || h;
-          return { world: q, x: q.x + f.cx, y: q.y + f.cy, z: hq.z, value: hq.v };
+      const t = len * s / n, cur = at(t);
+      if (!cur) { prev = null; continue; }
+      if (prev && cur.side !== prev.side) {
+        let a = prev.t, b = t, best = cur;
+        for (let it = 0; it < 14; it++) {                 // refine the crossing
+          const mid = (a + b) / 2, m = at(mid);
+          if (m && m.side !== prev.side) { b = mid; best = m; } else a = mid;
         }
+        return { world: best.q, x: best.q.x + f.cx, y: best.q.y + f.cy, z: best.h.z, value: best.h.v };
       }
-      prev = { t: len * s / n };
+      prev = { t, side: cur.side };
     }
     return null;
   }
@@ -407,55 +571,111 @@ class Viewer {
   _bindInput() {
     const c = this.canvas;
     let drag = null;
+    const pts = new Map();                       // active pointers (two fingers: pinch and pan)
+    let pinch = null;
     c.addEventListener("contextmenu", (e) => e.preventDefault());
     c.addEventListener("pointerdown", (e) => {
       const [px, py] = this._xy(e);
-      if (this._cubeHit(px, py, true)) return;
+      const face = this._cubeFace(px, py);
+      if (face >= 0) {                           // the view cube: a click turns to that side
+        if (e.button === 0) this.view(["right", "left", "top", "bottom", "front", "back"][face]);
+        return;
+      }
       c.setPointerCapture(e.pointerId);
+      pts.set(e.pointerId, [px, py]);
       this.anim = null;
+      if (pts.size === 2) {                      // a second finger: pinch to zoom, move to pan
+        const [a, b] = [...pts.values()];
+        pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, mx: (a[0] + b[0]) / 2, my: (a[1] + b[1]) / 2 };
+        drag = null;
+        c.classList.remove("orbiting", "panning");
+        return;
+      }
+      if (pts.size > 2) return;
       const pan = e.button === 1 || e.button === 2 || (e.button === 0 && e.shiftKey);
       const hit = pan ? null : this.pick(px, py);
-      drag = { pan, x: px, y: py, pivot: hit ? hit.world : null, moved: false };
+      drag = { pan, button: e.button, x: px, y: py, x0: px, y0: py, pivot: hit ? hit.world : null, moved: false };
       c.classList.add(pan ? "panning" : "orbiting");
+      this._emit("hover", null);
     });
     c.addEventListener("pointermove", (e) => {
       const [px, py] = this._xy(e);
-      if (!drag) { this._hoverAt(px, py); this._cubeHover(px, py); return; }
+      if (pts.has(e.pointerId)) pts.set(e.pointerId, [px, py]);
+      if (pinch && pts.size === 2) {
+        const [a, b] = [...pts.values()];
+        const d = Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+        this._pan(mx - pinch.mx, my - pinch.my);
+        this._zoomAt(mx, my, pinch.d / d);
+        pinch = { d, mx, my };
+        this.render();
+        return;
+      }
+      if (!drag) {
+        if (this._cubeFace(px, py) >= 0) { this._cancelHover(); this._emit("hover", null); }
+        else this._hoverAt(px, py);
+        this._cubeHover(px, py);
+        return;
+      }
       const dx = px - drag.x, dy = py - drag.y;
       drag.x = px; drag.y = py; drag.moved = true;
       if (drag.pan) this._pan(dx, dy); else this._orbit(dx, dy, drag.pivot);
       this.render();
     });
     const end = (e) => {
+      pts.delete(e.pointerId);
+      try { c.releasePointerCapture(e.pointerId); } catch {}
+      if (pinch) { if (pts.size < 2) { pinch = null; this._emit("change", this.getCamera()); } return; }
       if (!drag) return;
       c.classList.remove("panning", "orbiting");
-      try { c.releasePointerCapture(e.pointerId); } catch {}
+      // a right-drag that ends outside the view must not open the browser's menu there
+      if (drag.moved && drag.button === 2) {
+        const stop = (ev) => ev.preventDefault();
+        window.addEventListener("contextmenu", stop, true);
+        setTimeout(() => window.removeEventListener("contextmenu", stop, true), 400);
+      }
+      const click = e.type === "pointerup" && drag.button === 0 && !drag.pan && Math.hypot(drag.x - drag.x0, drag.y - drag.y0) < 4;
       drag = null;
       this._emit("change", this.getCamera());
+      if (e.type === "pointerup") {
+        const [px, py] = this._xy(e);
+        if (click && this.tool) this._toolClick(px, py);
+        this._hoverAt(px, py);
+      }
     };
     c.addEventListener("pointerup", end);
     c.addEventListener("pointercancel", end);
-    c.addEventListener("pointerleave", () => { if (!drag) this._emit("hover", null); this._cubeHover(-1, -1); });
-    c.addEventListener("dblclick", (e) => { const [px, py] = this._xy(e); if (!this._cubeHit(px, py, false)) this.fit(); });
+    c.addEventListener("pointerleave", () => { if (!drag) { this._cancelHover(); this._emit("hover", null); } this._cubeHover(-1, -1); });
+    c.addEventListener("dblclick", (e) => { const [px, py] = this._xy(e); if (this._cubeFace(px, py) < 0) this.fit(); });
     c.addEventListener("wheel", (e) => {
       e.preventDefault();
       this.anim = null;
       const [px, py] = this._xy(e);
-      const f = Math.exp(Math.max(-1, Math.min(1, e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0015))));
-      const hit = this.pick(px, py);
-      let P = hit ? hit.world : null;
-      if (!P) {
-        const { back } = this._dirs(this.state);
-        P = this._ray(px, py).intersectPlane(new THREE.Plane().setFromNormalAndCoplanarPoint(back, this.state.target), new THREE.Vector3());
-      }
-      const st = this.state;
-      if (P) st.target = P.clone().add(st.target.clone().sub(P).multiplyScalar(f));
-      st.dist *= f;
+      // a trackpad pinch arrives as a wheel with Ctrl and small steps
+      const k = e.deltaMode === 1 ? 0.05 : e.ctrlKey ? 0.01 : 0.0015;
+      const f = Math.exp(Math.max(-1, Math.min(1, e.deltaY * k)));
+      if (this._cubeFace(px, py) >= 0) this.zoom(f, false);
+      else this._zoomAt(px, py, f);
       this.render();
       clearTimeout(this._wheelT);
       this._wheelT = setTimeout(() => this._emit("change", this.getCamera()), 150);
     }, { passive: false });
   }
+
+  // zoom by f towards the point of the surface under (px, py), or the point of the view plane
+  _zoomAt(px, py, f) {
+    const st = this.state;
+    const f2 = this._clampDist(st.dist * f) / st.dist;
+    const hit = this.pick(px, py);
+    let P = hit ? hit.world : null;
+    if (!P) {
+      const { back } = this._dirs(st);
+      P = this._ray(px, py).intersectPlane(new THREE.Plane().setFromNormalAndCoplanarPoint(back, st.target), new THREE.Vector3());
+    }
+    if (P) st.target = P.clone().add(st.target.clone().sub(P).multiplyScalar(f2));
+    st.dist *= f2;
+  }
+
+  _cancelHover() { if (this._hoverRaf) { cancelAnimationFrame(this._hoverRaf); this._hoverRaf = 0; } }
 
   _xy(e) { const r = this.canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
 
@@ -492,7 +712,13 @@ class Viewer {
 
   // ── view cube ──────────────────────────────────────────────────────────────
   _buildCube() {
-    if (this.cube) { this.cubeScene.remove(this.cubeRoot); this.cube.geometry.dispose(); this.cube.material.forEach((m) => { m.map.dispose(); m.dispose(); }); }
+    if (this.cubeRoot) {
+      this.cubeScene.remove(this.cubeRoot);
+      this.cubeRoot.traverse((o) => {
+        if (o.geometry) o.geometry.dispose();
+        [].concat(o.material || []).forEach((m) => { if (m.map) m.map.dispose(); m.dispose(); });
+      });
+    }
     this.cubeScene = this.cubeScene || new THREE.Scene();
     this.cubeCam = this.cubeCam || new THREE.OrthographicCamera(-1.05, 1.05, 1.05, -1.05, 0.1, 10);
     this.cubeCam.up.set(0, 0, 1);
@@ -555,16 +781,16 @@ class Viewer {
     this.render();
   }
 
-  _cubeHit(px, py, act) {
-    const f = this._cubeFace(px, py);
-    if (f < 0) return false;
-    if (act) this.view(["right", "left", "top", "bottom", "front", "back"][f]);
-    return true;
-  }
-
   dispose() {
     this._ro.disconnect();
+    window.removeEventListener("resize", this._onWinResize);
+    cancelAnimationFrame(this._raf); this._cancelHover(); clearTimeout(this._wheelT);
+    this.anim = null;
+    if (this.mesh) { this.mesh.geometry.dispose(); this.mesh.material.dispose(); }
+    if (this.cubeRoot) this.cubeRoot.traverse((o) => { if (o.geometry) o.geometry.dispose(); [].concat(o.material || []).forEach((m) => { if (m.map) m.map.dispose(); m.dispose(); }); });
+    this.marks = []; this._drawMarks(false);
     this.renderer.dispose();
+    this.renderer.forceContextLoss();
     this.canvas.remove();
   }
 }

@@ -4,3 +4,4 @@ tests/test_channel.x3p
 .DS_Store
 Thumbs.db
 tests/test_channel_600um.txt
+tests/test_part_600um.txt

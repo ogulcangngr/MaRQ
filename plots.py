@@ -49,7 +49,7 @@ EQUAL = True                        # 1:1 axis scales on the 2D plots: a µm on 
 
 SLOPE_CS = _scale("Inferno")        # slope-magnitude maps and the slope error
 DIFF_CS  = _scale("Diverging")      # signed height difference B - A: blue below, red above
-FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
+FONT = '-apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", system-ui, "Ubuntu", "Droid Sans", sans-serif'   # the interface font of Visual Studio Code
 U = "µm"
 
 Z_DTICK_3D       = 100      # Z tick spacing in the single-surface 3D view
@@ -92,24 +92,24 @@ def C(key):
 # ── Serialisation helpers ──────────────────────────────────────────────────────
 
 def _v(x):
-    """Scalar: nan -> None, numpy scalar -> Python scalar."""
-    if isinstance(x, float) and math.isnan(x):
+    """Scalar: nan or inf -> None, numpy scalar -> Python scalar."""
+    if isinstance(x, float) and not math.isfinite(x):
         return None
     if isinstance(x, (np.floating, np.integer)):
         v = x.item()
-        return None if (isinstance(v, float) and math.isnan(v)) else v
+        return None if (isinstance(v, float) and not math.isfinite(v)) else v
     return x
 
 
 def _arr(a, nd=None):
-    """1-D or 2-D array -> nested list with nan -> None (vectorised), optionally rounded."""
+    """1-D or 2-D array -> nested list with nan and inf -> None (vectorised), optionally rounded."""
     if a is None:
         return None
     a = np.asarray(a, dtype=float)
     if nd is not None:
         a = np.round(a, nd)
     obj = a.astype(object)
-    obj[np.isnan(a)] = None
+    obj[~np.isfinite(a)] = None
     return obj.tolist()
 
 
@@ -228,6 +228,7 @@ def _scene(aspect, xt, yt, zt, zdtick=None):
     def ax(t):
         return {"title": {"text": t, "font": {"size": 11}}, "gridcolor": C("CARD"),
                 "backgroundcolor": C("BG"), "showbackground": True, "gridwidth": 1,
+                "linecolor": C("BORDER"), "zerolinecolor": C("BORDER"), "spikecolor": C("BORDER"),
                 "tickfont": {"size": 10}}
     zax = ax(zt)
     if zdtick:
@@ -672,6 +673,31 @@ def make_gradient_3d_error_fig(result, max_cells=None):
 
 # ── Paired comparison: 2D height and slope maps ────────────────────────────────
 
+def _mask_edges(xi, yi, m):
+    """The outline of a mask on a grid (cells centred on xi, yi) as line segments with None
+    between them: the cell edges between a cell inside and one outside, merged along each row
+    and column."""
+    xi, yi = np.asarray(xi, float), np.asarray(yi, float)
+    dx = (xi[1] - xi[0]) if xi.size > 1 else 1.0
+    dy = (yi[1] - yi[0]) if yi.size > 1 else 1.0
+    xs, ys = [], []
+
+    def runs(v):
+        e = np.diff(np.r_[0, v.astype(np.int8), 0])
+        return zip(np.flatnonzero(e == 1), np.flatnonzero(e == -1))
+    d = m[1:, :] != m[:-1, :]                       # edges between rows j and j+1
+    for j in np.flatnonzero(d.any(axis=1)):
+        y = float((yi[j] + yi[j + 1]) / 2)
+        for a, b in runs(d[j]):
+            xs += [float(xi[a] - dx / 2), float(xi[b - 1] + dx / 2), None]; ys += [y, y, None]
+    d = m[:, 1:] != m[:, :-1]                       # edges between columns i and i+1
+    for i in np.flatnonzero(d.any(axis=0)):
+        x = float((xi[i] + xi[i + 1]) / 2)
+        for a, b in runs(d[:, i]):
+            xs += [x, x, None]; ys += [float(yi[a] - dy / 2), float(yi[b - 1] + dy / 2), None]
+    return xs, ys
+
+
 def _mask_outline(g, mask, max_pts=3000):
     """Boundary cells of the channel-interior mask as (x, y) lists, thinned."""
     if mask.sum() == 0:
@@ -683,7 +709,10 @@ def _mask_outline(g, mask, max_pts=3000):
     return XI[by[::keep], bx[::keep]].tolist(), YI[by[::keep], bx[::keep]].tolist()
 
 
-def make_gradient_maps_fig(result):
+def make_gradient_maps_fig(result, which=None):
+    """The comparison maps on the common grid: which="height" the heights of A and B and their
+    difference, which="slope" the slope magnitudes and the slope error, one map per row; with
+    which=None all six (the figure of the paper)."""
     g = result["grids"]
     ZA, ZB = np.asarray(g["ZI1"], float), np.asarray(g["ZI2"], float)
     GA, GB = np.asarray(g["mag1"], float), np.asarray(g["mag2"], float)
@@ -711,7 +740,28 @@ def make_gradient_maps_fig(result):
          "GA": (GA, SLOPE_CS, 0.0,  g1,   "Slope A",           3),
          "GB": (GB, SLOPE_CS, 0.0,  g1,   "Slope B",           3),
          "ED": (ED, SLOPE_CS, 0.0,  ed,   "Slope error",       3)}
-    if stacked:
+    split = which in ("height", "slope")
+    if split:
+        order = ["ZA", "ZB", "EZ"] if which == "height" else ["GA", "GB", "ED"]
+        gap = 0.07; h = (1 - 2 * gap) / 3
+        rows = {i: [1 - (i - 1) * (h + gap) - h, 1 - (i - 1) * (h + gap)] for i in (1, 2, 3)}
+        pos  = {key: (i, 1) for i, key in enumerate(order, 1)}
+        cols = {1: [0.0, 0.92]}
+        def span(r0, r1):
+            top, bot = rows[r0][1], rows[r1][0]
+            return {"y": (top + bot) / 2, "len": top - bot}
+        if which == "height":
+            cb = {"ZA": _cbar(f"Height ({U})", x=0.935, nticks=5, **span(1, 2), **small),
+                  "EZ": _cbar(f"B − A ({U})",  x=0.935, nticks=4, **span(3, 3), **small)}
+            lab = {"ZA": "Surface A", "ZB": "Surface B", "EZ": "B − A"}
+        else:
+            cb = {"GA": _cbar("Slope (µm/µm)", x=0.935, nticks=5, **span(1, 2), **small),
+                  "ED": _cbar("Error (µm/µm)", x=0.935, nticks=4, **span(3, 3), **small)}
+            lab = {"GA": "Surface A", "GB": "Surface B", "ED": "Slope error"}
+        ylabel  = {key: f"{lab[key]}<br>Y ({U})" for key in order}
+        headers = []
+        title_note = "" if not EQUAL else "  |  1:1"
+    elif stacked:
         order = ["ZA", "ZB", "EZ", "GA", "GB", "ED"]
         gap = 0.028; h = (1 - 5 * gap) / 6
         rows = {i: [1 - (i - 1) * (h + gap) - h, 1 - (i - 1) * (h + gap)] for i in range(1, 7)}
@@ -745,25 +795,44 @@ def make_gradient_maps_fig(result):
     nrows = max(r for r, c in pos.values())
 
     layout = _base(margin={"t": 70 if headers else 55, "b": 50, "l": 75, "r": 75}, showlegend=False)
-    layout["title"] = _title("Height and slope maps on the common grid  |  green outline: the channel "
+    name = {"height": "Height maps on the common grid", "slope": "Slope maps on the common grid"}.get(
+        which, "Height and slope maps on the common grid")
+    layout["title"] = _title(name + "  |  green outline: the channel "
                              "interior over which the correlations are computed" + title_note)
-    data = []
+    data, outline = [], None
     for k, key in enumerate(order, 1):
         z, cs, zmin, zmax, name, nd = P[key]
         r, c = pos[key]
         xa, ya = ("x" if k == 1 else f"x{k}"), ("y" if k == 1 else f"y{k}")
         xkey, ykey = ("xaxis" if k == 1 else f"xaxis{k}"), ("yaxis" if k == 1 else f"yaxis{k}")
-        # linked zoom (matches) and 1:1 scale (scaleanchor) cannot both be set on an axis
-        link_x = {} if (EQUAL or k == 1) else {"matches": "x"}
-        link_y = {} if (EQUAL or k == 1) else {"matches": "y"}
-        layout[xkey] = _axis(f"X ({U})" if r == nrows else None, domain=cols[c], anchor=ya,
-                             showticklabels=(r == nrows), **link_x,
-                             **({"constrain": "domain"} if EQUAL else {}))
-        layout[ykey] = _axis(ylabel[key], domain=rows[r], anchor=xa, showticklabels=(c == 1),
-                             **link_y, **_eq(xa, constrain="domain"))
+        if split:
+            # The three maps of one view show one grid in panels of one size: Plotly links them
+            # itself (they move together in one redraw), the first sets the true proportions
+            # (widening its range to fill the panel) and the other two follow it.
+            link_x = {"matches": "x"} if k > 1 else ({"constrain": "range"} if EQUAL else {})
+            link_y = {"matches": "y"} if k > 1 else _eq(xa, constrain="range")
+            layout[xkey] = _axis(f"X ({U})" if r == nrows else None, domain=cols[c], anchor=ya,
+                                 showticklabels=(r == nrows), **link_x)
+            layout[ykey] = _axis(ylabel[key], domain=rows[r], anchor=xa, showticklabels=(c == 1), **link_y)
+        else:
+            # linked zoom (matches) and 1:1 scale (scaleanchor) cannot both be set on an axis
+            link_x = {} if (EQUAL or k == 1) else {"matches": "x"}
+            link_y = {} if (EQUAL or k == 1) else {"matches": "y"}
+            layout[xkey] = _axis(f"X ({U})" if r == nrows else None, domain=cols[c], anchor=ya,
+                                 showticklabels=(r == nrows), **link_x,
+                                 **({"constrain": "domain"} if EQUAL else {}))
+            layout[ykey] = _axis(ylabel[key], domain=rows[r], anchor=xa, showticklabels=(c == 1),
+                                 **link_y, **_eq(xa, constrain="domain"))
         data.append(_heatmap(xi, yi, z[::S, ::S], cs, name, cbar=cb.get(key), nd=nd,
                              zmin=zmin, zmax=zmax, xaxis=xa, yaxis=ya))
-        if mx:
+        if split and mask.any():
+            # the outline of the mask as one line of ready segments, cheap to redraw on every zoom
+            if outline is None:
+                outline = _mask_edges(xi, yi, mask[::S, ::S])
+            data.append({"type": "scatter", "mode": "lines", "x": outline[0], "y": outline[1],
+                         "line": {"color": _rgba(C("MASK"), 0.9), "width": 1.1}, "connectgaps": False,
+                         "hoverinfo": "skip", "showlegend": False, "xaxis": xa, "yaxis": ya, "name": "mask"})
+        elif mx and not split:
             data.append({"type": "scatter", "x": mx, "y": my, "mode": "markers",
                          "marker": {"size": 1.4, "color": _rgba(C("MASK"), 0.8)}, "hoverinfo": "skip",
                          "showlegend": False, "xaxis": xa, "yaxis": ya, "name": "mask"})
@@ -789,9 +858,13 @@ BUILDERS = {
         "grad3d_cloud1": lambda r, mc: make_gradient_3d_cloud1_fig(r, mc),
         "grad3d_cloud2": lambda r, mc: make_gradient_3d_cloud2_fig(r, mc),
         "grad3d_error":  lambda r, mc: make_gradient_3d_error_fig(r, mc),
+        "gradheight":    lambda r, mc: make_gradient_maps_fig(r, "height"),
+        "gradslope":     lambda r, mc: make_gradient_maps_fig(r, "slope"),
         "gradmaps":      lambda r, mc: make_gradient_maps_fig(r),
     },
 }
+# built only when asked for (the export dialog, the report), not with every result
+EXPORT_ONLY = {"gradmaps"}
 
 
 def build_figs(kind, result, max_cells=None, palette=None, equal=None):
@@ -799,7 +872,7 @@ def build_figs(kind, result, max_cells=None, palette=None, equal=None):
         set_palette(palette)
     if equal is not None:
         set_equal(equal)
-    return {key: localise(fn(result, max_cells)) for key, fn in BUILDERS[kind].items()}
+    return {key: localise(fn(result, max_cells)) for key, fn in BUILDERS[kind].items() if key not in EXPORT_ONLY}
 
 
 def build_one_fig(kind, key, result, max_cells=None, palette=None, equal=None):
@@ -832,9 +905,9 @@ _TR = {
     "Crop box (exported channel)": "Kırpma kutusu (dışa aktarılan kanal)",
     "Difference B − A": "Fark B − A",
     "Difference": "Fark",
-    "Field left": "Sol düzlem",
-    "Field right": "Sağ düzlem",
-    "Field": "Düzlem",
+    "Field left": "Sol çevre yüzey",
+    "Field right": "Sağ çevre yüzey",
+    "Field": "Çevre yüzey",
     "Floor": "Taban",
     "Floor length edges": "Taban uzunluğu uçları",
     "Floor length per grid line along the channel": "Kanal boyunca her ızgara çizgisinde taban uzunluğu",
@@ -860,7 +933,7 @@ _TR = {
     "Slice without a valid floor": "Geçerli tabanı olmayan dilim",
     "No data": "Veri yok",
     "Before: raw scan": "Önce: ham tarama",
-    "After: field levelled": "Sonra: düzlem yataylandı",
+    "After: field levelled": "Sonra: çevre yüzey yataylandı",
     "channel along X": "kanal X boyunca",
     "protrusion rotated to a depression": "çıkıntı çukura döndürüldü",
     "channel axis": "kanal ekseni",
@@ -879,10 +952,12 @@ _TR = {
     "X, along the channel (µm)": "X, kanal boyunca (µm)",
     "X, channel axis (µm)": "X, kanal ekseni (µm)",
     "X, position along the channel (µm)": "X, kanal boyunca konum (µm)",
-    "Y, across the channel (µm)": "Y, kanal enine (µm)",
+    "Y, across the channel (µm)": "Y, kanala dik (µm)",
     "Y, cross-channel (µm)": "Y, kanala dik (µm)",
-    "Y, position across the channel (µm)": "Y, kanal enine konum (µm)",
+    "Y, position across the channel (µm)": "Y, kanala dik konum (µm)",
     "Height and slope maps on the common grid": "Ortak ızgarada yükseklik ve eğim haritaları",
+    "Height maps on the common grid": "Ortak ızgarada yükseklik haritaları",
+    "Slope maps on the common grid": "Ortak ızgarada eğim haritaları",
     "green outline: the channel interior over which the correlations are computed":
         "yeşil çizgi: korelasyonların hesaplandığı kanal içi",
     "Levelling and alignment": "Yataylama ve hizalama",
@@ -900,7 +975,7 @@ _TR = {
     "height": "yükseklik",
     "rotated 180° about Z to match A": "A'ya uyması için Z ekseni etrafında 180° döndürüldü",
     "Local depth per slice": "Dilim başına yerel derinlik",
-    "Mid-wall lines (25–75 % of depth)": "Orta duvar çizgileri (derinliğin %25–75'i)",
+    "Mid-wall lines (25–75 % of depth)": "Orta yan duvar çizgileri (derinliğin %25–75'i)",
 }
 
 # templates: {} matches a number with its unit; the Turkish order may differ
@@ -914,7 +989,7 @@ _TR_TPL = [
     ("length {}", "uzunluk {}"),
     ("depth {}", "derinlik {}"),
     ("opening {}", "ağız {}"),
-    ("wall angle {}", "duvar açısı {}"),
+    ("wall angle {}", "yan duvar açısı {}"),
     ("Floor width and length per grid line at {} % of depth", "Derinliğin %{} düzeyinde her ızgara çizgisinde taban genişliği ve uzunluğu"),
     ("W = {}", "G = {}"),
     ("L = {} (median ± SD of the lines)", "U = {} (çizgilerin ortancası ± SS)"),
@@ -930,7 +1005,7 @@ _TR_TPL = [
     ("Local depth per slice (SD, central 80 %: {})", "Dilim başına yerel derinlik (SS, ortadaki %80: {})"),
     ("Mean depth {}", "Ortalama derinlik {}"),
     ("Mean {}", "Ortalama {}"),
-    ("Mid-wall lines (25–75 % of depth), wall angle {}", "Orta duvar çizgileri (derinliğin %25–75'i), duvar açısı {}"),
+    ("Mid-wall lines (25–75 % of depth), wall angle {}", "Orta yan duvar çizgileri (derinliğin %25–75'i), yan duvar açısı {}"),
     ("width ±1 SD over {} lines", "genişlik ±1 SS, {} çizgi üzerinden"),
     ("length ±1 SD over {} lines", "uzunluk ±1 SS, {} çizgi üzerinden"),
     ("{}: no data", "{}: veri yok"),
@@ -962,7 +1037,7 @@ def _tr_piece(p, whole=False):
                 continue
             m = rx.match(core)
             if m:
-                out = tr.format(*m.groups())
+                out = tr.format(*[_TR.get(g.strip(), g) if isinstance(g, str) else g for g in m.groups()])
                 break
     if out is None:
         return p.replace(core, _decimal(core)), False
@@ -979,23 +1054,32 @@ def _tr_text(s):
     return "".join(p if (i % 2 == 1) else _tr_piece(p)[0] for i, p in enumerate(parts))
 
 
+_NEG_ZERO = re.compile(r"(?<![\w.,])-(0(?:\.0+)?)(?![\w.,]*\d)")
+
+
 def localise(fig):
-    """Translate the texts of one figure in place (no change in English)."""
-    if _LANG == "en":
-        return fig
+    """Translate the texts of one figure in place, once ("-0.00" becomes "0.00" in every language)."""
+    layout = fig.setdefault("layout", {})
+    meta = layout.get("meta") if isinstance(layout.get("meta"), dict) else {}
+    if meta.get("marq_lang"):
+        return fig                                   # already done: a second pass would undo the decimals
+    layout["meta"] = {**meta, "marq_lang": _LANG}
 
     def walk(o):
         if isinstance(o, dict):
             for k, v in o.items():
                 if k in ("text", "name", "hovertemplate") and isinstance(v, str):
-                    o[k] = _tr_text(v)
+                    if k != "hovertemplate":
+                        v = _NEG_ZERO.sub(r"\1", v)
+                    o[k] = v if _LANG == "en" else _tr_text(v)
                 else:
                     walk(v)
         elif isinstance(o, list):
             for v in o:
                 walk(v)
     walk(fig)
-    fig.setdefault("layout", {})["separators"] = ",."
+    if _LANG != "en":
+        layout["separators"] = ",."
     return fig
 
 
@@ -1017,12 +1101,12 @@ def _safe(obj):
     if isinstance(obj, np.integer):
         return int(obj)
     if isinstance(obj, np.floating):
-        return None if math.isnan(float(obj)) else float(obj)
+        return None if not math.isfinite(float(obj)) else float(obj)
     if isinstance(obj, dict):
         return {k: _safe(v) for k, v in obj.items()}
     if isinstance(obj, (list, tuple)):
         return [_safe(v) for v in obj]
-    if isinstance(obj, float) and math.isnan(obj):
+    if isinstance(obj, float) and not math.isfinite(obj):    # JSON has no NaN or Infinity
         return None
     return obj
 

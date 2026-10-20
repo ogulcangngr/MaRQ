@@ -11,9 +11,9 @@ olmadan da çalışır. Arayüz İngilizce ya da Türkçedir.
 
 İki iş akışı, ortak bir yükleme ve ön işleme altyapısını paylaşır:
 
-- **Tek yüzey.** Kanalı çevreleyen düz yüzeyi (düzlem) yataylar, kanal eksenini hizalar
-  ve şunları verir: taban, orta derinlik ve ağız genişlikleri, derinlik, duvar açısı,
-  taban ve ağız köşelerinin yuvarlaklığı, uzunluk ve tabanla düzlemin ISO 25178
+- **Tek yüzey.** Kanalı çevreleyen düz yüzeyi (çevre yüzey) yataylar, kanal eksenini hizalar
+  ve şunları verir: taban, orta derinlik ve ağız genişlikleri, derinlik, yan duvar açısı,
+  taban ve ağız köşelerinin yuvarlaklığı, uzunluk ve tabanla çevre yüzeyin ISO 25178
   pürüzlülüğü; ayrıca ortalama kesit, kanal boyunca genişlikler ve her dilimin
   derinliği. Kanalın yataylanmış, hizalanmış bir kırpımını dışa aktarır.
 - **İki yüzey.** İki kırpımı ortak bir ızgarada çakıştırır ve yükseklik korelasyonu RQ'yu,
@@ -28,14 +28,14 @@ sonuçlarıyla bir örnek kanalı ve çalışmanın nokta bulutlarını içeren 
 Zenodo'dadır: https://doi.org/10.5281/zenodo.22813916 (makale yayımlanana kadar erişimi
 kısıtlıdır).
 
-## MaRQ'yu çalıştırma
+## MaRQ'ı çalıştırma
 
 Python dahil hiçbir şeyin kurulması gerekmez. Zip dosyasını çıkarın, bu klasörü açın ve:
 
 - **Windows 10/11:** `MaRQ.exe` dosyasına çift tıklayın. *Windows bilgisayarınızı korudu*
   iletisi çıkarsa *Ek bilgi*, ardından *Yine de çalıştır* düğmesine tıklayın
   (program kod imzalı değildir).
-- **macOS 12 ve sonrası:** `MaRQ.command` dosyasına çift tıklayın. macOS ilk seferde onay
+- **macOS 11 ve sonrası:** `MaRQ.command` dosyasına çift tıklayın. macOS ilk seferde onay
   ister: macOS 15 ve sonrasında *Sistem Ayarları*, *Gizlilik ve Güvenlik*, *Yine de Aç*;
   daha eski sürümlerde dosyaya Control tuşuyla tıklayıp *Aç*'ı seçin. Yine de
   başlamazsa Terminal'e `sh ` yazın, `MaRQ.command` dosyasını pencereye sürükleyin ve
@@ -46,20 +46,47 @@ Küçük bir konsol penceresi *MaRQ is running at http://127.0.0.1:8000/* yazar 
 penceresinde açılır: Chrome'un ya da Edge'in uygulama kipi, adres çubuğu ve sekmeler
 olmadan (Edge her Windows 10 ve 11 ile gelir). Bu iki tarayıcı da yoksa MaRQ varsayılan
 tarayıcının bir sekmesinde açılır (güncel bir Firefox ya da Safari de çalışır);
-`MaRQ.exe --tab` bilerek sekme ister. Çalışırken konsol penceresini açık tutun; MaRQ'yu
-durdurmak için kapatın. Hiçbir şey açılmazsa adresi bir tarayıcıya kendiniz yazın.
+`MaRQ.exe --tab` bilerek sekme ister. MaRQ'ın penceresi kapatılınca MaRQ durur
+ve konsol penceresi de birkaç saniye sonra kapanır; konsolu kapatmak da MaRQ'ı durdurur
+(`MaRQ.exe --stay`, pencere kapandıktan sonra da çalışmayı sürdürür). Hiçbir şey açılmazsa adresi bir tarayıcıya kendiniz yazın. MaRQ
+çalışırken yeniden başlatılırsa aynı MaRQ'a yeni bir pencere açılır; böylece tarayıcının
+adrese göre sakladığı ayarlar korunur.
+
+**MaRQ başlamazsa**
+
+- *Windows bilgisayarınızı korudu*: *Ek bilgi*, *Yine de çalıştır*. Çıkarmadan önce zip
+  dosyasına sağ tıklayıp *Özellikler*'de *Engellemeyi kaldır* kutusunu işaretleyin: çıkarılan
+  dosyalar indirilmiş olarak işaretlenmez ve soru bir daha gelmez.
+- MaRQ.exe kaybolursa ya da virüs koruması onu engellerse, veya Akıllı Uygulama Denetimi
+  *Yine de çalıştır* seçeneği sunmazsa: Go ile yazılmış programlar bazen zararlı yazılım
+  sanılır. Dosyayı geri yükleyip izin verin ya da Python 3'ü kurup `MaRQ.bat` dosyasına çift
+  tıklayın; MaRQ bu durumda Python ile başlar.
+- *The MaRQ files are not next to this program*: zip açılmış ama çıkarılmamış, ya da
+  MaRQ.exe başka bir yere kopyalanmış. Programı çıkarılan klasörde başlatın; masaüstünde
+  bir simge için kısayol oluşturun (MaRQ.exe'ye sağ tıklayıp *Gönder*, *Masaüstü*; macOS'te
+  *Takma Ad Oluştur*).
+- macOS, Terminal'in İndirilenler klasörüne erişip erişemeyeceğini sorarsa *Tamam* deyin ve
+  MaRQ'ı yeniden başlatın. MaRQ'ı İndirilenler dışında bir klasöre çıkarmak bu soruyu
+  önler.
+- OneDrive, iCloud ya da Dropbox ile eşitlenen bir klasörde dosyaların yalnızca yer
+  tutucuları bulunabilir: MaRQ'ı bilgisayardaki yerel bir klasöre çıkarın.
+- MaRQ'ın üstündeki kırmızı uyarı neyin eksik olduğunu söyler: doğrudan açılmış bir
+  `index.html` (başlatıcıyı kullanın), eksik bir `vendor/` klasörü (zip dosyasının tamamını
+  yeniden çıkarın) ya da kapatılmış bir konsol penceresi (MaRQ'ı yeniden başlatın).
+- MaRQ'ı güncellemeden önce konsol penceresini kapatın: Windows çalışan bir `MaRQ.exe`
+  dosyasının üzerine yazamaz.
 
 Sayfanın bir HTTP sunucusundan gelmesi gerekir (bir `file://` sayfası analiz motorunu
 başlatamaz; `index.html` dosyasına çift tıklamak bunu söyleyen kırmızı bir uyarı
-gösterir). Başlatıcılar, `launcher/main.go` dosyasından `tools/build_launchers.py` ile
-derlenen küçük programlardır (Go, bağımlılık yok): bu klasörü yalnızca 127.0.0.1
+gösterir). Başlatıcılar, `launcher/` klasöründeki Go kaynaklarından `tools/build_launchers.py` ile
+derlenen küçük programlardır (bağımlılık yok): bu klasörü yalnızca 127.0.0.1
 üzerinde, sabit içerik türleriyle sunar ve pencereyi açarlar. `MaRQ.exe` Windows
 sürümüdür; `MaRQ.command` ve `MaRQ.sh`, `launchers/` içinden macOS (Apple silicon ya da
 Intel) veya Linux (x86-64 ya da Arm) için doğru olanı başlatır ve o çalışmazsa Python 3'e
 geçer. `MaRQ.bat` Windows'ta aynısını yapar; `python run_marq.py` ise Python 3 kurulu her
 yerde çalışır. Herhangi bir statik sunucu da olur (`npx serve`, VS Code'un Live Server
 eklentisi). Arşivdeki `HOW_TO_RUN.txt`, ilk başlatmada çıkabilecek iletileri ve her biri
-için ne yapılacağını listeler. `tests/e2e_check.py`, çalışan bir MaRQ'yu Chromium, Firefox
+için ne yapılacağını listeler. `tests/e2e_check.py`, çalışan bir MaRQ'ı Chromium, Firefox
 ya da WebKit'te çalıştırır ve arşivin örnek verileriyle denetler.
 
 **Çevrimdışı.** `vendor/` klasörü Plotly.js, three.js ve NumPy ile SciPy içeren Pyodide
@@ -75,23 +102,31 @@ paketi geri getirir.
   B olarak ata, Kırpımı kaydet), *Karşılaştırma* (A'yı aç, B'yi aç, Karşılaştır, toplu
   işlem), *Dışa aktar*, *Görünüm* ve *Genel* (Ayarlar, Günlük). İlk kez kullanan birinin
   büyük olasılıkla sıradaki komutu kırmızı çerçeveyle gösterilir.
-- **Tarayıcı** (solda): girdiler (analiz edilecek tarama, A yüzeyi, B yüzeyi; bir dosya
+- **Model ağacı** (solda): girdiler (analiz edilecek tarama, A yüzeyi, B yüzeyi; bir dosya
   açmak için satıra tıklayın ya da dosyayı üzerine bırakın) ve her sonucun bütün
-  görünümleri. Göstermek için bir görünüme tıklayın.
+  görünümleri. Analiz edilen her nokta bulutunun bütün görünümleriyle kendi düğümü vardır;
+  böylece önceki bir analiz (örneğin B analiz edilip karşılaştırıldıktan sonra A yüzeyininki)
+  her zaman yeniden açılabilir. Ekrandaki analiz (adı kırmızı) *A olarak ata*, *B olarak
+  ata*, *Kırpımı kaydet*, dışa aktarmalar ve raporun kullandığı analizdir; bir adın yanındaki
+  A ve B, kırpımları yuvaları dolduran analizleri gösterir. Analiz motoru en yeni altı
+  analizi tutar (daha eskisi yine görüntülenebilir); bir düğümün × düğmesi analizini
+  oturumdan çıkarır.
 - **Özellikler** (solda, altta): ekrandaki sonucun ölçülen değerleri; fareyle üzerine
   gelindiğinde her birinin açıklaması çıkar.
-- **Görünüm alanı** (ortada): tarayıcıda seçilen görünüm; üstünde başlığı ve ayrıntıları,
+- **Görünüm alanı** (ortada): model ağacında seçilen görünüm; üstünde başlığı ve ayrıntıları,
   altında gezinme çubuğu. Pencerenin herhangi bir yerine bırakılan dosya, analiz edilecek
   tarama olarak açılır.
 - **Durum çubuğu** (altta): bir çalıştırmanın ilerleyişi (her adımı ve kalite denetim
   değerini gösteren canlı analiz günlüğü için tıklayın), imlecin altındaki koordinatlar,
   ayarların makaledeki değerler olup olmadığı ve çalışma ortamının çevrimdışı paket olup
   olmadığı.
-- **Başlık çubuğu**: dil (English, Türkçe), açık ya da koyu tema, yardım ve Hakkında.
+- **Başlık çubuğu**: *Dosya* menüsü (nokta bulutu ya da oturum açma, oturumu kaydetme,
+  rapor ve dışa aktarmalar), dil (English, Türkçe), açık ya da koyu tema, yardım ve Hakkında.
   Seçim yapılmamışsa MaRQ sistemin dilini ve temasını izler.
 
-Bölmeler kenarları sürüklenerek boyutlandırılabilir ve bütün boyutlar pencereyi izler;
-böylece yerleşim dizüstü bir bilgisayarda da büyük bir ekranda da oranlarını korur.
+Bölmeler kenarları sürüklenerek boyutlandırılabilir. 1366 pikselin altında bütün boyutlar
+pencereyle birlikte küçülür; böylece şerit ve bölmeler küçük bir dizüstü ekranında da
+oranlarını korur. Daha geniş bir pencere görünüm alanına daha çok yer bırakır.
 Süren bir analiz iptal edilebilir (şeritte *İptal*); motor birkaç saniyede yeniden
 başlar.
 
@@ -101,9 +136,14 @@ Shift ve sol düğmeyle) sürükleyin; imlece doğru yakınlaştırmak için tek
 çift tıklama yüzeyi görünüme sığdırır. Köşedeki görünüm küpü yönelimi gösterir; bir
 yüzüne tıklamak görünümü o tarafa çevirir. Görünümün altındaki gezinme çubuğunda
 başlangıç görünümü, sığdırma, yakınlaştırma ve uzaklaştırma, üstten, önden (kanal
-boyunca) ve sağdan (kesit) görünümler, ölçek çubuklu ortografik izdüşüm ve PNG anlık
-görüntüsü vardır. Tuşlar: H başlangıç, F sığdır, + ve − yakınlaştır ve uzaklaştır, 1 üst,
-2 ön, 3 sağ, O ortografik ya da perspektif. 2B grafiklerde kaydırmak için sürükleyin;
+boyunca) ve sağdan (kesit) görünümler, ortografik izdüşüm (bir eksen boyunca bakan
+görünümlerde ölçek çubuğuyla), araçlar ve PNG anlık görüntüsü vardır. Tuşlar: H başlangıç,
+F sığdır, + ve − yakınlaştır ve uzaklaştır, 1 üst, 2 ön, 3 sağ, O ortografik ya da
+perspektif, M ölçme, S kesit, C dik kesit, Esc noktaları siler. **Ölç**, yüzeyde tıklanan
+iki nokta arasındaki uzaklığı düzlemde ve yükseklikte verir; **Kesit**, tıklanan iki nokta
+arasındaki çizgi boyunca yükseklik profilini, **dik kesit** ise tıklanan bir noktadan kanalı
+dik kesen profili görünümün altında açar (karşılaştırma görünümlerinde A ve B yüzeyleri ile
+eğim hatası); her ikisi de CSV olarak kaydedilebilir. 2B grafiklerde kaydırmak için sürükleyin;
 yakınlaştırmak için tekerleği ya da + ve − düğmelerini kullanın; kutu aracı çizilen
 kutuya yakınlaştırır; çift tıklama görünümü sıfırlar.
 
@@ -123,8 +163,9 @@ görünümlerin ağını belirler.
 ## Girdi biçimleri
 
 - Ayraçlı metin nokta bulutları: `.txt`, `.xyz`, `.asc`, `.csv`; x y z olmak üzere üç
-  sütun, yaygın herhangi bir ayraç; başlık satırları *Atlanacak başlık satırları*
-  (Ayarlar) ile atlanır. Birimler dosyanınkilerdir; makalenin verileri mikrometredir.
+  sütun, yaygın herhangi bir ayraç. Dosyanın başındaki metin satırları (sütun adları, cihaz
+  bilgileri) kendiliğinden atlanır; *Atlanacak başlık satırları* (Ayarlar) sayılarını elle
+  belirler. Birimler dosyanınkilerdir; makalenin verileri mikrometredir.
 - ISO 25178-72 X3P dosyaları (`.x3p`); yüklenirken mikrometreye çevrilir.
 
 X3P yolunu bir cihaz dosyası olmadan denemek için `python tests/make_test_x3p.py`
@@ -138,31 +179,35 @@ gerisi varsayılan değerlerdeyken analiz edin; günlüğün ilk satırlarında 
 
 1. Nokta bulutunu **Aç**ın (ya da pencereye bırakın).
 2. Ayarları varsayılan değerlerinde bırakın; bunlar makalede kullanılan değerlerdir.
-   *Ayarlar* (şerit) bunları listeler: Voksel boyutu 5, Düzlem bandı 2,5 ortanca mutlak
+   *Ayarlar* (şerit) bunları listeler: Voksel boyutu 5, Çevre yüzey bandı 2,5 ortanca mutlak
    sapma, Kanal boyunca kırpma payı 180, Kanal enine kırpma payı 100, derinliğin 0,10'u
    Ağız seviyesi ve 0,90'ı Taban seviyesi, kanal genişliğinin 0,5'i Taban pürüzlülük
-   şeridi genişliği, Taban pürüzlülük şeridi uzunluğu 4000, Düzlem pürüzlülük şeridi
+   şeridi genişliği, Taban pürüzlülük şeridi uzunluğu 4000, Çevre yüzey pürüzlülük şeridi
    genişliği 400 ve uzunluğu 4000; *Gelişmiş* altında: Kenar payı 100, Gösterim hücre
-   boyutu 0 (otomatik), Gösterim yumuşatma 0, Derinlik profili dilimleri 80, Atlanacak
+   boyutu 0 (otomatik), Gösterim yumuşatması 0, Derinlik profili dilimleri 80, Atlanacak
    başlık satırları 0. Birimler dosyanınkilerdir. Değiştirilen değerler işaretlenir ve
    durum çubuğu kaçının makaledekinden farklı olduğunu söyler; *Makaledeki değerler*
    bunları geri getirir; *Kaydet* ve *Yükle* bir JSON ayar dosyası yazar ve okur;
    değerler bilgisayarda hatırlanır.
-3. **Analiz et**. Özellikler genişlikleri, derinliği, duvar açısını, köşe yuvarlaklığını,
-   uzunlukları, pürüzlülüğü ve hizalamayı gösterir; tarayıcı görünümleri listeler:
+3. **Analiz et**. Özellikler genişlikleri, derinliği, yan duvar açısını, köşe yuvarlaklığını,
+   uzunlukları, pürüzlülüğü ve hizalamayı gösterir; model ağacı görünümleri listeler:
    *Hizalama*, *Kanal tespiti*, *Profiller* (taban genişliği ve ağız seviyeleri, duvar
-   konumları ve orta duvar çizgileriyle ortalama kesit ve her dilimin derinliği; ızgara
+   konumları ve orta yan duvar çizgileriyle ortalama kesit ve her dilimin derinliği; ızgara
    çizgisi başına genişlik ve uzunluk; merkez çizgileri), *3B görünüm* ve *Pürüzlülük
-   alanları*. Günlük kalan eğikliği, her duvarın açısını, köşe yuvarlaklığını, kullanılan
+   alanları*. *Profiller* altındaki *Seçilen konumda kesit*, kanalı boyunca herhangi bir
+   noktada dik keser: kanalın bir ucundan (ölçülen taban seviyesi uçları) ötekine giden bir
+   kaydırıcı, ya da uzunluğun oranı (0 ile 1 arası) veya baştan mikrometre olarak yazılan
+   konum; profil, konuma bir voksel uzaklıktaki noktalardan okunur, karşılaştırma için
+   ortalama kesitle birlikte gösterilir ve CSV olarak kaydedilebilir. Günlük kalan eğikliği, her duvarın açısını, köşe yuvarlaklığını, kullanılan
    ızgara çizgilerini ve varsa kalite denetim uyarılarını listeler.
 
    Geometrinin nasıl okunduğu: derinlik, kanalın tamamının ortalama kesitinden gelir.
-   Genişlikler, duvar açısı ve köşe yuvarlaklığı kanal enine ızgara çizgileri üzerinde
+   Genişlikler, yan duvar açısı ve köşe yuvarlaklığı kanal enine ızgara çizgileri üzerinde
    okunur (bir voksellik hücreler, iki voksel arayla çizgiler, kanalın ortadaki %80'i
    üzerinde): her çizgide bir seviyedeki duvar, merkez çizgisinden dışarı doğru
    ilerlerken yükseklik profilinin o seviyenin ilk kez üstüne çıktığı yerdir; çevresindeki
    iki ızgara noktası arasında ara değerlenir ve her değer çizgiler üzerinden ortancadır.
-   Genişlikler derinliğin %90, %50 ve %10'unda alınır. Duvar açısı, derinliğin %25 ile
+   Genişlikler derinliğin %90, %50 ve %10'unda alınır. Yan duvar açısı, derinliğin %25 ile
    %75'i arasındaki duvar konumlarından geçen bir doğrudur ve düşeyden ölçülür (alttan
    oyuk bir duvarda negatiftir); düşeye 3°'den yakın bir duvar 3°'nin altında olarak
    bildirilir, çünkü o durumda çözümlenemeyecek kadar az hücreye yayılır. Köşe
@@ -171,7 +216,7 @@ gerisi varsayılan değerlerdeyken analiz edin; günlüğün ilk satırlarında 
    uç dışarıdan içeriye doğru okunur; dışa aktarılan kırpım iki ucu ve kırpma payını
    kapsar.
 4. **Kırpımı kaydet**, yataylanmış, hizalanmış, voksellerle seyreltilmiş kırpımı kaydeder
-   (mikrometre cinsinden x y z, düzlem z = 0'da, kanal x boyunca, ortalanmış). **A olarak
+   (mikrometre cinsinden x y z, çevre yüzey z = 0'da, kanal x boyunca, ortalanmış). **A olarak
    ata** ve **B olarak ata** aynı kırpımı doğrudan karşılaştırma yuvalarına yerleştirir.
    Bu kırpımlar İş akışı B'nin girdileridir.
 
@@ -190,11 +235,12 @@ gerisi varsayılan değerlerdeyken analiz edin; günlüğün ilk satırlarında 
    gösterir; B için korunan yönü, ızgarayı ve kanal içi maskenin boyutunu belirtir.
    Araç sayıları ve haritaları verir, yorumlamayı kullanıcıya bırakır; makale bir kabul
    eşiği tanımlamaz. Görünümler şunlardır: 3B'de *A yüzeyi* ve *B yüzeyi*, B yüzeyi
-   üzerinde 3B çizilmiş *Eğim hatası*, ve *Yükseklik ve eğim haritaları*: iki yüzeyin
-   yükseklik ve eğim büyüklüğü haritaları, işaretli yükseklik farkı B − A ve işaretsiz eğim
-   hatası, kanal içi maskenin sınırıyla birlikte. Günlük, B'nin hangi yönünün korunduğunu,
+   üzerinde 3B çizilmiş *Eğim hatası*, *Yükseklik haritaları* (A, B ve işaretli fark B − A)
+   ve *Eğim haritaları* (A ile B'nin eğim büyüklükleri ve işaretsiz eğim hatası), her biri
+   kanal içi maskenin sınırıyla, ve tek yüzeydeki gibi kanal boyunca seçilen bir konumda
+   *A ve B kesitleri*. İki harita görünümü birlikte yakınlaştırılır ve kaydırılır. Günlük, B'nin hangi yönünün korunduğunu,
    geçerli hücre oranını ve maske boyutunu belirtir; ölçüt tablosu korunan yöne aittir.
-4. **Toplu işlem**: *Toplu dosyalar…* ile birden çok dosya seçin ve **Topluyu çalıştır**'a
+4. **Toplu işlem**: *Toplu dosyalar…* ile birden çok dosya seçin ve **Toplu karşılaştır**'a
    tıklayın. *Toplu sonuçlar* görünümü her dosya için RQ, RQdx, RQdy ve RQd değerlerini
    listeler; *Göster* bir çifti şekilleri için yeniden çalıştırır.
 
@@ -207,12 +253,28 @@ seçilen 5 µm'de bildirir.
 - **Şekil**: herhangi bir şekil, SVG ya da PNG (2× veya 3×) olarak; belgeler için açık
   temada ya da geçerli temada; metni arayüz dilinde, İngilizce ya da Türkçe; seçilen
   boyutta. Şekil o boyutta eksenler ve renk çubuğuyla yeniden oluşturulur; böylece
-  etiketler ve çizgi kalınlıkları okunaklı kalır. Bir görünümün altındaki kamera düğmesi
-  onu ekranda göründüğü gibi PNG olarak kaydeder.
+  etiketler ve çizgi kalınlıkları okunaklı kalır; altı karşılaştırma haritası tek bir şekil
+  olarak da dışa aktarılabilir. Bir görünümün altındaki kamera düğmesi onu ekranda göründüğü
+  gibi PNG olarak kaydeder.
 - **Sonuçlar (JSON)**: oturumun bütün sayıları, bütün ayarları ve çizgi ile dilim başına
   serileri; yazılım ve çalışma ortamı sürümleriyle.
 - **Sonuçlar (CSV)**: analiz edilen her yüzey için bir satır ve her karşılaştırma için bir
   satır.
+- **Rapor** (Dışa aktar ya da Dosya menüsü): her sonuç için yazdırılabilir bir sayfa:
+  Özellikler bölmesindeki sayılar, ayarlar (makaledekinden farklı olanlar kalın) ve açık
+  temada ana şekiller. İletişim kutusundan yazdırılabilir ya da PDF olarak kaydedilebilir,
+  veya bir HTML dosyası olarak kaydedilebilir.
+- **Oturum** (Dosya, *Oturumu kaydet*, Ctrl+S): analiz motorunun tuttuğu bütün sonuçları,
+  oturum kaydını, ayarları ve A ile B yüzeylerini içeren bir `.marq` dosyası. *Oturum aç*
+  ya da dosyayı pencereye bırakmak, sonuçları yeni bir analiz olmadan geri getirir:
+  görüntülenebilir, dışa aktarılabilir, yeniden karşılaştırılabilir ve başka bir temada ya
+  da dilde yeniden oluşturulabilirler. Dosya yalnızca veri içerir (JSON ve NumPy dizileri);
+  çalıştırılan hiçbir şey içermez.
+
+Kaydederken yer sorulur: Chrome ve Edge, son kaydın klasöründe sistemin kaydetme penceresini
+açar; Firefox ve Safari dosyayı indirme klasörlerine kaydeder ve durum çubuğu dosyanın adını
+söyler. Bazı sonuçlar ne oturum ne de JSON ya da CSV olarak kaydedilmişken MaRQ kapatılırsa
+önce sorulur.
 
 JSON ve CSV dosyaları, arayüz dili ne olursa olsun İngilizce ve ondalık noktalıdır; böylece
 her tabloda ve betikte aynı biçimde okunurlar.
@@ -229,9 +291,10 @@ her tabloda ve betikte aynı biçimde okunurlar.
 | `rq_gradient_core.py` | Çift modülü: çakıştırma, RQ, RQdx, RQdy, RQd, hata haritaları |
 | `x3p_loader.py` | ISO 25178-72 X3P okuyucu |
 | `plots.py` | Plotly şekil oluşturucuları ve çevirileri |
-| `MaRQ.exe`, `MaRQ.command`, `MaRQ.sh`, `launchers/` | Hiçbir kurulum gerektirmeyen başlatıcılar (Windows; macOS; Linux); `launcher/main.go` dosyasından `tools/build_launchers.py` ile derlenir |
+| `MaRQ.exe`, `MaRQ.command`, `MaRQ.sh`, `launchers/` | Hiçbir kurulum gerektirmeyen başlatıcılar (Windows; macOS; Linux); `launcher/` klasöründeki Go kaynaklarından `tools/build_launchers.py` ile derlenir |
 | `MaRQ.bat`, `run_marq.py` | Python 3 üzerinden yedek başlatıcılar |
-| `tests/e2e_check.py`, `tests/e2e_synthetic.py` | Çalışan bir MaRQ'nun örnek verilere ya da yapay bir kanala karşı tarayıcı testleri |
+| `tests/e2e_check.py`, `tests/e2e_synthetic.py`, `tests/e2e_features.py` | Çalışan bir MaRQ'ın tarayıcı testleri: sayılar örnek verilere ya da yapay bir kanala karşı, arayüz yapay bir iç kalıp ve parça üzerinde |
+| `tests/launcher_check.py` | Bir başlatıcının tarayıcısız testi: sunduğu dosyalar, klasör başına tek MaRQ, son pencere kapanınca durma |
 | `vendor/` | Çevrimdışı kullanım için gömülü Plotly.js, three.js ve NumPy ile SciPy içeren Pyodide çalışma ortamı |
 | `tools/fetch_vendor.py` | Paketi sabitlenmiş sürümlerde yeniden indirir ve doğrular |
 | `tools/make_icons.py` | Simgeyi (`logo.svg`) başlatıcıların ve sayfanın kullandığı her boyutta çizer |

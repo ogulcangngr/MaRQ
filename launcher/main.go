@@ -6,10 +6,16 @@
 //
 // Build for every system with tools/build_launchers.py. Usage:
 //
-//	MaRQ.exe                 picks a free port from 8000 upward
+//	MaRQ.exe                 picks a free port from 8000 upward; if MaRQ already runs from
+//	                         this folder, opens a window to it instead of a second server
 //	MaRQ.exe 8080            a specific port
 //	MaRQ.exe --dir PATH      serve another MaRQ folder
 //	MaRQ.exe --tab           open a tab of the default browser instead of a window
+//	MaRQ.exe --stay          keep running after the last MaRQ window has closed
+//
+// MaRQ stops, and its console window closes, a few seconds after its last window has closed:
+// every MaRQ page says it is alive every 20 s and goodbye when it closes (a reload says hello
+// again within the few seconds).
 //
 // MARQ_NO_BROWSER=1 starts the server without opening a browser (tests); MARQ_BROWSER_TAB=1
 // is the same as --tab.
@@ -17,8 +23,10 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -28,6 +36,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -98,20 +107,62 @@ func appDir(arg string) (string, error) {
 	return "", errors.New("not found")
 }
 
-func listen(port int) (net.Listener, error) {
+// listen takes the first free port from 8000 upward. A port held by MaRQ serving this same
+// folder is returned as a URL instead, so the caller opens a window to that MaRQ: a second
+// double-click does not start a second server on another port (where the settings, which the
+// browser remembers per port, would be missing).
+func listen(port int, root string) (net.Listener, string, error) {
 	if port > 0 {
-		return net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(port))
+		l, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(port))
+		return l, "", err
 	}
 	for p := 8000; p < 8050; p++ {
 		if l, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(p)); err == nil {
-			return l, nil
+			return l, "", nil
+		}
+		if u := runningMaRQ(p, root); u != "" {
+			return nil, u, nil
 		}
 	}
-	return net.Listen("tcp", "127.0.0.1:0") // any free port
+	l, err := net.Listen("tcp", "127.0.0.1:0") // any free port
+	return l, "", err
 }
 
-// appBrowser finds a Chromium-based browser that can show a page as an application window.
-func appBrowser() (string, bool) {
+// identity answers /__marq, so a later start can recognise this server.
+type identity struct {
+	App     string `json:"app"`
+	Version string `json:"version"`
+	Dir     string `json:"dir"`
+}
+
+func runningMaRQ(port int, root string) string {
+	u := fmt.Sprintf("http://127.0.0.1:%d/", port)
+	c := http.Client{Timeout: 1500 * time.Millisecond}
+	resp, err := c.Get(u + "__marq")
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	var id identity
+	if resp.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(resp.Body, 8192)).Decode(&id) != nil || id.App != "MaRQ" {
+		return ""
+	}
+	a, b := filepath.Clean(id.Dir), filepath.Clean(root)
+	if a == b || (runtime.GOOS != "linux" && strings.EqualFold(a, b)) {
+		return u
+	}
+	return ""
+}
+
+// The browsers that can show a page as an application window, in order of preference; the
+// default browser of the user comes first when it is one of them.
+type browser struct {
+	key   string
+	paths []string
+}
+
+func browsers() []browser {
+	var list []browser
 	switch runtime.GOOS {
 	case "windows":
 		var bases []string
@@ -120,27 +171,71 @@ func appBrowser() (string, bool) {
 				bases = append(bases, b)
 			}
 		}
-		for _, rel := range []string{`Google\Chrome\Application\chrome.exe`, `Microsoft\Edge\Application\msedge.exe`,
-			`BraveSoftware\Brave-Browser\Application\brave.exe`, `Chromium\Application\chrome.exe`} {
-			for _, b := range bases {
-				if p := filepath.Join(b, rel); fileExists(p) {
-					return p, true
-				}
+		for _, kr := range [][2]string{{"chrome", `Google\Chrome\Application\chrome.exe`}, {"edge", `Microsoft\Edge\Application\msedge.exe`},
+			{"brave", `BraveSoftware\Brave-Browser\Application\brave.exe`}, {"chromium", `Chromium\Application\chrome.exe`}} {
+			b := browser{key: kr[0]}
+			for _, base := range bases {
+				b.paths = append(b.paths, filepath.Join(base, kr[1]))
 			}
+			list = append(list, b)
 		}
 	case "darwin":
 		home, _ := os.UserHomeDir()
-		for _, app := range []string{"Google Chrome.app", "Microsoft Edge.app", "Chromium.app", "Brave Browser.app"} {
-			for _, dir := range []string{"/Applications", filepath.Join(home, "Applications")} {
-				if p := filepath.Join(dir, app); fileExists(p) {
-					return p, true
-				}
-			}
+		for _, kr := range [][2]string{{"chrome", "Google Chrome.app"}, {"edge", "Microsoft Edge.app"},
+			{"chromium", "Chromium.app"}, {"brave", "Brave Browser.app"}} {
+			list = append(list, browser{kr[0], []string{filepath.Join("/Applications", kr[1]), filepath.Join(home, "Applications", kr[1])}})
 		}
 	default:
-		for _, b := range []string{"google-chrome", "google-chrome-stable", "chromium", "chromium-browser",
-			"microsoft-edge", "microsoft-edge-stable", "brave-browser"} {
-			if p, err := exec.LookPath(b); err == nil {
+		for _, kr := range [][2]string{{"chrome", "google-chrome"}, {"chrome", "google-chrome-stable"}, {"chromium", "chromium"},
+			{"chromium", "chromium-browser"}, {"edge", "microsoft-edge"}, {"edge", "microsoft-edge-stable"}, {"brave", "brave-browser"}} {
+			if p, err := exec.LookPath(kr[1]); err == nil {
+				list = append(list, browser{kr[0], []string{p}})
+			}
+		}
+	}
+	if d := defaultBrowser(); d != "" {
+		var first, rest []browser
+		for _, b := range list {
+			if b.key == d {
+				first = append(first, b)
+			} else {
+				rest = append(rest, b)
+			}
+		}
+		list = append(first, rest...)
+	}
+	return list
+}
+
+// defaultBrowser names the default web browser when it is Chromium-based ("" otherwise, or
+// when unknown): from the Windows registry, or from xdg-settings on Linux.
+func defaultBrowser() string {
+	var out []byte
+	switch runtime.GOOS {
+	case "windows":
+		out, _ = exec.Command("reg", "query", `HKCU\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice`, "/v", "ProgId").Output()
+	case "linux":
+		out, _ = exec.Command("xdg-settings", "get", "default-web-browser").Output()
+	}
+	s := strings.ToLower(string(out))
+	switch {
+	case strings.Contains(s, "chromehtml") || strings.Contains(s, "google-chrome"):
+		return "chrome"
+	case strings.Contains(s, "msedgehtm") || strings.Contains(s, "microsoft-edge"):
+		return "edge"
+	case strings.Contains(s, "brave"):
+		return "brave"
+	case strings.Contains(s, "chromium"):
+		return "chromium"
+	}
+	return ""
+}
+
+// appBrowser finds a Chromium-based browser that can show a page as an application window.
+func appBrowser() (string, bool) {
+	for _, b := range browsers() {
+		for _, p := range b.paths {
+			if fileExists(p) {
 				return p, true
 			}
 		}
@@ -159,13 +254,14 @@ func openWindow(url string) bool {
 	if !ok {
 		return false
 	}
-	args := []string{"--app=" + url, "--start-maximized"}
+	args := []string{"--app=" + url, "--start-maximized", "--no-first-run", "--no-default-browser-check"}
 	var cmd *exec.Cmd
 	if runtime.GOOS == "darwin" {
 		cmd = exec.Command("open", append([]string{"-na", p, "--args"}, args...)...)
 	} else {
 		cmd = exec.Command(p, args...)
 	}
+	detach(cmd) // Ctrl+C or closing the terminal stops MaRQ, not the browser
 	return cmd.Start() == nil
 }
 
@@ -191,23 +287,101 @@ func openBrowser(url string) error {
 			return errors.New("no browser command found")
 		}
 	}
+	detach(cmd)
 	return cmd.Start()
 }
 
-type handler struct{ root string }
+type handler struct {
+	root  string
+	port  int
+	pages *pages
+}
+
+// pages tracks the open MaRQ windows.
+type pages struct {
+	mu    sync.Mutex
+	seen  map[string]time.Time
+	ever  bool
+	empty time.Time
+}
+
+func (ps *pages) alive(id string) {
+	ps.mu.Lock()
+	ps.seen[id] = time.Now()
+	ps.ever = true
+	ps.mu.Unlock()
+}
+
+func (ps *pages) bye(id string) {
+	ps.mu.Lock()
+	delete(ps.seen, id)
+	ps.mu.Unlock()
+}
+
+// watch returns once no MaRQ page has been open for the grace time. A page that stopped saying
+// it is alive without a goodbye (a crashed browser) is dropped after five minutes; a hidden
+// page still says it every minute at least.
+func (ps *pages) watch(grace time.Duration) {
+	for range time.Tick(time.Second) {
+		ps.mu.Lock()
+		now := time.Now()
+		for id, t := range ps.seen {
+			if now.Sub(t) > 5*time.Minute {
+				delete(ps.seen, id)
+			}
+		}
+		done := false
+		if !ps.ever || len(ps.seen) > 0 {
+			ps.empty = time.Time{}
+		} else if ps.empty.IsZero() {
+			ps.empty = now
+		} else if now.Sub(ps.empty) >= grace {
+			done = true
+		}
+		ps.mu.Unlock()
+		if done {
+			return
+		}
+	}
+}
 
 func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// only requests for this server by its own name: a web page that points another host name
+	// at 127.0.0.1 (DNS rebinding) cannot read the folder
+	if r.Host != "127.0.0.1:"+strconv.Itoa(h.port) && r.Host != "localhost:"+strconv.Itoa(h.port) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	p := r.URL.Path
+	if r.Method == http.MethodPost && (p == "/__alive" || p == "/__bye") {
+		if id := r.URL.Query().Get("id"); id != "" && len(id) < 100 {
+			if p == "/__alive" {
+				h.pages.alive(id)
+			} else {
+				h.pages.bye(id)
+			}
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	p := r.URL.Path
 	if p == "/" {
 		p = "/index.html"
 	}
-	if strings.Contains(p, "..") {
-		http.NotFound(w, r)
+	if p == "/__marq" {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+		json.NewEncoder(w).Encode(identity{"MaRQ", version, h.root})
 		return
+	}
+	for _, seg := range strings.Split(p, "/") {
+		if strings.HasPrefix(seg, ".") || strings.Contains(seg, `\`) { // "..", hidden files (.git)
+			http.NotFound(w, r)
+			return
+		}
 	}
 	full := filepath.Join(h.root, filepath.FromSlash(strings.TrimPrefix(p, "/")))
 	f, err := os.Open(full)
@@ -217,7 +391,7 @@ func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer f.Close()
 	st, err := f.Stat()
-	if err != nil || st.IsDir() {
+	if err != nil || !st.Mode().IsRegular() {
 		http.NotFound(w, r)
 		return
 	}
@@ -226,13 +400,20 @@ func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		ct = "application/octet-stream"
 	}
 	w.Header().Set("Content-Type", ct)
+	// The browser asks again every time and gets the file unless it holds exactly this one: the
+	// tag names the size and the modification time. A date comparison alone is not used, since a
+	// folder extracted from an older zip has older dates than the files the browser may hold
+	// from another MaRQ that was served on the same port.
 	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("ETag", fmt.Sprintf(`"%x-%x"`, st.Size(), st.ModTime().UnixNano()))
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	http.ServeContent(w, r, st.Name(), st.ModTime(), f)
+	r.Header.Del("If-Modified-Since")
+	r.Header.Del("If-Unmodified-Since")
+	http.ServeContent(w, r, st.Name(), time.Time{}, f)
 }
 
 func main() {
-	port, dirArg, tab := 0, "", os.Getenv("MARQ_BROWSER_TAB") != ""
+	port, dirArg, tab, stay := 0, "", os.Getenv("MARQ_BROWSER_TAB") != "", false
 	args := os.Args[1:]
 	for i := 0; i < len(args); i++ {
 		a := args[i]
@@ -242,14 +423,16 @@ func main() {
 			i++
 		case a == "--tab":
 			tab = true
+		case a == "--stay":
+			stay = true
 		case a == "-h" || a == "--help":
 			fmt.Println("MaRQ launcher " + version + ": serves the MaRQ folder on 127.0.0.1 and opens MaRQ in its own window.")
-			fmt.Println("Usage: MaRQ [port] [--dir FOLDER] [--tab]")
+			fmt.Println("Usage: MaRQ [port] [--dir FOLDER] [--tab] [--stay]")
 			return
 		default:
 			n, err := strconv.Atoi(a)
 			if err != nil || n < 1 || n > 65535 {
-				fail("Unknown argument: " + a + "\nUsage: MaRQ [port] [--dir FOLDER] [--tab]")
+				fail("Unknown argument: " + a + "\nUsage: MaRQ [port] [--dir FOLDER] [--tab] [--stay]")
 			}
 			port = n
 		}
@@ -261,14 +444,27 @@ func main() {
 			fail(err.Error())
 		}
 		fail("The MaRQ files (index.html, worker.js) are not next to this program.\n\n" +
-			"If you opened the downloaded zip file directly, extract it first\n" +
-			"(Windows: right-click the zip, Extract All; macOS: double-click the zip),\n" +
-			"then start MaRQ from the extracted \"software\" folder.")
+			"- If you opened the downloaded zip file directly, extract it first\n" +
+			"  (Windows: right-click the zip, Extract All; macOS: double-click the zip),\n" +
+			"  then start MaRQ from the extracted folder.\n" +
+			"- If this program was copied somewhere else (the Desktop, for example), start it\n" +
+			"  from the MaRQ folder instead. For an icon on the Desktop, make a shortcut:\n" +
+			"  right-click MaRQ.exe, Send to, Desktop (create shortcut).")
 	}
 
-	l, err := listen(port)
+	setTitle("MaRQ " + version + " - close this window to stop MaRQ")
+	l, running, err := listen(port, root)
 	if err != nil {
 		fail(fmt.Sprintf("Port %d is in use or not allowed (%v).\nStart MaRQ without a port number, or with another one.", port, err))
+	}
+	if running != "" {
+		fmt.Println("MaRQ is already running from this folder, at " + running)
+		if os.Getenv("MARQ_NO_BROWSER") == "" && (tab || !openWindow(running)) {
+			openBrowser(running)
+		}
+		fmt.Println("A new MaRQ window opens; this window closes by itself.")
+		time.Sleep(4 * time.Second)
+		return
 	}
 	url := fmt.Sprintf("http://127.0.0.1:%d/", l.Addr().(*net.TCPAddr).Port)
 
@@ -277,12 +473,32 @@ func main() {
 	fmt.Println("  MaRQ is running at   " + url)
 	fmt.Println("  Folder               " + root)
 	fmt.Println()
-	fmt.Println("  Keep this window open while you use MaRQ; close it to stop MaRQ.")
+	// tests start the server without a browser and keep it; MARQ_AUTOSTOP=seconds tests the stop
+	grace := 4 * time.Second
+	autoStop := !stay && os.Getenv("MARQ_NO_BROWSER") == ""
+	if n, err := strconv.Atoi(os.Getenv("MARQ_AUTOSTOP")); err == nil && n > 0 {
+		autoStop, grace = !stay, time.Duration(n)*time.Second
+	}
+	if autoStop {
+		fmt.Println("  MaRQ stops, and this window closes, when its last window is closed;")
+		fmt.Println("  closing this window stops MaRQ too.")
+	} else {
+		fmt.Println("  Keep this window open while you use MaRQ; close it to stop MaRQ.")
+	}
 	fmt.Println("  Nothing is installed and no data leave this computer: the analysis runs in")
 	fmt.Println("  your browser, this program only hands it the files of the MaRQ folder.")
 	fmt.Println()
 
-	srv := &http.Server{Handler: handler{root}, ReadHeaderTimeout: 30 * time.Second}
+	ps := &pages{seen: map[string]time.Time{}}
+	srv := &http.Server{Handler: handler{root, l.Addr().(*net.TCPAddr).Port, ps}, ReadHeaderTimeout: 30 * time.Second}
+	if autoStop {
+		go func() {
+			ps.watch(grace)
+			fmt.Println("\nMaRQ stopped: its last window was closed.")
+			srv.Close()
+			os.Exit(0)
+		}()
+	}
 	go func() {
 		if err := srv.Serve(l); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			fail("The server stopped: " + err.Error())

@@ -1,20 +1,21 @@
 """Build the MaRQ launchers (launcher/main.go) for every system, so that MaRQ starts
-without Python. Needs Go (https://go.dev/dl/; no installation needed, the unpacked
-folder is enough):
+without Python. Needs Go 1.24 (https://go.dev/dl/; no installation needed, the unpacked
+folder is enough). Go 1.24 is the last version whose macOS programs run on macOS 11; with
+a newer Go the macOS launchers need macOS 12 or 13, and this script says so.
 
     python tools/build_launchers.py [path/to/go]
 
 Writes, from the MaRQ folder:
     MaRQ.exe                       Windows 10/11 (x64; runs on Windows on Arm too)
-    launchers/marq-macos-arm64     macOS 12+ on Apple silicon (ad-hoc signed by the Go linker)
-    launchers/marq-macos-x64       macOS 12+ on Intel
+    launchers/marq-macos-arm64     macOS 11+ on Apple silicon (ad-hoc signed by the Go linker)
+    launchers/marq-macos-x64       macOS 11+ on Intel
     launchers/marq-linux-x64       Linux on x86-64
     launchers/marq-linux-arm64     Linux on Arm (Raspberry Pi 4/5, Arm laptops)
 The builds are reproducible (no build paths or build ids in the binaries), so a rebuild
 from the same source and Go version gives the same files. MaRQ.command and MaRQ.sh pick
 the right macOS or Linux binary.
 """
-import os, sys, shutil, hashlib, subprocess
+import os, sys, shutil, hashlib, struct, subprocess
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GO = sys.argv[1] if len(sys.argv) > 1 else (shutil.which("go") or "go")
@@ -29,6 +30,24 @@ TARGETS = [("windows", "amd64", "MaRQ.exe"),
 # MaRQ.exe. That file is kept in the repository; to remake it after changing the icon or the
 # version: go install github.com/tc-hib/go-winres@latest, then in launcher/:
 #     go-winres make --in winres/winres.json --arch amd64
+
+
+def macos_minimum(path):
+    """The oldest macOS a Mach-O program runs on (its LC_BUILD_VERSION), as text."""
+    b = open(path, "rb").read()
+    if b[:4] != bytes.fromhex("cffaedfe"):
+        return ""
+    off = 32
+    for _ in range(struct.unpack_from("<I", b, 16)[0]):
+        cmd, size = struct.unpack_from("<II", b, off)
+        if cmd == 0x32:
+            v = struct.unpack_from("<I", b, off + 12)[0]
+            note = "" if (v >> 16) <= 11 else "  (the README says 11; build with Go 1.24)"
+            return f"  macOS {v >> 16}.{(v >> 8) & 255}+{note}"
+        off += size
+    return ""
+
+
 ver = subprocess.run([GO, "version"], capture_output=True, text=True, check=True).stdout.strip()
 print(ver)
 os.makedirs(os.path.join(HERE, "launchers"), exist_ok=True)
@@ -38,4 +57,4 @@ for goos, arch, out in TARGETS:
     subprocess.run([GO, "build", "-trimpath", "-ldflags", "-s -w -buildid=", "-o", dst, "."],
                    cwd=os.path.join(HERE, "launcher"), env=env, check=True)
     h = hashlib.sha256(open(dst, "rb").read()).hexdigest()[:16]
-    print(f"  {out:30s} {os.path.getsize(dst) / 1e6:5.1f} MB  sha256 {h}")
+    print(f"  {out:30s} {os.path.getsize(dst) / 1e6:5.1f} MB  sha256 {h}{macos_minimum(dst)}")
