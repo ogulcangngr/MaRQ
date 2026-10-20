@@ -12,7 +12,7 @@ run_marq.py), so it never meets a MaRQ that is already running here. The pages a
 by the requests a MaRQ window sends: /__alive every 20 s, /__bye when it closes. Exit code 0
 when everything holds.
 """
-import os, re, sys, time, shutil, tempfile, threading, subprocess, http.client
+import os, re, sys, time, signal, shutil, tempfile, threading, subprocess, http.client
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -26,7 +26,7 @@ for n in ("index.html", "worker.js"):
 open(os.path.join(stub, ".hidden"), "w").write("not to be served")
 if args == ["--python"]:
     shutil.copy2(os.path.join(ROOT, "run_marq.py"), stub)
-    cmd = [sys.executable, os.path.join(stub, "run_marq.py")]
+    cmd = [sys.executable, "-X", "faulthandler", os.path.join(stub, "run_marq.py")]
 else:
     cmd = args + ["--dir", stub]
     if cmd[0].lower().endswith(".exe"):
@@ -87,7 +87,10 @@ first = Run(MARQ_AUTOSTOP=str(GRACE))
 second = None
 try:
     m = first.find(r"http://127\.0\.0\.1:(\d+)/")
-    check("starts and names its address", m, m.group(0) if m else first.text()[-400:])
+    if not m and first.p.poll() is None and os.name != "nt":
+        first.p.send_signal(signal.SIGABRT)          # Python (faulthandler) and Go print where they wait
+        time.sleep(2)
+    check("starts and names its address", m, m.group(0) if m else "output: " + first.text()[-3000:])
     if not m:
         raise SystemExit(1)
     port = int(m.group(1))

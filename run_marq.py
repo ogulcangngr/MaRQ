@@ -22,6 +22,7 @@ import mimetypes
 import os
 import shutil
 import socket
+import socketserver
 import subprocess
 import sys
 import threading
@@ -151,13 +152,16 @@ def running_marq(port):
 class Server(http.server.ThreadingHTTPServer):
     """One server per port. On Windows the address reuse that http.server asks for lets a second
     server take a port that is in use, so a second start would not find the MaRQ already
-    running; there the port is taken exclusively instead."""
+    running; there the port is taken exclusively instead. The reverse name lookup of the
+    address that http.server makes on binding is left out: the server only answers 127.0.0.1,
+    and the lookup can take half a minute on a Mac whose name server is slow."""
     allow_reuse_address = sys.platform != "win32"
 
     def server_bind(self):
         if sys.platform == "win32" and hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
-        super().server_bind()
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
 
 
 def serve(port):
