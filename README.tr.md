@@ -235,7 +235,7 @@ gerisi varsayılan değerlerdeyken analiz edin; günlüğün ilk satırlarında 
    gösterir; B için korunan yönü, ızgarayı ve kanal içi maskenin boyutunu belirtir.
    Araç sayıları ve haritaları verir, yorumlamayı kullanıcıya bırakır; makale bir kabul
    eşiği tanımlamaz. Görünümler şunlardır: 3B'de *A yüzeyi* ve *B yüzeyi*, B yüzeyi
-   üzerinde 3B çizilmiş *Eğim hatası*, *Yükseklik haritaları* (A, B ve işaretli fark B − A)
+   üzerinde 3B çizilmiş *Eğim hatası*, *Yükseklik haritaları* (A, B ve işaretli fark A − B)
    ve *Eğim haritaları* (A ile B'nin eğim büyüklükleri ve işaretsiz eğim hatası), her biri
    kanal içi maskenin sınırıyla, ve tek yüzeydeki gibi kanal boyunca seçilen bir konumda
    *A ve B kesitleri*. İki harita görünümü birlikte yakınlaştırılır ve kaydırılır. Günlük, B'nin hangi yönünün korunduğunu,

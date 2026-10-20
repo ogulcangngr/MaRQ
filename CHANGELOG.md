@@ -80,7 +80,7 @@ so every downstream number was recomputed.
     module is unavailable.
   - 2D plots: drag pans and the wheel zooms; a box-zoom tool; the comparison maps zoom
     and pan together, also at true proportions; plots follow the size of their pane.
-  - Labels in words instead of symbols (Height, Difference B − A, Slope A, Slope error;
+  - Labels in words instead of symbols (Height, Difference A − B, Slope A, Slope error;
     RQ<sub>d</sub> typeset); plot titles moved to the viewport caption.
   - Colour scales are passed as explicit stops: Plotly.js does not know Plasma, Magma,
     Inferno or Turbo by name, so in 1.0 before this change those palettes, and the
@@ -168,7 +168,7 @@ so every downstream number was recomputed.
     from the session. The engine holds the newest six analyses (an older one stays
     viewable); a new theme or language rebuilds the analysis on screen at once and the
     others when they are opened. Sessions keep every analysis held.
-  - The comparison maps are two views, *Height maps* (A, B, B − A) and *Slope maps* (A, B,
+  - The comparison maps are two views, *Height maps* (A, B, A − B) and *Slope maps* (A, B,
     slope error), one map per row; the six-map figure of the paper stays in the export
     dialog and the report. The three maps of a view are linked by Plotly itself and the
     mask outline is drawn as ready line segments, so a zoom or pan moves all three at once

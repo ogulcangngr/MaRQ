@@ -23,7 +23,8 @@ for path, extra in ((INS, []), (PART, ["--part"])):
         subprocess.run([sys.executable, os.path.join(HERE, "make_test_channel.py"), path, *extra], check=True)
 KEYS = ("r_z", "r_gx", "r_gy", "r_mag")
 tmp = tempfile.mkdtemp(prefix="marq_features_")
-results, errors = [], []
+results, errors, cut_off = [], [], []
+phase = [""]                                     # "reload" while a page reload is under way
 
 
 def check(label, good, info=""):
@@ -56,12 +57,13 @@ with sync_playwright() as p:
     host = a.url.split("/")[2]
     ctx.route("**/*", lambda r: r.continue_() if r.request.url.split("/")[2] == host else r.abort())
     page = ctx.new_page()
-    page.on("pageerror", lambda e: errors.append(str(e)))
+    # requests that a reload cuts off are no errors of the page (WebKit on macOS reports them)
+    page.on("pageerror", lambda e: (cut_off if phase[0] == "reload" else errors).append(str(e)))
     page.on("dialog", lambda d: d.accept())
     t0 = time.time()
     page.goto(a.url)
     page.evaluate("() => { localStorage.clear(); localStorage.setItem('marq.lang', 'en'); }")
-    page.reload(); wait(page, "() => ready")
+    phase[0] = "reload"; page.reload(); wait(page, "() => ready"); phase[0] = ""
     print(f"[{a.browser}] ready in {time.time() - t0:.0f} s")
 
     # two analyses, kept as A and B, compared
@@ -147,7 +149,7 @@ with sync_playwright() as p:
     check("session file", {"marq_session.json", "rq_gradient.json", "rq_gradient.npz", "slot_A.txt", "slot_B.txt"} <= names
           and sum(n.startswith("pvisual_") and n.endswith(".npz") for n in names) == 2, f"{os.path.getsize(sess) / 1e6:.1f} MB")
     check("results saved", page.evaluate("() => resultCount() === _savedCount"))
-    page.reload(); wait(page, "() => ready")
+    phase[0] = "reload"; page.reload(); wait(page, "() => ready"); phase[0] = ""
     page.set_input_files("#session-input", sess)
     wait(page, "() => _figs.rq_gradient && _figs.pvisual && !_restoring", 300); time.sleep(1)
     m2 = page.evaluate("() => session.comparisons[0].metrics")
@@ -156,6 +158,8 @@ with sync_playwright() as p:
     check("compared again after opening it", abs(page.evaluate("() => session.comparisons[1].metrics.r_mag") - m["r_mag"]) < 1e-9)
     b.close()
 
+if cut_off:
+    print("   --  cut off by a reload (not counted):", cut_off[:3])
 check("no script errors", not errors, errors[:3])
 ok = all(results)
 print(f"[{a.browser}] {'PASS' if ok else 'FAIL'} ({sum(results)} of {len(results)})")

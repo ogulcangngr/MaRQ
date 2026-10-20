@@ -228,7 +228,7 @@ the reported depth is 60 µm.
    mask. The tool reports the numbers and the maps and leaves their interpretation to
    the user; the paper defines no acceptance thresholds. The views are *Surface A* and
    *Surface B* in 3D, the *Slope error* drawn in 3D on surface B, the *Height maps* (A, B
-   and the signed difference B − A) and the *Slope maps* (the slope magnitudes of A and B
+   and the signed difference A − B) and the *Slope maps* (the slope magnitudes of A and B
    and the unsigned slope error), each with the outline of the channel-interior mask, and
    the *Cross-sections of A and B* at a chosen position along the channel, as for one
    surface. The two map views zoom and pan together. The log states which orientation of B was kept, the

@@ -48,7 +48,7 @@ _CS = _scale("Viridis")             # height colour scale (palette selector)
 EQUAL = True                        # 1:1 axis scales on the 2D plots: a µm on x is a µm on y
 
 SLOPE_CS = _scale("Inferno")        # slope-magnitude maps and the slope error
-DIFF_CS  = _scale("Diverging")      # signed height difference B - A: blue below, red above
+DIFF_CS  = _scale("Diverging")      # signed height difference A - B (E_Z of the paper): blue below, red above
 FONT = '-apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", system-ui, "Ubuntu", "Droid Sans", sans-serif'   # the interface font of Visual Studio Code
 U = "µm"
 
@@ -736,7 +736,7 @@ def make_gradient_maps_fig(result, which=None):
     #        z    colourscale  zmin  zmax  name       decimals
     P = {"ZA": (ZA, _CS,      z0,   z1,   "Height A",          1),
          "ZB": (ZB, _CS,      z0,   z1,   "Height B",          1),
-         "EZ": (EZ, DIFF_CS,  -ez,  ez,   "Difference B − A",  1),
+         "EZ": (EZ, DIFF_CS,  -ez,  ez,   "Difference A − B",  1),
          "GA": (GA, SLOPE_CS, 0.0,  g1,   "Slope A",           3),
          "GB": (GB, SLOPE_CS, 0.0,  g1,   "Slope B",           3),
          "ED": (ED, SLOPE_CS, 0.0,  ed,   "Slope error",       3)}
@@ -752,8 +752,8 @@ def make_gradient_maps_fig(result, which=None):
             return {"y": (top + bot) / 2, "len": top - bot}
         if which == "height":
             cb = {"ZA": _cbar(f"Height ({U})", x=0.935, nticks=5, **span(1, 2), **small),
-                  "EZ": _cbar(f"B − A ({U})",  x=0.935, nticks=4, **span(3, 3), **small)}
-            lab = {"ZA": "Surface A", "ZB": "Surface B", "EZ": "B − A"}
+                  "EZ": _cbar(f"A − B ({U})",  x=0.935, nticks=4, **span(3, 3), **small)}
+            lab = {"ZA": "Surface A", "ZB": "Surface B", "EZ": "A − B"}
         else:
             cb = {"GA": _cbar("Slope (µm/µm)", x=0.935, nticks=5, **span(1, 2), **small),
                   "ED": _cbar("Error (µm/µm)", x=0.935, nticks=4, **span(3, 3), **small)}
@@ -771,10 +771,10 @@ def make_gradient_maps_fig(result, which=None):
             top, bot = rows[r0][1], rows[r1][0]
             return {"y": (top + bot) / 2, "len": top - bot}
         cb = {"ZA": _cbar(f"Height ({U})",  x=0.945, nticks=4, **span(1, 2), **small),
-              "EZ": _cbar(f"B − A ({U})",   x=0.945, nticks=3, **span(3, 3), **small),
+              "EZ": _cbar(f"A − B ({U})",   x=0.945, nticks=3, **span(3, 3), **small),
               "GA": _cbar("Slope (µm/µm)",  x=0.945, nticks=4, **span(4, 5), **small),
               "ED": _cbar("Error (µm/µm)",  x=0.945, nticks=3, **span(6, 6), **small)}
-        short = {"ZA": "Height A", "ZB": "Height B", "EZ": "B − A", "GA": "Slope A", "GB": "Slope B", "ED": "Error"}
+        short = {"ZA": "Height A", "ZB": "Height B", "EZ": "A − B", "GA": "Slope A", "GB": "Slope B", "ED": "Error"}
         ylabel  = {key: short[key] for key in order}
         headers = []
         title_note = "  |  1:1"
@@ -784,7 +784,7 @@ def make_gradient_maps_fig(result, which=None):
         rows = {1: [0.70, 1.0], 2: [0.35, 0.65], 3: [0.0, 0.30]}
         pos  = {"ZA": (1, 1), "GA": (1, 2), "ZB": (2, 1), "GB": (2, 2), "EZ": (3, 1), "ED": (3, 2)}
         cb = {"ZA": _cbar(f"Height ({U})",  x=0.43, y=0.675, len=0.62, **small),
-              "EZ": _cbar(f"B − A ({U})",   x=0.43, y=0.15,  len=0.30, **small),
+              "EZ": _cbar(f"A − B ({U})",   x=0.43, y=0.15,  len=0.30, **small),
               "GA": _cbar("Slope (µm/µm)",  x=1.0,  y=0.675, len=0.62, **small),
               "ED": _cbar("Error (µm/µm)",  x=1.0,  y=0.15,  len=0.30, **small)}
         row_label = {1: "Surface A", 2: "Surface B", 3: "Difference"}
@@ -903,7 +903,7 @@ _TR = {
     "Centre X per grid line along the channel": "Kanal boyunca her ızgara çizgisinde merkez X",
     "Centre Y per grid line across the channel": "Kanal enine her ızgara çizgisinde merkez Y",
     "Crop box (exported channel)": "Kırpma kutusu (dışa aktarılan kanal)",
-    "Difference B − A": "Fark B − A",
+    "Difference A − B": "Fark A − B",
     "Difference": "Fark",
     "Field left": "Sol çevre yüzey",
     "Field right": "Sağ çevre yüzey",
