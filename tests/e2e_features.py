@@ -107,11 +107,21 @@ with sync_playwright() as p:
     tree(page, "gradxs"); wait(page, "() => _xs && _xs.kind === 'rq_gradient' && _xs.d", 60)
     check("cross-sections of A and B", page.evaluate("() => document.getElementById('xs-plot').data.length") == 3)
 
-    # 3D, when the headless browser has WebGL
+    # 3D, when the headless browser has WebGL: the three.js viewport, or Plotly's 3D surface where
+    # three.js cannot start (no WebGL 2 in some headless browsers without a graphics card)
     webgl = page.evaluate("() => { try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch (e) { return false; } }")
+    mode = ""
     if webgl:
         tree(page, "view3d", ids[1]); time.sleep(1.5)
-        check("3D view drawn", page.evaluate("() => !!_viewer && _viewer._trace === _A[_curA].figs.view3d.data[0]"))
+        mode = page.evaluate("""() => _viewer && _viewer._trace === _A[_curA].figs.view3d.data[0] ? "three.js"
+            : _viewerFailed && (document.getElementById("viewer3d").data || []).length ? "Plotly" : "" """)
+        why = page.evaluate("() => (document.getElementById('log-box').value.match(/3D viewport unavailable[^\\n]*/) || [''])[0]")
+        check("3D view drawn", mode, mode + (f"; {why}" if mode == "Plotly" else ""))
+    if not webgl:
+        print("   --  3D view not checked: this headless browser has no WebGL")
+    elif mode == "Plotly":
+        print("   --  one-click cross-section not checked: it needs the three.js viewport")
+    else:
         tree(page, "gradA"); time.sleep(1.5)
         page.click('#navbar .navbtn[data-act="xsect"]'); time.sleep(0.3)
         hit = page.evaluate("() => { const v = _viewer; for (let y = 0.3; y <= 0.7; y += 0.01) for (let x = 0.3; x <= 0.7; x += 0.01) if (v.pick(x * v.w, y * v.h)) return [x, y]; return null; }")
@@ -121,8 +131,6 @@ with sync_playwright() as p:
         check("one-click cross-section in 3D", hit and page.is_visible("#section-panel")
               and page.evaluate("() => document.getElementById('section-plot').data.length") == 3)
         page.click('#navbar .navbtn[data-act="xsect"]'); time.sleep(0.3)
-    else:
-        print("   --  3D view not checked: this headless browser has no WebGL")
 
     # report
     page.click("#export-report"); wait(page, "() => document.getElementById('modal-report').style.display === 'flex'", 300)
