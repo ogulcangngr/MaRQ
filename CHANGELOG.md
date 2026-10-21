@@ -191,6 +191,15 @@ so every downstream number was recomputed.
   - Turkish: the field is *çevre yüzey* (it was *düzlem*, which also means a plane), the
     Browser *Model ağacı*, the wall angle *yan duvar açısı*, Run batch *Toplu karşılaştır*;
     MaRQ takes the suffixes of "mark" (MaRQ'ı, MaRQ'ın).
+- From the first users (2026-10-21). No analysis change.
+  - After a file is opened, the start page shows it (name and size, with surfaces A and B
+    when one of them was opened), the next step as a button (*Analyse*, *Compare*, or
+    opening the missing surface) and a *Settings* button, with a note that the analysis
+    uses the paper defaults or how many settings differ from them; the status bar says
+    the file was opened. Before, only the file name in the browser showed that it was.
+  - Every text in the plots is one point larger: titles, axis titles and ticks, legends,
+    colour bars, annotations and hover labels (`plots.py`), the profile plots of the
+    cross-section panels, and the colour bar, scale bar and labels of the 3D view.
 
 ## 0.9 (2026-09-30)
 

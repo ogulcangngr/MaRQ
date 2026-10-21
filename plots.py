@@ -129,15 +129,15 @@ def _rgba(hex_colour, alpha):
 
 # ── Layout helpers ─────────────────────────────────────────────────────────────
 
-def _font(size=12, color=None):
+def _font(size=13, color=None):
     return {"family": FONT, "size": size, "color": color or C("TEXT")}
 
 
 def _axis(title=None, **kw):
     d = {"gridcolor": C("CARD"), "linecolor": C("BORDER"), "zerolinecolor": C("BORDER"),
-         "tickfont": {"size": 11}}
+         "tickfont": {"size": 12}}
     if title:
-        d["title"] = {"text": title, "font": {"size": 12}}
+        d["title"] = {"text": title, "font": {"size": 13}}
     d.update(kw)
     return d
 
@@ -146,16 +146,16 @@ def _base(**kw):
     layout = {
         "paper_bgcolor": C("PANEL"),
         "plot_bgcolor":  C("BG"),
-        "font":          _font(12),
+        "font":          _font(13),
         "autosize":      True,
         "margin":        {"t": 60, "b": 55, "l": 65, "r": 30},
-        "hoverlabel":    {"font": {"family": FONT, "size": 12}},
+        "hoverlabel":    {"font": {"family": FONT, "size": 13}},
     }
     layout.update(kw)
     return layout
 
 
-def _title(text, size=13):
+def _title(text, size=14):
     return {"text": text, "font": {"size": size}, "x": 0.5, "xanchor": "center"}
 
 
@@ -165,15 +165,15 @@ def _legend_bottom(y=None):
     return {"x": 0.5, "xanchor": "center", "orientation": "h",
             "yref": "container", "y": 0.012, "yanchor": "bottom",
             "bgcolor": C("CARD"), "bordercolor": C("BORDER"), "borderwidth": 1,
-            "font": {"size": 11}}
+            "font": {"size": 12}}
 
 
 def _cbar(text, **kw):
     """Colourbar with a right-hand title `text`; any key in kw (including a full
     `title` dict) overrides the defaults."""
     d = {"thickness": 12, "len": 0.85, "outlinewidth": 0,
-         "title": {"text": text, "side": "right", "font": {"size": 11}},
-         "tickfont": {"size": 10}}
+         "title": {"text": text, "side": "right", "font": {"size": 12}},
+         "tickfont": {"size": 11}}
     d.update(kw)
     return d
 
@@ -190,14 +190,14 @@ def _sym_ticks(v):
     return {"tickmode": "array", "tickvals": [round(i * step, 10) for i in range(-n, n + 1)]}
 
 
-def _ann(text, x, y, xref="paper", yref="paper", size=11, color=None, **kw):
+def _ann(text, x, y, xref="paper", yref="paper", size=12, color=None, **kw):
     d = {"text": text, "x": x, "y": y, "xref": xref, "yref": yref, "showarrow": False,
          "font": {"size": size, "color": color or C("TEXT2")}}
     d.update(kw)
     return d
 
 
-def _panel_title(text, xaxis, yaxis, size=12):
+def _panel_title(text, xaxis, yaxis, size=13):
     """Subplot title anchored to the subplot's own domain (cannot collide with a neighbour)."""
     return _ann(text, 0.5, 1.0, xref=xaxis + " domain", yref=yaxis + " domain",
                 size=size, color=C("TEXT"), xanchor="center", yanchor="bottom", yshift=6)
@@ -238,10 +238,10 @@ def _camera(aspect):
 
 def _scene(aspect, xt, yt, zt, zdtick=None):
     def ax(t):
-        return {"title": {"text": t, "font": {"size": 11}}, "gridcolor": C("CARD"),
+        return {"title": {"text": t, "font": {"size": 12}}, "gridcolor": C("CARD"),
                 "backgroundcolor": C("BG"), "showbackground": True, "gridwidth": 1,
                 "linecolor": C("BORDER"), "zerolinecolor": C("BORDER"), "spikecolor": C("BORDER"),
-                "tickfont": {"size": 10}}
+                "tickfont": {"size": 11}}
     zax = ax(zt)
     if zdtick:
         zax["dtick"] = zdtick
@@ -253,9 +253,9 @@ _LIGHTING = {"ambient": 0.6, "diffuse": 0.8, "roughness": 0.5, "specular": 0.1, 
 
 
 def _layout3d(title, scene):
-    return {"paper_bgcolor": C("PANEL"), "font": _font(12), "autosize": True,
+    return {"paper_bgcolor": C("PANEL"), "font": _font(13), "autosize": True,
             "margin": {"t": 60, "b": 10, "l": 10, "r": 90},
-            "title": _title(title, 12), "scene": scene}
+            "title": _title(title, 13), "scene": scene}
 
 
 # ── Rotation maps ──────────────────────────────────────────────────────────────
@@ -290,15 +290,15 @@ def make_rotation_fig(result):
              "xref": "x", "yref": "y", "axref": "x", "ayref": "y",
              "showarrow": True, "arrowhead": 3, "arrowsize": 1.2,
              "arrowcolor": C("RED"), "arrowwidth": 2.5,
-             "text": "channel axis", "font": {"color": C("RED"), "size": 10}},
+             "text": "channel axis", "font": {"color": C("RED"), "size": 11}},
         ],
     })
 
     return {
         "data": [
             _heatmap(bg["XI"][0].tolist(), bg["YI"][:, 0].tolist(), bg["ZI"], _CS, "before",
-                     cbar=_cbar(f"Height ({U})", x=0.415, xanchor="left", tickfont={"size": 9},
-                                title={"text": f"Height ({U})", "side": "top", "font": {"size": 10}}),
+                     cbar=_cbar(f"Height ({U})", x=0.415, xanchor="left", tickfont={"size": 10},
+                                title={"text": f"Height ({U})", "side": "top", "font": {"size": 11}}),
                      xaxis="x", yaxis="y"),
             _heatmap(ag["XI"][0].tolist(), ag["YI"][:, 0].tolist(), ag["ZI"], _CS, "after",
                      cbar=_cbar(f"Height ({U})", x=1.01, xanchor="left"), xaxis="x2", yaxis="y2"),
@@ -541,7 +541,7 @@ def make_cross_section_fig(result):
                      "showlegend": False})
 
     wall = ch.get("wall_angle_deg", ch.get("draft_angle_deg"))
-    layout = _base(showlegend=True, legend={**_legend_bottom(), "font": {"size": 10}},
+    layout = _base(showlegend=True, legend={**_legend_bottom(), "font": {"size": 11}},
                    margin={"t": 60, "b": 140, "l": 70, "r": 30})
     layout["title"] = _title(f"Mean cross-section and local depth  |  floor width {ch['floor_width']:.1f} {U}, "
                              f"opening {ch['opening_width']:.1f} {U}, depth {depth:.1f} {U}"
@@ -626,7 +626,7 @@ def make_roughness_fig(result):
         _rect(rgh["regions"]["surf_right"], C("RED"),   "Field right", rgh["surf_right"]),
     ]
     layout = _base(margin={"t": 60, "b": 125, "l": 65, "r": 80}, showlegend=True,
-                   legend={**_legend_bottom(), "font": {"size": 10}})
+                   legend={**_legend_bottom(), "font": {"size": 11}})
     layout["title"] = _title("Roughness evaluation areas (ISO 25178, plane-removed)")
     layout["xaxis"] = _axis(f"X, channel axis ({U})")
     layout["yaxis"] = _axis(f"Y, cross-channel ({U})", scaleanchor="x")
@@ -744,7 +744,7 @@ def make_gradient_maps_fig(result, which=None):
 
     x_range = float(g["XI"][0, -1] - g["XI"][0, 0]); y_range = float(g["YI"][-1, 0] - g["YI"][0, 0])
     stacked = EQUAL and (x_range / max(y_range, 1e-9) > 2.5)      # long channel at true scale: one map per row
-    small = {"xanchor": "left", "thickness": 10, "tickfont": {"size": 9}}
+    small = {"xanchor": "left", "thickness": 10, "tickfont": {"size": 10}}
     #        z    colourscale  zmin  zmax  name       decimals
     P = {"ZA": (ZA, _CS,      z0,   z1,   "Height A",          1),
          "ZB": (ZB, _CS,      z0,   z1,   "Height B",          1),

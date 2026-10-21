@@ -78,6 +78,8 @@ let _batchRows      = [];       // rows of the last batch run
 let _lastBatch      = null;
 let _lastPairNames  = null;
 let _file1Analysed  = false;    // the point cloud in the scan slot has been analysed
+let _readySlot      = null;     // slot of the file opened last: the start page shows it and the next step
+let _nChanged       = 0;        // analysis settings that differ from the paper defaults
 let _run            = null;     // what the run in progress was started with: kind, file or names, settings
 let _batchRunning   = false;
 let _batchPos       = null;     // {i, n} of the batch comparison in progress
@@ -330,7 +332,11 @@ function readFile(file, slot) {
     return;
   }
   const reader = new FileReader();
-  reader.onload = (ev) => { hideNotice(); setFile(slot, file.name, new Uint8Array(ev.target.result)); };
+  reader.onload = (ev) => {
+    hideNotice(); setFile(slot, file.name, new Uint8Array(ev.target.result));
+    _readySlot = slot; showStart();
+    setStatus("Opened {name}", "success", { name: file.name });
+  };
   reader.onerror = () => showNotice("The file could not be opened",
     t("{name} could not be read. If it is on a network or cloud drive, copy it to this computer first.", { name: file.name }));
   reader.readAsArrayBuffer(file);
@@ -393,6 +399,53 @@ function updateButtons() {
   document.getElementById("export-csv").disabled  = !hasData;
   document.getElementById("cancel-run").style.visibility = running ? "visible" : "hidden";
   updateNext();
+  updateStart();
+}
+
+// The start page after a file is opened: the file, the next step as a button, and where the
+// settings are. Without a pending step it shows the welcome text.
+function updateStart() {
+  const box = document.getElementById("ready-box");
+  const s = _readySlot, pair = s === "A" || s === "B";
+  const show = s === "1" ? !!(files["1"] && !_file1Analysed) : pair && !!(files["A"] || files["B"]);
+  box.style.display = show ? "" : "none";
+  document.getElementById("start-box").style.display = show ? "none" : "";
+  if (!show) return;
+  const size = (n) => n >= 1048576 ? decimal((n / 1048576).toFixed(1)) + " MB" : decimal(Math.max(1, Math.round(n / 1024))) + " kB";
+  const row = (slot) => {
+    const f = files[slot];
+    const tag = slot === "1" ? '<svg class="ico"><use href="#i-file"/></svg>' : `<span class="slot-tag">${slot}</span>`;
+    if (!f) return `<div class="ready-file missing">${tag}<span>${esc(t(slot === "A" ? "Surface A, the reference: not opened yet" : "Surface B, the compared surface: not opened yet"))}</span></div>`;
+    const name = f.isCrop ? t("crop of {name}", { name: f.from }) : f.name;
+    return `<div class="ready-file">${tag}<span class="rf-name" title="${esc(f.name)}">${esc(name)}</span><span class="rf-size">${size(f.content.length)}</span></div>`;
+  };
+  let title, text, label, run, idle = true;
+  if (s === "1") {
+    title = t("Point cloud opened");
+    text = t("Click <b>Analyse</b> to level and align the surface, find the channel and measure it.");
+    label = t("Analyse"); run = runPvisual; idle = !document.getElementById("run-pvisual").disabled;
+  } else if (files["A"] && files["B"]) {
+    title = t("Surfaces A and B are ready");
+    text = t("Click <b>Compare</b> to grade how faithfully B replicates A, with RQ, RQ<sub>dx</sub>, RQ<sub>dy</sub> and RQ<sub>d</sub>.");
+    label = t("Compare"); run = runGradient; idle = !document.getElementById("run-gradient").disabled;
+  } else {
+    const need = files["A"] ? "B" : "A";
+    title = t(need === "B" ? "Surface A opened" : "Surface B opened");
+    text = t(need === "B" ? "Now open surface <b>B</b>, the compared surface (usually the moulded part), or analyse its scan and click <b>Keep as B</b>."
+                          : "Now open surface <b>A</b>, the reference (usually the mould insert), or analyse its scan and click <b>Keep as A</b>.");
+    label = t(need === "B" ? "Open B…" : "Open A…"); run = () => document.getElementById("file" + need + "-input").click();
+  }
+  document.getElementById("ready-title").textContent = title;
+  document.getElementById("ready-files").innerHTML = s === "1" ? row("1") : row("A") + row("B");
+  document.getElementById("ready-text").innerHTML = text;
+  const btn = document.getElementById("ready-run");
+  btn.textContent = label; btn.disabled = !idle; box._run = run;
+  document.getElementById("ready-settings-label").textContent = t("Settings");
+  let note = _nChanged ? t(_nChanged > 1 ? "{n} analysis settings differ from the paper defaults. To check or change them, press <b>Settings</b>."
+                                         : "{n} analysis setting differs from the paper defaults. To check or change it, press <b>Settings</b>.", { n: _nChanged })
+                       : t("The analysis uses the default settings of the paper. To change them before you start, press <b>Settings</b>.");
+  if (!ready) note += " " + t("MaRQ is still starting; the button works in a moment.");
+  document.getElementById("ready-note").innerHTML = note;
 }
 
 // The command a first-time user most likely needs next is outlined in the ribbon.
@@ -604,6 +657,7 @@ function markChangedParams() {
       : t("All values are the paper defaults.");
   document.getElementById("params-reset").classList.toggle("attention", n > 0);
   document.getElementById("params-summary").textContent = n ? t("Settings: {n} changed from the paper", { n }) : t("Paper defaults");
+  _nChanged = n; updateStart();
   document.getElementById("settings-summary").classList.toggle("changed", n > 0);
   document.getElementById("settings-dot").style.display = n ? "" : "none";
 }
@@ -861,7 +915,7 @@ function showStart() {
   document.getElementById("vp-title").textContent = t("Start");
   document.getElementById("vp-detail").textContent = "";
   document.querySelectorAll(".trow.sel").forEach((r) => r.classList.remove("sel"));
-  showProps(null); updateDocTitle(null);
+  showProps(null); updateDocTitle(null); updateStart();
 }
 
 // voxel size in a file name: 5 as "5", 2.5 as "2.5"
@@ -911,6 +965,7 @@ function renderGradient(result, retheme, batch, lastName) {
     const rows = batch && batch.length ? batch.filter((r) => !r.error).map((r) => ({ b: r.name, metrics: r.metrics })) : [{ b: names[1], metrics: m }];
     rows.forEach((r) => session.comparisons.push({ file_a: names[0], file_b: r.b, time: new Date().toISOString(),
                                                     parameters: params, metrics: r.metrics }));
+    if (_readySlot === "A" || _readySlot === "B") _readySlot = null;       // the pair is compared: no pending step
     showView(batch ? "batch" : "gradA");
     const failed = batch ? batch.filter((r) => r.error).length : 0;
     if (failed) setStatus("Batch complete: {n} comparisons, {f} failed", "error", { n: batch.length - failed, f: failed });
@@ -1416,7 +1471,7 @@ function exportXs() {
 // a profile plot (the section panel and the cross-section view): heights, and the slope error
 // on a second axis
 function drawProfile(el, series, xTitle, opts = {}) {
-  const font = { family: getComputedStyle(document.body).fontFamily, size: 11, color: cssVar("--text2") };
+  const font = { family: getComputedStyle(document.body).fontFamily, size: 12, color: cssVar("--text2") };
   const cols = [cssVar("--accent"), "#3d8bfd", cssVar("--text3")];
   const second = series.some((c) => c.y2);
   const data = series.map((sr, k) => ({
@@ -2244,6 +2299,7 @@ function setLanguage(lang, rebuild = true) {
   ["1", "A", "B"].forEach((slot) => { const f = files[slot]; if (f && f.isCrop) document.getElementById("file" + slot + "-name").textContent = t("crop of {name}", { name: f.from }); });
   updateBatchCount();
   markChangedParams();
+  updateStart();
   document.querySelectorAll('input[type="range"]').forEach(rangeLabel);
   if (_lastBatch) renderBatchView();
   applyPageTheme(_theme);
@@ -2343,6 +2399,8 @@ window.addEventListener("DOMContentLoaded", () => {
   document.getElementById("toggle-log").addEventListener("click", () => toggleLog());
   document.getElementById("status-bar").addEventListener("click", () => toggleLog());
   document.getElementById("settings-open").addEventListener("click", () => openModal("modal-settings"));
+  document.getElementById("ready-settings").addEventListener("click", () => openModal("modal-settings"));
+  document.getElementById("ready-run").addEventListener("click", () => { const r = document.getElementById("ready-box")._run; if (r) r(); });
   document.getElementById("about-open").addEventListener("click", () => openModal("modal-about"));
   document.getElementById("help-open").addEventListener("click", () => openModal("modal-help"));
   document.querySelectorAll("#navbar .navbtn").forEach((b) => b.addEventListener("click", () => navAction(b.dataset.act)));

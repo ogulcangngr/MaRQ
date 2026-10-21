@@ -114,6 +114,31 @@ const I18N = { tr: {
   "Open a point cloud…": "Nokta bulutu aç…",
   "You can also drop a file anywhere on this window. Everything runs on this computer; no data leave it.":
     "Dosyayı bu pencerenin herhangi bir yerine de bırakabilirsiniz. Her şey bu bilgisayarda çalışır; hiçbir veri dışarı çıkmaz.",
+  // start page after a file is opened
+  "Opened {name}": "{name} açıldı",
+  "Point cloud opened": "Nokta bulutu açıldı",
+  "Surface A opened": "A yüzeyi açıldı",
+  "Surface B opened": "B yüzeyi açıldı",
+  "Surfaces A and B are ready": "A ve B yüzeyleri hazır",
+  "Surface A, the reference: not opened yet": "Referans olan A yüzeyi: henüz açılmadı",
+  "Surface B, the compared surface: not opened yet": "Karşılaştırılan B yüzeyi: henüz açılmadı",
+  "Click <b>Analyse</b> to level and align the surface, find the channel and measure it.":
+    "Yüzeyi yataylamak ve hizalamak, kanalı bulup ölçmek için <b>Analiz et</b>'e tıklayın.",
+  "Click <b>Compare</b> to grade how faithfully B replicates A, with RQ, RQ<sub>dx</sub>, RQ<sub>dy</sub> and RQ<sub>d</sub>.":
+    "B'nin A'yı ne kadar iyi kopyaladığını RQ, RQ<sub>dx</sub>, RQ<sub>dy</sub> ve RQ<sub>d</sub> ile değerlendirmek için <b>Karşılaştır</b>'a tıklayın.",
+  "Now open surface <b>B</b>, the compared surface (usually the moulded part), or analyse its scan and click <b>Keep as B</b>.":
+    "Şimdi karşılaştırılan <b>B</b> yüzeyini (genellikle kalıplanmış parça) açın ya da taramasını analiz edip <b>B olarak ata</b>'ya tıklayın.",
+  "Now open surface <b>A</b>, the reference (usually the mould insert), or analyse its scan and click <b>Keep as A</b>.":
+    "Şimdi referans olan <b>A</b> yüzeyini (genellikle iç kalıp) açın ya da taramasını analiz edip <b>A olarak ata</b>'ya tıklayın.",
+  "Open A…": "A'yı aç…",
+  "Open B…": "B'yi aç…",
+  "The analysis uses the default settings of the paper. To change them before you start, press <b>Settings</b>.":
+    "Analiz makaledeki varsayılan ayarlarla yapılır. Başlamadan önce değiştirmek için <b>Ayarlar</b>'a basın.",
+  "{n} analysis settings differ from the paper defaults. To check or change them, press <b>Settings</b>.":
+    "{n} analiz ayarı makaledeki değerlerden farklı. Kontrol etmek ya da değiştirmek için <b>Ayarlar</b>'a basın.",
+  "{n} analysis setting differs from the paper defaults. To check or change it, press <b>Settings</b>.":
+    "{n} analiz ayarı makaledeki değerlerden farklı. Kontrol etmek ya da değiştirmek için <b>Ayarlar</b>'a basın.",
+  "MaRQ is still starting; the button works in a moment.": "MaRQ hâlâ başlatılıyor; düğme birazdan çalışır.",
 
   // navigation bar, log, drop, status bar
   "Fit the whole plot (double-click on the plot does the same)": "Grafiğin tamamını sığdır (grafiğe çift tıklamak da aynısını yapar)",

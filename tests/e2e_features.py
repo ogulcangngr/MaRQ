@@ -70,6 +70,11 @@ with sync_playwright() as p:
     for f, slot in ((INS, "a"), (PART, "b")):
         n = page.evaluate("() => session.analyses.length")
         page.set_input_files("#file1-input", f); time.sleep(0.5)
+        if slot == "a":
+            card = page.evaluate("""() => getComputedStyle(document.getElementById('ready-box')).display !== 'none'
+                && document.getElementById('ready-files').textContent.includes('test_channel_600um.txt')
+                && document.getElementById('ready-run').textContent""")
+            check("the opened file on the start page, with the next step", card == "Analyse", card)
         page.click("#run-pvisual"); wait(page, f"() => !running && session.analyses.length === {n + 1}")
         page.click(f"#use-crop-{slot}"); wait(page, f"() => files.{slot.upper()} !== null", 120)
     page.click("#run-gradient"); wait(page, "() => !running && session.comparisons.length === 1")
