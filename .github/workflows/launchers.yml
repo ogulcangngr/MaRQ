@@ -37,6 +37,7 @@ jobs:
           - { os: macos-15-intel, start: "sh MaRQ.command", browsers: "chromium webkit" }
           - { os: ubuntu-latest, start: "sh MaRQ.sh", browsers: "chromium firefox" }
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45                  # a hung step (one browser download stalled for hours) ends here
     defaults:
       run:
         shell: bash

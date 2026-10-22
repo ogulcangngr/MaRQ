@@ -191,9 +191,34 @@ def forget(aid):
     if aid in _held:
         _held.remove(aid)
 
-def xs_pvisual(result, x0):
+def _pad(lo, hi, f=0.04):
+    d = (hi - lo) * f or 1.0
+    return [float(lo - d), float(hi + d)]
+
+def _xs_pvisual_range(result, P, vox, lo, hi):
+    """Fixed axes for every cross-section of an analysis: the extent in y and the range of the
+    voxel-bin median heights over the whole channel between lo and hi (each shown profile is a
+    median over at least these bins, so it stays inside). Kept with the result."""
+    key = (lo, hi)
+    if result.get("_xs_rng_key") == key:
+        return result["_xs_rng"]
+    sel = _xnp.ones(len(P), bool) if lo is None or hi is None else (P[:, 0] >= lo - vox) & (P[:, 0] <= hi + vox)
+    Q = P[sel] if sel.any() else P
+    ix = _xnp.floor((Q[:, 0] - Q[:, 0].min()) / vox).astype(_xnp.int64)
+    iy = _xnp.floor((Q[:, 1] - Q[:, 1].min()) / vox).astype(_xnp.int64)
+    k = ix * (int(iy.max()) + 1) + iy
+    order = _xnp.argsort(k, kind="stable")
+    ks, zs = k[order], Q[order, 2]
+    cut = _xnp.flatnonzero(_xnp.diff(ks)) + 1
+    med = _xnp.array([_xnp.median(g) for g in _xnp.split(zs, cut)]) if zs.size else _xnp.zeros(1)
+    rng = {"y": _pad(Q[:, 1].min(), Q[:, 1].max(), 0.0), "z": _pad(med.min(), med.max())}
+    result["_xs_rng_key"], result["_xs_rng"] = key, rng
+    return rng
+
+def xs_pvisual(result, x0, lo=None, hi=None):
     """The cross-section of the aligned crop at x0, across the channel: the points within one
-    voxel of x0 (three where they are sparse), median height per voxel-wide bin in y."""
+    voxel of x0 (three where they are sparse), median height per voxel-wide bin in y; with the
+    fixed axes of all the cross-sections between lo and hi."""
     P = _xnp.asarray(result["cropped_cloud"], float)
     vox = float((result.get("rotation") or {}).get("voxel_size") or 5.0) or 5.0
     half = vox
@@ -202,7 +227,8 @@ def xs_pvisual(result, x0):
         half = 3 * vox
         sel = _xnp.abs(P[:, 0] - x0) <= half
     y, z = P[sel, 1], P[sel, 2]
-    out = {"x": float(x0), "half": half, "n": int(sel.sum()), "y": [], "z": []}
+    out = {"x": float(x0), "half": half, "n": int(sel.sum()), "y": [], "z": [],
+           "range": _xs_pvisual_range(result, P, vox, lo, hi)}
     if y.size:
         b = _xnp.floor((y - y.min()) / vox).astype(int)
         order = _xnp.argsort(b, kind="stable")
@@ -214,19 +240,33 @@ def xs_pvisual(result, x0):
     return out
 
 def xs_gradient(result, x0):
-    """The cross-sections of A and B and the slope error on the common grid at x0 (the
-    nearest grid column), and the extent of the channel-interior mask along x."""
+    """The cross-sections of A and B on the common grid at x0 (the nearest grid column), their
+    height difference A - B and the slope error, the extent of the channel-interior mask
+    along x, and fixed axes for every position: the largest height range and difference over
+    the columns of that extent."""
     g = result["grids"]
     XI, YI = _xnp.asarray(g["XI"], float), _xnp.asarray(g["YI"], float)
+    ZA, ZB = _xnp.asarray(g["ZI1"], float), _xnp.asarray(g["ZI2"], float)
     mask = _xnp.asarray(g.get("mask", g["valid"]), bool)
     cols = _xnp.flatnonzero(mask.any(axis=0))
     lo, hi = (float(XI[0, cols[0]]), float(XI[0, cols[-1]])) if cols.size else (float(XI[0, 0]), float(XI[0, -1]))
+    if "_xs_rng" not in result:
+        c0, c1 = (int(cols[0]), int(cols[-1]) + 1) if cols.size else (0, XI.shape[1])
+        a, b = ZA[:, c0:c1], ZB[:, c0:c1]
+        both = _xnp.concatenate([a[_xnp.isfinite(a)], b[_xnp.isfinite(b)]])
+        d = (a - b)[_xnp.isfinite(a) & _xnp.isfinite(b)]
+        rows = _xnp.flatnonzero((_xnp.isfinite(a) | _xnp.isfinite(b)).any(axis=1))
+        dm = float(_xnp.abs(d).max()) if d.size else 1.0
+        result["_xs_rng"] = {
+            "z": _pad(both.min(), both.max()) if both.size else None,
+            "d": [-dm * 1.06, dm * 1.06],
+            "y": [float(YI[rows[0], 0]), float(YI[rows[-1], 0])] if rows.size else None}
     if x0 is None:
         x0 = (lo + hi) / 2
     j = int(_xnp.argmin(_xnp.abs(XI[0] - x0)))
     col = lambda a: [float(v) if _xnp.isfinite(v) else None for v in _xnp.asarray(a, float)[:, j]]
-    return {"x": float(XI[0, j]), "y": YI[:, 0].tolist(), "zA": col(g["ZI1"]), "zB": col(g["ZI2"]),
-            "err": col(g["error_map"]), "lo": lo, "hi": hi}
+    return {"x": float(XI[0, j]), "y": YI[:, 0].tolist(), "zA": col(ZA), "zB": col(ZB), "diff": col(ZA - ZB),
+            "err": col(g["error_map"]), "lo": lo, "hi": hi, "range": result["_xs_rng"]}
 `;
 
 // Python bytes as a Uint8Array of their own
@@ -470,9 +510,11 @@ _sess_slots = None`);
     try {
       pyodide.globals.set("_aid", data.aid || null);
       pyodide.globals.set("_xs_x", data.x == null ? null : Number(data.x));
+      pyodide.globals.set("_xs_lo", data.lo == null ? null : Number(data.lo));
+      pyodide.globals.set("_xs_hi", data.hi == null ? null : Number(data.hi));
       pyodide.runPython(`
 import json as _json
-_xs_json = _json.dumps(xs_pvisual(use(_aid), _xs_x) if _aid else xs_gradient(_result2, _xs_x))`);
+_xs_json = _json.dumps(xs_pvisual(use(_aid), _xs_x, _xs_lo, _xs_hi) if _aid else xs_gradient(_result2, _xs_x))`);
       post({ type: "xsection", id, req: data, data: pyodide.globals.get("_xs_json") });
     } catch (err) { fail(id, new Error("The cross-section could not be read: " + err.message), null); }
   }

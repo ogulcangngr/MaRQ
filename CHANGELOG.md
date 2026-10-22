@@ -202,6 +202,18 @@ so every downstream number was recomputed.
     after *Keep as* the next scan or *Compare*; after a comparison *Report*, *Figure* and
     *Save the session*, with a word on the browser, Properties and *Batch files…*; after a
     batch *Results CSV*). Closed with ×; *Hide tips*, or the box in Help, turns them off.
+  - No comparison of a surface that was not analysed: *Keep as A* or *B* while the point
+    cloud in the scan slot has not been analysed asks first (it would keep the earlier
+    analysis on screen) and offers to analyse it and keep it as soon as it is done; keeping
+    one analysis as both A and B is refused (a surface compared with itself gives RQ = 1);
+    *Open A*, *Open B* and *Batch files…* ask before taking a file without "crop" in its
+    name (MaRQ names its crops `<scan>_Crop_Voxel<size>.txt`), with the same offer.
+  - *Cross-sections of A and B* shows the height difference A − B on its second axis instead
+    of the slope error (the CSV has both), and the two-click *Section* in the comparison 3D
+    views does the same. The cross-section views keep their axes fixed along the whole
+    channel: the full width, the largest height range and, for A and B, the largest
+    difference, so a profile does not look larger only because its axis changed. The GitHub
+    check stops a job after 45 minutes.
   - Surfaces A and B are described neutrally, as the reference and the surface compared
     with it, without naming a mould insert or a moulded part (the start page, the tips,
     the tooltips, Help, About and the README).

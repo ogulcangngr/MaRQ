@@ -135,9 +135,9 @@
         <button class="rtool primary" id="run-pvisual" disabled onclick="runPvisual()" title="Level and align the surface, find the channel, measure it">
           <svg class="ico"><use href="#i-analyse"/></svg><span>Analyse</span></button>
         <div class="rstack">
-          <button class="rsmall" id="use-crop-a" disabled onclick="useCrop('A')" title="Keep the cropped channel of this analysis as surface A, the reference">
+          <button class="rsmall" id="use-crop-a" disabled onclick="keepAs('A')" title="Keep the cropped channel of this analysis as surface A, the reference">
             <svg class="ico"><use href="#i-keep"/></svg><span>Keep as A</span></button>
-          <button class="rsmall" id="use-crop-b" disabled onclick="useCrop('B')" title="Keep the cropped channel of this analysis as surface B, the surface compared with A">
+          <button class="rsmall" id="use-crop-b" disabled onclick="keepAs('B')" title="Keep the cropped channel of this analysis as surface B, the surface compared with A">
             <svg class="ico"><use href="#i-keep"/></svg><span>Keep as B</span></button>
           <button class="rsmall" id="download-crop" disabled onclick="downloadCrop()" title="Save the levelled, aligned, voxel-thinned crop of the channel as an x y z text file">
             <svg class="ico"><use href="#i-save"/></svg><span>Save crop</span></button>
@@ -659,6 +659,15 @@
           <tr><td>Open</td><td>File, Open a session, or drop the .marq file on the window: the results return without a new analysis</td></tr>
         </table>
       </div>
+    </div>
+  </div>
+
+  <!-- ── A question before a step that would give a meaningless result (filled by app.js) ── -->
+  <div class="modal" id="modal-ask" role="dialog" aria-modal="true" style="display:none">
+    <div class="modal-box">
+      <div class="modal-head"><span id="ask-title" data-i18n-skip></span><button class="tx" onclick="closeModal('modal-ask')" title="Close"><svg class="ico"><use href="#i-x"/></svg></button></div>
+      <div class="modal-body about"><p id="ask-body" data-i18n-skip></p></div>
+      <div class="modal-foot btn-row" id="ask-buttons" data-i18n-skip></div>
     </div>
   </div>
 

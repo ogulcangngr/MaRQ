@@ -104,6 +104,26 @@ const I18N = { tr: {
   "Surface A": "A yüzeyi",
   "Surface B": "B yüzeyi",
   "Slope error": "Eğim hatası",
+  "Difference A − B": "Fark A − B",
+  // questions before a step that would give a meaningless result
+  "Not analysed yet?": "Henüz analiz edilmedi mi?",
+  "Not analysed yet": "Henüz analiz edilmedi",
+  "<b>{name}</b> does not look like a crop saved by MaRQ. Surfaces A and B are the cropped channels of analysed surfaces: levelled, aligned and cut to the channel, so that the two can be compared. A point cloud compared as it was measured gives meaningless results. Analyse it first; MaRQ then keeps it as {slot}.":
+    "<b>{name}</b>, MaRQ'ın kaydettiği bir kırpıma benzemiyor. A ve B yüzeyleri, analiz edilmiş yüzeylerin kırpılmış kanallarıdır: ikisi karşılaştırılabilsin diye yataylanır, hizalanır ve kanala göre kesilir. Ölçüldüğü gibi karşılaştırılan bir nokta bulutu anlamsız sonuç verir. Önce analiz edin; MaRQ onu sonra {slot} olarak atar.",
+  "Analyse it, then keep it as {slot}": "Analiz et, sonra {slot} olarak ata",
+  "Use it as {slot} anyway": "Yine de {slot} olarak kullan",
+  "{names}: not crops saved by MaRQ, by their names. Each batch file is compared with surface A as it is, so it has to be the crop of an analysed surface (Analyse, then Save crop). A point cloud compared as it was measured gives meaningless results.":
+    "{names}: adlarına göre MaRQ'ın kaydettiği kırpımlar değil. Her toplu dosya A yüzeyiyle olduğu gibi karşılaştırılır, bu yüzden analiz edilmiş bir yüzeyin kırpımı olmalıdır (Analiz et, sonra Kırpımı kaydet). Ölçüldüğü gibi karşılaştırılan bir nokta bulutu anlamsız sonuç verir.",
+  "Use them anyway": "Yine de kullan",
+  "Keep {name} as {slot} instead": "Bunun yerine {name} dosyasını {slot} olarak ata",
+  "<b>{scan}</b> is open but has not been analysed yet. Keep as {slot} keeps the cropped channel of an analysed surface, and the analysis on screen is that of <b>{name}</b>.":
+    "<b>{scan}</b> açık ama henüz analiz edilmedi. {slot} olarak ata, analiz edilmiş bir yüzeyin kırpılmış kanalını atar; ekrandaki analiz <b>{name}</b> dosyasına ait.",
+  "That one is already surface {other}.": "O dosya zaten {other} yüzeyi.",
+  "Analyse {scan} first.": "Önce {scan} dosyasını analiz edin.",
+  "Already surface {other}": "Zaten {other} yüzeyi",
+  "<b>{name}</b> is already surface {other}. A surface compared with itself always gives RQ = 1. Open and analyse the other surface, then keep that one as {slot}.":
+    "<b>{name}</b> zaten {other} yüzeyi. Kendisiyle karşılaştırılan bir yüzey her zaman RQ = 1 verir. Diğer yüzeyi açıp analiz edin, sonra onu {slot} olarak atayın.",
+  "Analyse the point cloud, then keep it as {slot}": "Nokta bulutunu analiz edin, sonra {slot} olarak atayın",
   "Height and slope maps": "Yükseklik ve eğim haritaları",
   "Batch results": "Toplu sonuçlar",
   "Drag to resize": "Boyutlandırmak için sürükleyin",

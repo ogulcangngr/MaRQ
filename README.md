@@ -135,7 +135,8 @@ or perspective, M measure, S section, C cross-section, Esc clears the points. **
 gives the distance between two clicked points of the surface, in the plane and in height;
 **Section** opens the height profile along the line between two clicked points below the
 view, and **Cross-section** the profile across the channel through one clicked point
-(surfaces A and B and the slope error in the comparison views), each with a CSV export.
+(surfaces A and B and their height difference A − B in the comparison views), each with a
+CSV export.
 In the 2D plots,
 drag to pan and use the wheel or the + and − buttons to zoom; the box tool zooms into a
 drawn box, and a double-click resets the view.
@@ -191,7 +192,8 @@ the reported depth is 60 µm.
    (the measured floor-level ends) to the other, or the position typed as a fraction of the
    length (0 to 1) or in micrometres from the start; the profile is read from the points
    within one voxel of the position, with the mean cross-section for comparison, and can be
-   saved as CSV. The log lists the residual tilt, the wall angle of each
+   saved as CSV. Its axes stay fixed along the whole channel (the full width and the largest
+   height range), so profiles at different positions can be compared by eye. The log lists the residual tilt, the wall angle of each
    wall, the corner rounding, the grid lines used and any quality-control flag.
 
    How the geometry is read: the depth comes from the mean cross-section of the
@@ -216,7 +218,9 @@ the reported depth is 60 µm.
 
 1. Fill surface A (the reference) and surface B (the compared surface) with crops,
    either with *Keep as A* and *Keep as B* after analysing each surface or with *Open A*
-   and *Open B* for crop files. Any two surfaces of the same channel can be compared. In
+   and *Open B* for crop files. MaRQ asks before keeping when the point cloud in the scan
+   slot has not been analysed yet, refuses to keep one analysis as both A and B, and asks
+   before taking a file without "crop" in its name as A, B or a batch file. Any two surfaces of the same channel can be compared. In
    the study behind MaRQ the reference was the mould insert and the compared surface the
    moulded part; for tool degradation both were the same insert at two shots, the
    earlier one as A.
@@ -232,7 +236,8 @@ the reported depth is 60 µm.
    and the signed difference A − B) and the *Slope maps* (the slope magnitudes of A and B
    and the unsigned slope error), each with the outline of the channel-interior mask, and
    the *Cross-sections of A and B* at a chosen position along the channel, as for one
-   surface. The two map views zoom and pan together. The log states which orientation of B was kept, the
+   surface, with the height difference A − B on a second axis; the height and difference
+   axes are fixed at their largest ranges over the channel. The two map views zoom and pan together. The log states which orientation of B was kept, the
    valid-cell fraction and the mask size; its metrics table is that of the kept
    orientation.
 4. **Batch**: choose several files with *Batch files…* and click **Run batch**. The

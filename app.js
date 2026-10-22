@@ -81,6 +81,7 @@ let _file1Analysed  = false;    // the point cloud in the scan slot has been ana
 let _readySlot      = null;     // slot of the file opened last: the start page shows it and the next step
 let _nChanged       = 0;        // analysis settings that differ from the paper defaults
 let _guide          = null;     // the tip on screen: {kind, slot}
+let _keepAfter      = null;     // {slot, aid}: keep this analysis as A or B as soon as it finishes
 let _run            = null;     // what the run in progress was started with: kind, file or names, settings
 let _batchRunning   = false;
 let _batchPos       = null;     // {i, n} of the batch comparison in progress
@@ -334,9 +335,15 @@ function readFile(file, slot) {
   }
   const reader = new FileReader();
   reader.onload = (ev) => {
-    hideNotice(); setFile(slot, file.name, new Uint8Array(ev.target.result));
-    _readySlot = slot; showStart();
-    setStatus("Opened {name}", "success", { name: file.name });
+    hideNotice();
+    const content = new Uint8Array(ev.target.result);
+    const place = (s) => { setFile(s, file.name, content); _readySlot = s; showStart(); setStatus("Opened {name}", "success", { name: file.name }); };
+    if (slot === "1" || isCropName(file.name)) { place(slot); return; }
+    askUser(t("Not analysed yet?"),
+      t("<b>{name}</b> does not look like a crop saved by MaRQ. Surfaces A and B are the cropped channels of analysed surfaces: levelled, aligned and cut to the channel, so that the two can be compared. A point cloud compared as it was measured gives meaningless results. Analyse it first; MaRQ then keeps it as {slot}.", { name: esc(file.name), slot }),
+      [[t("Analyse it, then keep it as {slot}", { slot }), () => { place("1"); analyseThenKeep(slot); }, true],
+       [t("Use it as {slot} anyway", { slot }), () => place(slot)],
+       [t("Cancel"), null]]);
   };
   reader.onerror = () => showNotice("The file could not be opened",
     t("{name} could not be read. If it is on a network or cloud drive, copy it to this computer first.", { name: file.name }));
@@ -363,6 +370,18 @@ function handleBatchInput(fileList) {
   const el = document.getElementById("batch-input");
   const list = Array.from(fileList || el.files).filter((f) => f.size > 0);
   el.value = "";
+  const raw = list.filter((f) => !isCropName(f.name));
+  if (raw.length) {
+    const names = raw.slice(0, 4).map((f) => "<b>" + esc(f.name) + "</b>").join(", ") + (raw.length > 4 ? ", …" : "");
+    askUser(t("Not analysed yet?"),
+      t("{names}: not crops saved by MaRQ, by their names. Each batch file is compared with surface A as it is, so it has to be the crop of an analysed surface (Analyse, then Save crop). A point cloud compared as it was measured gives meaningless results.", { names }),
+      [[t("Cancel"), null, true], [t("Use them anyway"), () => readBatch(list)]]);
+    return;
+  }
+  readBatch(list);
+}
+
+function readBatch(list) {
   batchFiles = [];
   updateBatchCount(); updateButtons();          // no run with a list that is still being read
   let pending = list.length;
@@ -464,7 +483,7 @@ function renderGuide() {
   const bar = document.getElementById("guide-bar");
   if (!_guide || !tipsOn()) { bar.style.display = "none"; return; }
   const A = !!files["A"], B = !!files["B"], { kind, slot } = _guide;
-  const KEEP_A = ["Keep as A", () => useCrop("A")], KEEP_B = ["Keep as B", () => useCrop("B")], REPORT = ["Report", makeReport];
+  const KEEP_A = ["Keep as A", () => keepAs("A")], KEEP_B = ["Keep as B", () => keepAs("B")], REPORT = ["Report", makeReport];
   let text, acts;
   if (kind === "analysed") {
     if (!A && !B) {
@@ -577,6 +596,60 @@ function cropText(a) {
     if (a.id === _curA) _cropText = m.data;
     return m.data;
   });
+}
+
+// A crop saved by MaRQ is named <scan>_Crop_Voxel<size>.txt (earlier versions: _CroppedVoxel).
+function isCropName(name) { return /crop/i.test(name || ""); }
+
+// Keep as A or B keeps the analysis on screen. Asked first when the point cloud in the Scan
+// slot has not been analysed (it would keep the earlier analysis instead), and refused when
+// the analysis on screen is already the other surface (a surface compared with itself).
+function keepAs(slot) {
+  const a = _A[_curA];
+  if (!a || !ready) return;
+  const other = slot === "A" ? "B" : "A", f = files["1"], inOther = !!(files[other] && files[other].aid === a.id);
+  if (f && !_file1Analysed && !f.isCrop) {
+    const buttons = [[t("Analyse it, then keep it as {slot}", { slot }), () => analyseThenKeep(slot), true]];
+    if (!inOther) buttons.push([t("Keep {name} as {slot} instead", { name: a.file, slot }), () => useCrop(slot)]);
+    buttons.push([t("Cancel"), null]);
+    askUser(t("Not analysed yet"),
+      t("<b>{scan}</b> is open but has not been analysed yet. Keep as {slot} keeps the cropped channel of an analysed surface, and the analysis on screen is that of <b>{name}</b>.", { scan: esc(f.name), slot, name: esc(a.file) }) +
+      (inOther ? " " + t("That one is already surface {other}.", { other }) : "") + " " + t("Analyse {scan} first.", { scan: esc(f.name) }),
+      buttons);
+    return;
+  }
+  if (inOther) {
+    askUser(t("Already surface {other}", { other }),
+      t("<b>{name}</b> is already surface {other}. A surface compared with itself always gives RQ = 1. Open and analyse the other surface, then keep that one as {slot}.", { name: esc(a.file), other, slot }),
+      [[t("Close"), null, true]]);
+    return;
+  }
+  useCrop(slot);
+}
+
+// Analyse the point cloud in the Scan slot and keep it as A or B when the analysis is done.
+function analyseThenKeep(slot) {
+  if (!ready || running || !files["1"]) { setStatus("Analyse the point cloud, then keep it as {slot}", "info", { slot }); return; }
+  runPvisual();
+  if (running && _run && _run.kind === "pvisual") _keepAfter = { slot, aid: _run.aid };
+}
+
+// A short question with its answers as buttons: [label, action or null, primary].
+function askUser(title, html, buttons) {
+  document.getElementById("ask-title").textContent = title;
+  document.getElementById("ask-body").innerHTML = html;
+  const box = document.getElementById("ask-buttons");
+  box.innerHTML = "";
+  buttons.forEach(([label, fn, primary]) => {
+    const b = document.createElement("button");
+    b.className = "btn" + (primary ? " btn-primary" : "");
+    b.textContent = label;
+    b.addEventListener("click", () => { closeModal("modal-ask"); if (fn) fn(); });
+    box.appendChild(b);
+  });
+  openModal("modal-ask");
+  const first = box.querySelector(".btn-primary") || box.firstChild;
+  if (first) first.focus();
 }
 
 function useCrop(slot) {
@@ -883,6 +956,7 @@ function renderPvisual(result, retheme, msg = {}) {
     showView("channel", { aid });
     setStatus("Surface analysis complete", "success");
     if (!_restoring) showGuide("analysed");
+    if (_keepAfter && _keepAfter.aid === aid) { const s = _keepAfter.slot; _keepAfter = null; useCrop(s); }
     // a channel no deeper than the roughness of the field is noise: say so
     const sq = Math.max(...["surf_left", "surf_right"].map((k) => (rgh && rgh[k] && rgh[k].Sq) || 0));
     if (!(ch.mean_depth > Math.max(1, 5 * sq)))
@@ -1392,7 +1466,7 @@ function sampleGrid(tr, X, Y, field) {
 const SECTION_CURVES = {
   pvisual: [["Height", "view3d", "z", false, "height_um"]],
   rq_gradient: [["Surface A", "grad3d_cloud1", "z", false, "height_A_um"], ["Surface B", "grad3d_cloud2", "z", false, "height_B_um"],
-                ["Slope error", "grad3d_error", "surfacecolor", true, "slope_error"]],
+                ["Difference A − B", null, null, "A − B (µm)", "difference_A_minus_B_um"]],
 };
 
 function openSection(a, b) {
@@ -1400,13 +1474,16 @@ function openSection(a, b) {
   if (!v || v.type !== "3d" || !_figs[v.kind]) return;
   const L = Math.hypot(b.x - a.x, b.y - a.y);
   if (!(L > 0)) return;
-  const curves = SECTION_CURVES[v.kind].filter(([, key]) => _figs[v.kind][key]);
+  const curves = SECTION_CURVES[v.kind].filter(([, key]) => !key || _figs[v.kind][key]);
   const tr0 = _figs[v.kind][curves[0][1]].data[0], cell = Math.abs(tr0.x[1] - tr0.x[0]) || 1;
   const n = Math.max(60, Math.min(2000, Math.ceil(L / (cell / 2))));
   const rows = [];
   for (let i = 0; i <= n; i++) {
     const f = i / n, X = a.x + (b.x - a.x) * f, Y = a.y + (b.y - a.y) * f;
-    rows.push({ s: L * f, x: X, y: Y, v: curves.map(([, key, field]) => sampleGrid(_figs[v.kind][key].data[0], X, Y, field)) });
+    const val = curves.map(([, key, field]) => key ? sampleGrid(_figs[v.kind][key].data[0], X, Y, field) : null);
+    if (val.length === 3 && val[2] === null)                          // A − B from the two heights at this point
+      val[2] = val[0] != null && val[1] != null ? val[0] - val[1] : null;
+    rows.push({ s: L * f, x: X, y: Y, v: val });
   }
   _section = { mode: "line", kind: v.kind, key: v.key, xTitle: "Distance along the section (µm)",
     detail: () => t("length {L} µm, from ({x1}; {y1}) to ({x2}; {y2}) µm", { L: fix(L, 1), x1: fix(a.x, 0), y1: fix(a.y, 0), x2: fix(b.x, 0), y2: fix(b.y, 0) }),
@@ -1438,16 +1515,30 @@ function xsDetail(x, rng) {
 
 function xsSeries(kind, d, withMean) {
   if (kind === "rq_gradient")
-    return [{ name: "Surface A", x: d.y, y: d.zA }, { name: "Surface B", x: d.y, y: d.zB }, { name: "Slope error", x: d.y, y: d.err, y2: true }];
+    return [{ name: "Surface A", x: d.y, y: d.zA }, { name: "Surface B", x: d.y, y: d.zB },
+            { name: "Difference A − B", x: d.y, y: d.diff, y2: "A − B (µm)" }];
   const out = [{ name: "At this position", x: d.y, y: d.z }];
   const pr = withMean && _A[_curA] && _A[_curA].record && _A[_curA].record.profile;
   if (pr && pr.yc) out.push({ name: "Mean cross-section", x: pr.yc, y: pr.zb, dash: "dash", color: cssVar("--text3") });
   return out;
 }
 
+function xsAxes(d) {
+  const r = d && d.range;
+  return r ? { x: r.y, y: r.z, y2: r.d } : null;
+}
+
+// a cross-section from the engine; for an analysis with the measured ends, so its fixed axes
+// cover the same stretch of channel as the slider
+function askXs(kind, aid, x) {
+  const rng = kind === "pvisual" ? xsRange(kind) : null;
+  return ask("xsection", { aid, x, lo: rng ? rng.lo : null, hi: rng ? rng.hi : null }, "xs");
+}
+
 function xsCsv(kind, d) {
   return kind === "rq_gradient"
-    ? { head: ["y_um", "height_A_um", "height_B_um", "slope_error"], rows: d.y.map((y, i) => [y, d.zA[i], d.zB[i], d.err[i]]) }
+    ? { head: ["y_um", "height_A_um", "height_B_um", "difference_A_minus_B_um", "slope_error"],
+        rows: d.y.map((y, i) => [y, d.zA[i], d.zB[i], d.diff[i], d.err[i]]) }
     : { head: ["y_um", "height_um"], rows: d.y.map((y, i) => [y, d.z[i]]) };
 }
 
@@ -1456,10 +1547,11 @@ function openXsPanel(x0) {
   const v = _view && VIEWS[_view];
   if (!v || v.type !== "3d") return;
   const kind = v.kind, aid = kind === "pvisual" ? _curA : null;
-  ask("xsection", { aid, x: x0 }, "xs").then((m) => {
+  askXs(kind, aid, x0).then((m) => {
     const d = JSON.parse(m.data), rng = xsRange(kind, d);
     _section = { mode: "xs", kind, key: kind === "pvisual" ? "cross_section" : "cross_sections", x: d.x, aid,
-                 xTitle: "Y, across the channel (µm)", detail: () => xsDetail(d.x, rng), series: xsSeries(kind, d, false), csv: xsCsv(kind, d) };
+                 xTitle: "Y, across the channel (µm)", detail: () => xsDetail(d.x, rng), series: xsSeries(kind, d, false), csv: xsCsv(kind, d),
+                 axes: xsAxes(d) };
     drawSection();
   }).catch(() => {});
 }
@@ -1489,7 +1581,7 @@ function requestXs() {
   if (_xsBusy) { _xsAgain = true; return; }
   _xsBusy = true; _xsAgain = false;
   const X = _xs;
-  ask("xsection", { aid: X.aid, x: X.x }, "xs").then((m) => {
+  askXs(X.kind, X.aid, X.x).then((m) => {
     if (X !== _xs) return;
     const d = JSON.parse(m.data);
     if (X.kind === "rq_gradient") { X.rng = { lo: d.lo, hi: d.hi }; if (X.x == null) X.x = d.x; document.getElementById("xs-slider").disabled = false; }
@@ -1502,7 +1594,7 @@ function drawXs() {
   const X = _xs;
   if (!X || !X.d) return;
   drawProfile(document.getElementById("xs-plot"), xsSeries(X.kind, X.d, true), "Y, across the channel (µm)",
-              { uirev: `xs:${X.kind}:${X.aid}`, dragmode: _dragmode2d });
+              { uirev: `xs:${X.kind}:${X.aid}`, dragmode: _dragmode2d, axes: xsAxes(X.d) });
   document.getElementById("xs-info").textContent = xsDetail(X.d.x, X.rng) + (X.kind === "pvisual"
     ? "  ·  " + t("{n} points within {w} µm of the position", { n: intl(X.d.n), w: fix(X.d.half, 1) }) : "");
 }
@@ -1535,8 +1627,9 @@ function exportXs() {
            textBlob(lines.join("\n") + "\n", "text/csv")).catch(() => {});
 }
 
-// a profile plot (the section panel and the cross-section view): heights, and the slope error
-// on a second axis
+// a profile plot (the section panel and the cross-section view): heights, and the height
+// difference on a second axis (its title in the series' y2). opts.axes fixes the ranges
+// {x, y, y2}, so the axes stay put while the position along the channel changes.
 function drawProfile(el, series, xTitle, opts = {}) {
   const font = { family: getComputedStyle(document.body).fontFamily, size: 12, color: cssVar("--text2") };
   const cols = [cssVar("--accent"), "#3d8bfd", cssVar("--text3")];
@@ -1552,8 +1645,12 @@ function drawProfile(el, series, xTitle, opts = {}) {
     legend: { orientation: "h", x: 0, y: 1.02, yanchor: "bottom", font, bgcolor: "rgba(0,0,0,0)" },
     hoverlabel: { bgcolor: cssVar("--pane"), bordercolor: cssVar("--line-2"), font: { color: cssVar("--text") } },
     xaxis: ax(t(xTitle)), yaxis: ax(t("Height (µm)")), separators: LANG === "tr" ? ",." : ".,", uirevision: opts.uirev };
-  if (second) layout.yaxis2 = { ...ax(t("Slope error")), overlaying: "y", side: "right", showgrid: false };
+  if (second) layout.yaxis2 = { ...ax(t(series.find((c) => c.y2).y2)), overlaying: "y", side: "right", showgrid: false };
   if (currentEqual() && !second) { layout.yaxis.scaleanchor = "x"; layout.yaxis.scaleratio = 1; }
+  const A = opts.axes || {};
+  [["xaxis", A.x], ["yaxis", A.y], ["yaxis2", A.y2]].forEach(([k, r]) => {
+    if (layout[k] && Array.isArray(r) && r.every((v) => isFinite(v)) && r[1] > r[0]) { layout[k].range = r.slice(); layout[k].autorange = false; }
+  });
   Plotly.react(el, data, layout, { displayModeBar: false, displaylogo: false, scrollZoom: true, responsive: false, doubleClick: "reset" });
   if (!el._marqRO && typeof ResizeObserver === "function") {
     el._marqRO = new ResizeObserver(() => { if (el._fullLayout && el.clientWidth > 20 && el.clientHeight > 20) Plotly.Plots.resize(el); });
@@ -1569,7 +1666,7 @@ function drawSection() {
   document.getElementById("sp-title").textContent = t(S.mode === "xs" ? "Cross-section" : "Section");
   document.getElementById("sp-detail").textContent = S.detail();
   document.getElementById("sp-open").style.display = S.mode === "xs" ? "" : "none";
-  drawProfile(el, S.series, S.xTitle);
+  drawProfile(el, S.series, S.xTitle, { axes: S.axes });
 }
 
 function closeSection() {

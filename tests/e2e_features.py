@@ -70,6 +70,12 @@ with sync_playwright() as p:
     for f, slot in ((INS, "a"), (PART, "b")):
         n = page.evaluate("() => session.analyses.length")
         page.set_input_files("#file1-input", f); time.sleep(0.5)
+        if slot == "b":                          # Keep as B before the scan is analysed: asked, not kept
+            page.click("#use-crop-b"); time.sleep(0.5)
+            asked = page.evaluate("""() => document.getElementById('modal-ask').style.display === 'flex'
+                && document.querySelector('#ask-buttons .btn-primary').textContent""")
+            page.evaluate("() => closeModal('modal-ask')")
+            check("Keep as B on an unanalysed scan asks first", asked and page.evaluate("() => files.B === null"), asked)
         if slot == "a":
             card = page.evaluate("""() => getComputedStyle(document.getElementById('ready-box')).display !== 'none'
                 && document.getElementById('ready-files').textContent.includes('test_channel_600um.txt')

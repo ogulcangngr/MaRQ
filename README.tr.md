@@ -143,7 +143,7 @@ perspektif, M ölçme, S kesit, C dik kesit, Esc noktaları siler. **Ölç**, y�
 iki nokta arasındaki uzaklığı düzlemde ve yükseklikte verir; **Kesit**, tıklanan iki nokta
 arasındaki çizgi boyunca yükseklik profilini, **dik kesit** ise tıklanan bir noktadan kanalı
 dik kesen profili görünümün altında açar (karşılaştırma görünümlerinde A ve B yüzeyleri ile
-eğim hatası); her ikisi de CSV olarak kaydedilebilir. 2B grafiklerde kaydırmak için sürükleyin;
+yükseklik farkları A − B); her ikisi de CSV olarak kaydedilebilir. 2B grafiklerde kaydırmak için sürükleyin;
 yakınlaştırmak için tekerleği ya da + ve − düğmelerini kullanın; kutu aracı çizilen
 kutuya yakınlaştırır; çift tıklama görünümü sıfırlar.
 
@@ -198,7 +198,9 @@ gerisi varsayılan değerlerdeyken analiz edin; günlüğün ilk satırlarında 
    noktada dik keser: kanalın bir ucundan (ölçülen taban seviyesi uçları) ötekine giden bir
    kaydırıcı, ya da uzunluğun oranı (0 ile 1 arası) veya baştan mikrometre olarak yazılan
    konum; profil, konuma bir voksel uzaklıktaki noktalardan okunur, karşılaştırma için
-   ortalama kesitle birlikte gösterilir ve CSV olarak kaydedilebilir. Günlük kalan eğikliği, her duvarın açısını, köşe yuvarlaklığını, kullanılan
+   ortalama kesitle birlikte gösterilir ve CSV olarak kaydedilebilir. Eksenleri kanal boyunca
+   sabit kalır (tüm genişlik ve en geniş yükseklik aralığı), böylece farklı konumlardaki
+   profiller gözle karşılaştırılabilir. Günlük kalan eğikliği, her duvarın açısını, köşe yuvarlaklığını, kullanılan
    ızgara çizgilerini ve varsa kalite denetim uyarılarını listeler.
 
    Geometrinin nasıl okunduğu: derinlik, kanalın tamamının ortalama kesitinden gelir.
@@ -239,7 +241,8 @@ gerisi varsayılan değerlerdeyken analiz edin; günlüğün ilk satırlarında 
    üzerinde 3B çizilmiş *Eğim hatası*, *Yükseklik haritaları* (A, B ve işaretli fark A − B)
    ve *Eğim haritaları* (A ile B'nin eğim büyüklükleri ve işaretsiz eğim hatası), her biri
    kanal içi maskenin sınırıyla, ve tek yüzeydeki gibi kanal boyunca seçilen bir konumda
-   *A ve B kesitleri*. İki harita görünümü birlikte yakınlaştırılır ve kaydırılır. Günlük, B'nin hangi yönünün korunduğunu,
+   *A ve B kesitleri*, ikinci eksende yükseklik farkı A − B ile; yükseklik ve fark eksenleri
+   kanal boyunca en geniş aralıklarında sabittir. İki harita görünümü birlikte yakınlaştırılır ve kaydırılır. Günlük, B'nin hangi yönünün korunduğunu,
    geçerli hücre oranını ve maske boyutunu belirtir; ölçüt tablosu korunan yöne aittir.
 4. **Toplu işlem**: *Toplu dosyalar…* ile birden çok dosya seçin ve **Toplu karşılaştır**'a
    tıklayın. *Toplu sonuçlar* görünümü her dosya için RQ, RQdx, RQdy ve RQd değerlerini
