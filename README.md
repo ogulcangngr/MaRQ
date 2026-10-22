@@ -2,8 +2,8 @@
 
 *Türkçe: [README.tr.md](README.tr.md)*
 
-MaRQ measures microchannels in optical-profilometry point clouds and grades how
-faithfully a channel has been replicated from a mould insert into a moulded part.
+MaRQ measures microchannels in optical-profilometry point clouds and compares two
+surfaces of a channel, A and B, grading how closely B matches A.
 It runs entirely on your computer: the analysis core is Python (NumPy, SciPy)
 executed in the browser engine through Pyodide, so nothing is installed and no
 measurement data leave the computer. With the runtime bundled in `vendor/` it also
@@ -216,9 +216,10 @@ the reported depth is 60 µm.
 
 1. Fill surface A (the reference) and surface B (the compared surface) with crops,
    either with *Keep as A* and *Keep as B* after analysing each surface or with *Open A*
-   and *Open B* for crop files. For replication quality the reference is the insert and
-   the compared surface is the part; for tool degradation both are the same insert at
-   two shots, the earlier one as A.
+   and *Open B* for crop files. Any two surfaces of the same channel can be compared. In
+   the study behind MaRQ the reference was the mould insert and the compared surface the
+   moulded part; for tool degradation both were the same insert at two shots, the
+   earlier one as A.
 2. In *Settings*, under *Comparison*, keep Grid spacing 5 µm and Smoothing before the
    slopes 0, the paper's values. A smoothing of 0 means the one-cell Gaussian filter of
    the RQd definition. The channel-interior fraction (0.20) and the 180-degree

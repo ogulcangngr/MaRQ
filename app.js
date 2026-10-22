@@ -55,7 +55,7 @@ const PARAM_IDS = ["p-voxel", "p-fieldk", "p-cropx", "p-cropy", "p-ofrac", "p-fl
                    "p-rfloorlen", "p-rfwidth", "p-rflen", "p-margin", "p-cell", "p-sigma", "p-slices",
                    "p-skiprows", "g-spacing", "g-sigma", "g-skiprows"];
 const LS = { params: "marq.params.v1", theme: "marq.theme", layout: "marq.layout2", equal: "marq.equal",
-             linkMaps: "marq.linkMaps", linkCams: "marq.linkCameras", lang: "marq.lang" };
+             linkMaps: "marq.linkMaps", linkCams: "marq.linkCameras", lang: "marq.lang", tips: "marq.tips" };
 // Figures whose panels share one coordinate system: zoom and pan move all panels together.
 const LINKED_2D = { gradheight: true, gradslope: true };
 
@@ -80,6 +80,7 @@ let _lastPairNames  = null;
 let _file1Analysed  = false;    // the point cloud in the scan slot has been analysed
 let _readySlot      = null;     // slot of the file opened last: the start page shows it and the next step
 let _nChanged       = 0;        // analysis settings that differ from the paper defaults
+let _guide          = null;     // the tip on screen: {kind, slot}
 let _run            = null;     // what the run in progress was started with: kind, file or names, settings
 let _batchRunning   = false;
 let _batchPos       = null;     // {i, n} of the batch comparison in progress
@@ -126,7 +127,7 @@ function showStartupBanner(msg, kind = "error") {
     b.id = "startup-banner";
     b.setAttribute("role", "alert");
     b.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:9999;padding:14px 18px;" +
-      "background:#b3261e;color:#fff;font:15px/1.45 system-ui,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.35)";
+      "background:#b3261e;color:#fff;font:15px/1.45 -apple-system,BlinkMacSystemFont,'Segoe WPC','Segoe UI',system-ui,Ubuntu,'Droid Sans',sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.35)";
     document.body.appendChild(b);
   }
   b.textContent = msg;
@@ -426,13 +427,13 @@ function updateStart() {
     label = t("Analyse"); run = runPvisual; idle = !document.getElementById("run-pvisual").disabled;
   } else if (files["A"] && files["B"]) {
     title = t("Surfaces A and B are ready");
-    text = t("Click <b>Compare</b> to grade how faithfully B replicates A, with RQ, RQ<sub>dx</sub>, RQ<sub>dy</sub> and RQ<sub>d</sub>.");
+    text = t("Click <b>Compare</b> to grade how closely B matches A, with RQ, RQ<sub>dx</sub>, RQ<sub>dy</sub> and RQ<sub>d</sub>.");
     label = t("Compare"); run = runGradient; idle = !document.getElementById("run-gradient").disabled;
   } else {
     const need = files["A"] ? "B" : "A";
     title = t(need === "B" ? "Surface A opened" : "Surface B opened");
-    text = t(need === "B" ? "Now open surface <b>B</b>, the compared surface (usually the moulded part), or analyse its scan and click <b>Keep as B</b>."
-                          : "Now open surface <b>A</b>, the reference (usually the mould insert), or analyse its scan and click <b>Keep as A</b>.");
+    text = t(need === "B" ? "Now open surface <b>B</b>, the surface compared with A, or analyse its scan and click <b>Keep as B</b>."
+                          : "Now open surface <b>A</b>, the reference, or analyse its scan and click <b>Keep as A</b>.");
     label = t(need === "B" ? "Open B…" : "Open A…"); run = () => document.getElementById("file" + need + "-input").click();
   }
   document.getElementById("ready-title").textContent = title;
@@ -446,6 +447,69 @@ function updateStart() {
                        : t("The analysis uses the default settings of the paper. To change them before you start, press <b>Settings</b>.");
   if (!ready) note += " " + t("MaRQ is still starting; the button works in a moment.");
   document.getElementById("ready-note").innerHTML = note;
+}
+
+// The tip under the view title after each step: what finished, what can come next, and the
+// next steps as buttons. Closed with ×; "Hide tips" (or the box in Help) turns them off.
+function tipsOn() { try { return localStorage.getItem(LS.tips) !== "off"; } catch { return true; } }
+function setTips(on) {
+  try { localStorage.setItem(LS.tips, on ? "on" : "off"); } catch {}
+  document.getElementById("tips-on").checked = on;
+  renderGuide();
+}
+function showGuide(kind, slot) { _guide = { kind, slot }; renderGuide(); }
+function hideGuide() { _guide = null; renderGuide(); }
+
+function renderGuide() {
+  const bar = document.getElementById("guide-bar");
+  if (!_guide || !tipsOn()) { bar.style.display = "none"; return; }
+  const A = !!files["A"], B = !!files["B"], { kind, slot } = _guide;
+  const KEEP_A = ["Keep as A", () => useCrop("A")], KEEP_B = ["Keep as B", () => useCrop("B")], REPORT = ["Report", makeReport];
+  let text, acts;
+  if (kind === "analysed") {
+    if (!A && !B) {
+      text = "<b>Surface analysis finished.</b> Its views are in the browser on the left, its numbers under Properties, and <b>Report</b> makes a printable page of it. To compare two surfaces, keep this channel as <b>A</b>, the reference, or as <b>B</b>, the surface compared with it, then analyse the other one.";
+      acts = [KEEP_A, KEEP_B, REPORT];
+    } else if (A && !B) {
+      text = "<b>Surface analysis finished.</b> Keep this channel as <b>B</b> to compare it with surface A. Its views are in the browser on the left, and <b>Report</b> makes a printable page of it.";
+      acts = [KEEP_B, REPORT, KEEP_A];
+    } else if (!A && B) {
+      text = "<b>Surface analysis finished.</b> Keep this channel as <b>A</b> to use it as the reference for surface B. Its views are in the browser on the left, and <b>Report</b> makes a printable page of it.";
+      acts = [KEEP_A, REPORT, KEEP_B];
+    } else {
+      text = "<b>Surface analysis finished.</b> Keep this channel as <b>A</b> or <b>B</b> to replace that surface, then compare again. <b>Report</b> makes a printable page of it.";
+      acts = [KEEP_A, KEEP_B, REPORT];
+    }
+  } else if (kind === "kept") {
+    if (A && B) {
+      text = "<b>Surfaces A and B are set.</b> <b>Compare</b> grades how closely B matches A, with RQ, RQ<sub>dx</sub>, RQ<sub>dy</sub> and RQ<sub>d</sub>.";
+      acts = [["Compare", runGradient]];
+    } else {
+      text = slot === "A" ? "<b>Surface A is set.</b> Now open the scan of the surface to compare with it, analyse it and keep it as <b>B</b>."
+                          : "<b>Surface B is set.</b> Now open the scan of the reference, analyse it and keep it as <b>A</b>.";
+      acts = [["Open a point cloud…", () => document.getElementById("file1-input").click()]];
+    }
+  } else if (kind === "compared") {
+    text = "<b>Comparison finished.</b> RQ<sub>d</sub> and the other correlations are under Properties; the browser lists the 3D views, the height and slope maps and the cross-sections of A and B. <b>Save the session</b> keeps every result to open again later, and <b>Batch files…</b> compares A with several surfaces at once.";
+    acts = [REPORT, ["Figure", () => openExportDialog()], ["Save the session…", saveSession]];
+  } else {
+    text = "<b>Batch finished.</b> Every comparison is in the table of <b>Batch results</b>; <b>Results CSV</b> saves it as a spreadsheet.";
+    acts = [["Results CSV", exportCSV], REPORT];
+  }
+  document.getElementById("gb-text").innerHTML = t(text);
+  const box = document.getElementById("gb-actions");
+  box.innerHTML = "";
+  acts.forEach(([label, fn], i) => {
+    const b = document.createElement("button");
+    b.className = "btn btn-mini" + (i === 0 ? " btn-primary" : "");
+    b.textContent = t(label);
+    b.addEventListener("click", () => { if (!running && !_reporting) fn(); });
+    box.appendChild(b);
+  });
+  document.getElementById("gb-off").textContent = t("Hide tips");
+  document.getElementById("gb-off").title = t("Turn the tips off; Help (?) turns them on again");
+  document.getElementById("gb-close").title = t("Close");
+  bar.style.display = "flex";
 }
 
 // The command a first-time user most likely needs next is outlined in the ribbon.
@@ -522,6 +586,7 @@ function useCrop(slot) {
     setFile(slot, a.crop.filename, new TextEncoder().encode(text), { isCrop: true, from: a.file, aid: a.id });
     setStatus("Crop placed as Surface {slot}", "success", { slot });
     updateButtons();
+    showGuide("kept", slot);
   }).catch(() => {});
 }
 
@@ -817,6 +882,7 @@ function renderPvisual(result, retheme, msg = {}) {
     selectAnalysis(aid);
     showView("channel", { aid });
     setStatus("Surface analysis complete", "success");
+    if (!_restoring) showGuide("analysed");
     // a channel no deeper than the roughness of the field is noise: say so
     const sq = Math.max(...["surf_left", "surf_right"].map((k) => (rgh && rgh[k] && rgh[k].Sq) || 0));
     if (!(ch.mean_depth > Math.max(1, 5 * sq)))
@@ -915,7 +981,7 @@ function showStart() {
   document.getElementById("vp-title").textContent = t("Start");
   document.getElementById("vp-detail").textContent = "";
   document.querySelectorAll(".trow.sel").forEach((r) => r.classList.remove("sel"));
-  showProps(null); updateDocTitle(null); updateStart();
+  showProps(null); updateDocTitle(null); updateStart(); hideGuide();
 }
 
 // voxel size in a file name: 5 as "5", 2.5 as "2.5"
@@ -971,6 +1037,7 @@ function renderGradient(result, retheme, batch, lastName) {
     if (failed) setStatus("Batch complete: {n} comparisons, {f} failed", "error", { n: batch.length - failed, f: failed });
     else if (batch) setStatus("Batch complete: {n} comparisons", "success", { n: batch.length });
     else setStatus("Comparison complete", "success");
+    if (!_restoring) showGuide(batch ? "batch" : "compared");
   } else if (_view && VIEWS[_view].kind === "rq_gradient") {
     showView(_view, { keepCamera: true });
   }
@@ -2011,43 +2078,43 @@ function reportPage(kind, imgs, logo, aid) {
 }
 
 function reportDocument(pages) {
-  const font = cssVar("--sans"), mono = cssVar("--mono");
+  const font = cssVar("--sans");
   return `<!doctype html><html lang="${LANG}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(t("MaRQ report"))}</title>
 <style>
 @page { size: A4; margin: 11mm; }
 * { box-sizing: border-box; }
 html { background: #e7e7ea; }
-body { margin: 0; font-family: ${font}; color: #1f1f22; font-size: 8.6pt; line-height: 1.35; }
+body { margin: 0; font-family: ${font}; font-variant-numeric: tabular-nums; color: #1f1f22; font-size: 8.6pt; line-height: 1.35; }
 .bar { position: sticky; top: 0; display: flex; justify-content: flex-end; padding: 8px 12px; background: #f3f3f4; border-bottom: 1px solid #e1e1e4; }
 .bar button { font: inherit; font-size: 10pt; padding: 5px 14px; border-radius: 4px; border: 1px solid #d32f2f; background: #d32f2f; color: #fff; cursor: pointer; }
 .embedded .bar { display: none; }
 .page { width: 188mm; min-height: 270mm; margin: 8mm auto; padding: 9mm 10mm; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,.15); }
 header { display: flex; align-items: center; gap: 4mm; border-bottom: 2px solid #d32f2f; padding-bottom: 3mm; margin-bottom: 4mm; }
 header img { width: 11mm; height: 11mm; }
-h1 { font-size: 15pt; margin: 0 0 1mm; font-weight: 650; }
+h1 { font-size: 15pt; margin: 0 0 1mm; font-weight: 600; }
 h2 { font-size: 8pt; text-transform: uppercase; letter-spacing: .06em; color: #8a8a92; margin: 3mm 0 1.5mm; }
 .subj { color: #55555c; font-size: 8.6pt; word-break: break-all; }
 .when { margin-left: auto; text-align: right; color: #8a8a92; font-size: 7.6pt; white-space: nowrap; }
 .grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 7mm; align-items: start; }
 .pgroup { margin-bottom: 2.5mm; }
-.pgroup-head { font-size: 7.4pt; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #8a8a92; padding: 1mm 0; }
+.pgroup-head { font-size: 7.4pt; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #8a8a92; padding: 1mm 0; }
 .prow { display: grid; grid-template-columns: 1fr auto; gap: 3mm; padding: .5mm 0 .5mm 2mm; border-left: 2px solid transparent; align-items: baseline; }
 .prow.key { border-left-color: #d32f2f; }
 .pk { color: #55555c; } .pk small { color: #8a8a92; font-size: 7pt; }
-.pv { font-family: ${mono}; color: #1f1f22; text-align: right; white-space: nowrap; }
+.pv { color: #1f1f22; text-align: right; white-space: nowrap; }
 .prow.big .pv { font-weight: 600; font-size: 9.6pt; } .prow.key .pv { color: #d32f2f; }
-.pv .pm, .sub { color: #8a8a92; font-size: 7.4pt; } .sub { grid-column: 1 / -1; text-align: right; font-family: ${mono}; }
+.pv .pm, .sub { color: #8a8a92; font-size: 7.4pt; } .sub { grid-column: 1 / -1; text-align: right; }
 .prow.stack { grid-template-columns: 1fr; } .prow.stack .pv { text-align: left; font-family: ${font}; white-space: normal; word-break: break-all; }
 .ptable, .settings table, table.batch { width: 100%; border-collapse: collapse; }
 .ptable th, table.batch th { font-weight: 600; color: #8a8a92; text-align: right; border-bottom: 1px solid #e1e1e4; padding: .4mm 1mm; font-size: 7.4pt; }
-.ptable td, table.batch td { font-family: ${mono}; text-align: right; padding: .4mm 1mm; }
+.ptable td, table.batch td { text-align: right; padding: .4mm 1mm; }
 .ptable th:first-child, .ptable td:first-child, table.batch td:nth-child(2), table.batch th:nth-child(2) { text-align: left; font-family: ${font}; color: #55555c; }
 table.batch td.key { color: #d32f2f; font-weight: 600; }
 .pnote, .note { color: #8a8a92; font-size: 7.4pt; margin: 1mm 0 0; }
 .settings td { padding: .35mm 0; border-bottom: 1px solid #f0f0f2; vertical-align: top; }
-.settings td:last-child { font-family: ${mono}; text-align: right; padding-left: 3mm; white-space: nowrap; }
-.settings tr.chg td { font-weight: 700; color: #1f1f22; }
+.settings td:last-child { text-align: right; padding-left: 3mm; white-space: nowrap; }
+.settings tr.chg td { font-weight: 600; color: #1f1f22; }
 .figs { display: grid; gap: 3mm; margin-top: 4mm; }
 .page.pvisual .figs { grid-template-columns: 1fr 1fr; }
 .figs img { width: 100%; display: block; border: 1px solid #ececee; }
@@ -2172,7 +2239,7 @@ function setStatus(msg, level, vars) {
 }
 function setRunning(isRunning, kind) {
   running = isRunning; _pendingKind = isRunning ? kind : null;
-  if (isRunning) { hideNotice(); _autoSkipped = 0; } else { _batchRunning = false; _batchPos = null; }
+  if (isRunning) { hideNotice(); hideGuide(); _autoSkipped = 0; } else { _batchRunning = false; _batchPos = null; }
   document.getElementById("spinner").style.display = isRunning ? "inline-block" : "none";
   updateButtons();
 }
@@ -2300,6 +2367,7 @@ function setLanguage(lang, rebuild = true) {
   updateBatchCount();
   markChangedParams();
   updateStart();
+  renderGuide();
   document.querySelectorAll('input[type="range"]').forEach(rangeLabel);
   if (_lastBatch) renderBatchView();
   applyPageTheme(_theme);
@@ -2400,6 +2468,10 @@ window.addEventListener("DOMContentLoaded", () => {
   document.getElementById("status-bar").addEventListener("click", () => toggleLog());
   document.getElementById("settings-open").addEventListener("click", () => openModal("modal-settings"));
   document.getElementById("ready-settings").addEventListener("click", () => openModal("modal-settings"));
+  document.getElementById("gb-close").addEventListener("click", hideGuide);
+  document.getElementById("gb-off").addEventListener("click", () => { setTips(false); setStatus("Tips turned off; Help (?) turns them on again", "info"); });
+  document.getElementById("tips-on").checked = tipsOn();
+  document.getElementById("tips-on").addEventListener("change", (e) => setTips(e.target.checked));
   document.getElementById("ready-run").addEventListener("click", () => { const r = document.getElementById("ready-box")._run; if (r) r(); });
   document.getElementById("about-open").addEventListener("click", () => openModal("modal-about"));
   document.getElementById("help-open").addEventListener("click", () => openModal("modal-help"));

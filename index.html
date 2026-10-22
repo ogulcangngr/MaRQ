@@ -135,9 +135,9 @@
         <button class="rtool primary" id="run-pvisual" disabled onclick="runPvisual()" title="Level and align the surface, find the channel, measure it">
           <svg class="ico"><use href="#i-analyse"/></svg><span>Analyse</span></button>
         <div class="rstack">
-          <button class="rsmall" id="use-crop-a" disabled onclick="useCrop('A')" title="Keep the cropped channel of this analysis as surface A, the reference (usually the mould insert)">
+          <button class="rsmall" id="use-crop-a" disabled onclick="useCrop('A')" title="Keep the cropped channel of this analysis as surface A, the reference">
             <svg class="ico"><use href="#i-keep"/></svg><span>Keep as A</span></button>
-          <button class="rsmall" id="use-crop-b" disabled onclick="useCrop('B')" title="Keep the cropped channel of this analysis as surface B, the compared surface (usually the moulded part)">
+          <button class="rsmall" id="use-crop-b" disabled onclick="useCrop('B')" title="Keep the cropped channel of this analysis as surface B, the surface compared with A">
             <svg class="ico"><use href="#i-keep"/></svg><span>Keep as B</span></button>
           <button class="rsmall" id="download-crop" disabled onclick="downloadCrop()" title="Save the levelled, aligned, voxel-thinned crop of the channel as an x y z text file">
             <svg class="ico"><use href="#i-save"/></svg><span>Save crop</span></button>
@@ -300,6 +300,14 @@
 
     <main id="viewport">
       <div id="vp-caption"><span id="vp-title" data-i18n-skip>Start</span><span id="vp-detail" data-i18n-skip></span></div>
+      <!-- after each step: what finished and what can come next (filled by app.js) -->
+      <div id="guide-bar" data-i18n-skip style="display:none">
+        <svg class="ico"><use href="#i-check"/></svg>
+        <div class="gb-text" id="gb-text"></div>
+        <div class="gb-actions" id="gb-actions"></div>
+        <button class="gb-off" id="gb-off"></button>
+        <button class="tx" id="gb-close"><svg class="ico"><use href="#i-x"/></svg></button>
+      </div>
       <div id="vp-stage">
 
         <!-- Start page -->
@@ -309,11 +317,11 @@
             <div class="empty-title">Microchannel and Replication Quality Analyzer</div>
             <ol class="empty-steps">
               <li data-i18n="empty.1"><b>Open</b> a point cloud and <b>Analyse</b> it: the surface is levelled and aligned, and the channel is found and measured.</li>
-              <li data-i18n="empty.2"><b>Keep as A</b> for the mould insert, <b>Keep as B</b> for the moulded part.</li>
-              <li data-i18n="empty.3"><b>Compare</b> to grade the replication with RQ, RQ<sub>dx</sub>, RQ<sub>dy</sub> and RQ<sub>d</sub>.</li>
+              <li data-i18n="empty.2"><b>Keep as A</b> and <b>Keep as B</b> for the two surfaces to compare.</li>
+              <li data-i18n="empty.3"><b>Compare</b> to grade how closely B matches A with RQ, RQ<sub>dx</sub>, RQ<sub>dy</sub> and RQ<sub>d</sub>.</li>
             </ol>
             <button class="btn btn-primary" onclick="document.getElementById('file1-input').click()">Open a point cloud…</button>
-            <div class="empty-note">You can also drop a file anywhere on this window. Everything runs on this computer; no data leave it.</div>
+            <div class="empty-note">You can also drop a file anywhere on this window.</div>
           </div>
           <!-- after a file is opened: what was opened and the next step (filled by app.js) -->
           <div class="empty-box" id="ready-box" data-i18n-skip style="display:none">
@@ -628,8 +636,9 @@
       <div class="modal-head"><span>Using MaRQ</span><button class="tx" onclick="closeModal('modal-help')" title="Close"><svg class="ico"><use href="#i-x"/></svg></button></div>
       <div class="modal-body about">
         <p data-i18n="help.flow"><b>Workflow</b><br>
-          1. <b>Open</b> a point cloud and <b>Analyse</b> it. 2. <b>Keep as A</b> (the mould insert) or <b>Keep as B</b> (the moulded part).
+          1. <b>Open</b> a point cloud and <b>Analyse</b> it. 2. <b>Keep as A</b> (the reference) and <b>Keep as B</b> (the surface compared with it).
           3. With both filled, <b>Compare</b>. The views of each result are listed in the <b>Browser</b>; the numbers are under <b>Properties</b>.</p>
+        <label class="help-check"><input type="checkbox" id="tips-on" checked> Show a tip after each step, with the next steps as buttons</label>
         <table class="keys">
           <tr><th colspan="2">3D views</th></tr>
           <tr><td>Turn</td><td>drag with the left button (about the point under the cursor)</td></tr>
@@ -659,8 +668,8 @@
       <div class="modal-head"><span>About MaRQ</span><button class="tx" onclick="closeModal('modal-about')" title="Close"><svg class="ico"><use href="#i-x"/></svg></button></div>
       <div class="modal-body about">
         <div class="about-head"><img src="logo.svg" alt=""><div><b>MaRQ</b><br><span data-i18n="about.version">Microchannel and Replication Quality Analyzer, version <span id="about-version">1.0</span></span></div></div>
-        <p data-i18n="about.what">MaRQ measures microchannels in optical-profilometry point clouds and grades how faithfully a channel has
-           been replicated from a mould insert into a moulded part, with the height correlation RQ, the
+        <p data-i18n="about.what">MaRQ measures microchannels in optical-profilometry point clouds and compares two surfaces of a
+           channel, A and B, with the height correlation RQ, the
            directional slope correlations RQ<sub>dx</sub> and RQ<sub>dy</sub>, and RQ<sub>d</sub>, the slope-magnitude correlation over the
            channel interior.</p>
         <p><b>Please cite</b><br>

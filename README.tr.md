@@ -2,8 +2,8 @@
 
 *English: [README.md](README.md)*
 
-MaRQ, optik profilometri nokta bulutlarında mikrokanalları ölçer ve bir kanalın iç
-kalıptan kalıplanmış parçaya ne kadar doğru kopyalandığını derecelendirir. Tamamen
+MaRQ, optik profilometri nokta bulutlarında mikrokanalları ölçer ve bir kanalın iki
+yüzeyini, A ile B'yi, karşılaştırarak B'nin A'ya ne kadar benzediğini derecelendirir. Tamamen
 bilgisayarınızda çalışır: analiz çekirdeği, tarayıcı motorunda Pyodide aracılığıyla
 çalışan Python'dur (NumPy, SciPy). Bu yüzden hiçbir şey kurulmaz ve hiçbir ölçüm verisi
 bilgisayardan çıkmaz. `vendor/` klasöründeki gömülü çalışma ortamıyla internet bağlantısı
@@ -224,9 +224,10 @@ gerisi varsayılan değerlerdeyken analiz edin; günlüğün ilk satırlarında 
 
 1. A yüzeyini (referans) ve B yüzeyini (karşılaştırılan yüzey) kırpımlarla doldurun: ya
    her yüzeyi analiz ettikten sonra *A olarak ata* ve *B olarak ata* ile, ya da kırpım
-   dosyaları için *A'yı aç* ve *B'yi aç* ile. Kopyalama kalitesi için referans iç kalıp,
-   karşılaştırılan yüzey parçadır; kalıp bozunması için ikisi de iki farklı kalıplamadaki
-   aynı iç kalıptır, önceki A olur.
+   dosyaları için *A'yı aç* ve *B'yi aç* ile. Aynı kanalın herhangi iki yüzeyi
+   karşılaştırılabilir. MaRQ'ın geliştirildiği çalışmada referans iç kalıp, karşılaştırılan
+   yüzey kalıplanmış parçaydı; kalıp bozunması için ikisi de iki farklı kalıplamadaki aynı
+   iç kalıptı, önceki A oldu.
 2. *Ayarlar* içinde, *Karşılaştırma* altında Izgara aralığı 5 µm ve Eğimlerden önce
    yumuşatma 0 değerlerini koruyun; bunlar makaledeki değerlerdir. 0 yumuşatma, RQd
    tanımındaki bir hücrelik Gauss süzgeci anlamına gelir. Kanal içi oranı (0,20) ve

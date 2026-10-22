@@ -76,6 +76,10 @@ with sync_playwright() as p:
                 && document.getElementById('ready-run').textContent""")
             check("the opened file on the start page, with the next step", card == "Analyse", card)
         page.click("#run-pvisual"); wait(page, f"() => !running && session.analyses.length === {n + 1}")
+        if slot == "a":
+            tip = page.evaluate("""() => getComputedStyle(document.getElementById('guide-bar')).display !== 'none'
+                && [...document.querySelectorAll('#gb-actions button')].map((b) => b.textContent).join(', ')""")
+            check("a tip with the next steps after the analysis", tip and tip.startswith("Keep as A"), tip)
         page.click(f"#use-crop-{slot}"); wait(page, f"() => files.{slot.upper()} !== null", 120)
     page.click("#run-gradient"); wait(page, "() => !running && session.comparisons.length === 1")
     m = page.evaluate("() => session.comparisons[0].metrics")

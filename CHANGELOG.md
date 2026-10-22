@@ -197,6 +197,21 @@ so every downstream number was recomputed.
     opening the missing surface) and a *Settings* button, with a note that the analysis
     uses the paper defaults or how many settings differ from them; the status bar says
     the file was opened. Before, only the file name in the browser showed that it was.
+  - Tips: after each step a bar under the view title says what finished and what can come
+    next, with the next steps as buttons (after an analysis *Keep as A* or *B* and *Report*;
+    after *Keep as* the next scan or *Compare*; after a comparison *Report*, *Figure* and
+    *Save the session*, with a word on the browser, Properties and *Batch files…*; after a
+    batch *Results CSV*). Closed with ×; *Hide tips*, or the box in Help, turns them off.
+  - Surfaces A and B are described neutrally, as the reference and the surface compared
+    with it, without naming a mould insert or a moulded part (the start page, the tips,
+    the tooltips, Help, About and the README).
+  - One font for every text, numbers included: the interface font of Visual Studio Code
+    (the editor font is gone from the properties, tables, log, 3D labels and the report),
+    with digits of one width so columns of numbers still line up. Two weights only, regular and
+    semibold (bold is gone), and one letter spacing for every heading in capitals. The grey texts are
+    brighter in the dark theme and darker in the light theme, the pane titles almost
+    white in the dark theme, and the names in Properties at full brightness. The start
+    page no longer says that everything runs on this computer.
   - Every text in the plots is one point larger: titles, axis titles and ticks, legends,
     colour bars, annotations and hover labels (`plots.py`), the profile plots of the
     cross-section panels, and the colour bar, scale bar and labels of the 3D view.

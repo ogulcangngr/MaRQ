@@ -18,10 +18,10 @@ from scipy.ndimage import binary_erosion
 _THEMES = {
     # dark: the greys of Visual Studio Code's dark theme; light: white with neutral greys
     "dark":  dict(BG="#1E1E1E", PANEL="#1E1E1E", CARD="#2D2D30", BORDER="#454545",
-                  TEXT="#D4D4D4", TEXT2="#9D9D9D", BLUE="#4FA3F7", RED="#F14C4C",
+                  TEXT="#D4D4D4", TEXT2="#C0C0C0", BLUE="#4FA3F7", RED="#F14C4C",
                   GREEN="#4EC98B", YELLOW="#E2B341", PURPLE="#B48EF0", MASK="#2BFF7A"),
     "light": dict(BG="#FFFFFF", PANEL="#FFFFFF", CARD="#EDEDEF", BORDER="#CFCFD4",
-                  TEXT="#1F1F1F", TEXT2="#5C5C62", BLUE="#1F6FD1", RED="#D32F2F",
+                  TEXT="#1F1F1F", TEXT2="#46464C", BLUE="#1F6FD1", RED="#D32F2F",
                   GREEN="#1A7F37", YELLOW="#9A6700", PURPLE="#8250DF", MASK="#00A040"),
 }
 # Colour scales as explicit stop lists (sampled from matplotlib; Earth from Plotly), because

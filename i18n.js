@@ -25,11 +25,11 @@ const I18N = { tr: {
   "Open": "Aç",
   "Level and align the surface, find the channel, measure it": "Yüzeyi yatayla ve hizala, kanalı bul, ölç",
   "Analyse": "Analiz et",
-  "Keep the cropped channel of this analysis as surface A, the reference (usually the mould insert)":
-    "Bu analizin kırpılmış kanalını referans olan A yüzeyi olarak ata (genellikle iç kalıp)",
+  "Keep the cropped channel of this analysis as surface A, the reference":
+    "Bu analizin kırpılmış kanalını referans olan A yüzeyi olarak ata",
   "Keep as A": "A olarak ata",
-  "Keep the cropped channel of this analysis as surface B, the compared surface (usually the moulded part)":
-    "Bu analizin kırpılmış kanalını karşılaştırılan B yüzeyi olarak ata (genellikle kalıplanmış parça)",
+  "Keep the cropped channel of this analysis as surface B, the surface compared with A":
+    "Bu analizin kırpılmış kanalını A ile karşılaştırılacak B yüzeyi olarak ata",
   "Keep as B": "B olarak ata",
   "Save the levelled, aligned, voxel-thinned crop of the channel as an x y z text file":
     "Kanalın yataylanmış, hizalanmış ve voksellerle seyreltilmiş kırpımını x y z metin dosyası olarak kaydet",
@@ -112,8 +112,7 @@ const I18N = { tr: {
     "Ölçülen geometri, pürüzlülük ve korelasyonlar analizden sonra burada görünür.",
   "Start": "Başlangıç",
   "Open a point cloud…": "Nokta bulutu aç…",
-  "You can also drop a file anywhere on this window. Everything runs on this computer; no data leave it.":
-    "Dosyayı bu pencerenin herhangi bir yerine de bırakabilirsiniz. Her şey bu bilgisayarda çalışır; hiçbir veri dışarı çıkmaz.",
+  "You can also drop a file anywhere on this window.": "Dosyayı bu pencerenin herhangi bir yerine de bırakabilirsiniz.",
   // start page after a file is opened
   "Opened {name}": "{name} açıldı",
   "Point cloud opened": "Nokta bulutu açıldı",
@@ -124,12 +123,12 @@ const I18N = { tr: {
   "Surface B, the compared surface: not opened yet": "Karşılaştırılan B yüzeyi: henüz açılmadı",
   "Click <b>Analyse</b> to level and align the surface, find the channel and measure it.":
     "Yüzeyi yataylamak ve hizalamak, kanalı bulup ölçmek için <b>Analiz et</b>'e tıklayın.",
-  "Click <b>Compare</b> to grade how faithfully B replicates A, with RQ, RQ<sub>dx</sub>, RQ<sub>dy</sub> and RQ<sub>d</sub>.":
-    "B'nin A'yı ne kadar iyi kopyaladığını RQ, RQ<sub>dx</sub>, RQ<sub>dy</sub> ve RQ<sub>d</sub> ile değerlendirmek için <b>Karşılaştır</b>'a tıklayın.",
-  "Now open surface <b>B</b>, the compared surface (usually the moulded part), or analyse its scan and click <b>Keep as B</b>.":
-    "Şimdi karşılaştırılan <b>B</b> yüzeyini (genellikle kalıplanmış parça) açın ya da taramasını analiz edip <b>B olarak ata</b>'ya tıklayın.",
-  "Now open surface <b>A</b>, the reference (usually the mould insert), or analyse its scan and click <b>Keep as A</b>.":
-    "Şimdi referans olan <b>A</b> yüzeyini (genellikle iç kalıp) açın ya da taramasını analiz edip <b>A olarak ata</b>'ya tıklayın.",
+  "Click <b>Compare</b> to grade how closely B matches A, with RQ, RQ<sub>dx</sub>, RQ<sub>dy</sub> and RQ<sub>d</sub>.":
+    "B'nin A'ya ne kadar benzediğini RQ, RQ<sub>dx</sub>, RQ<sub>dy</sub> ve RQ<sub>d</sub> ile değerlendirmek için <b>Karşılaştır</b>'a tıklayın.",
+  "Now open surface <b>B</b>, the surface compared with A, or analyse its scan and click <b>Keep as B</b>.":
+    "Şimdi A ile karşılaştırılacak <b>B</b> yüzeyini açın ya da taramasını analiz edip <b>B olarak ata</b>'ya tıklayın.",
+  "Now open surface <b>A</b>, the reference, or analyse its scan and click <b>Keep as A</b>.":
+    "Şimdi referans olan <b>A</b> yüzeyini açın ya da taramasını analiz edip <b>A olarak ata</b>'ya tıklayın.",
   "Open A…": "A'yı aç…",
   "Open B…": "B'yi aç…",
   "The analysis uses the default settings of the paper. To change them before you start, press <b>Settings</b>.":
@@ -139,6 +138,29 @@ const I18N = { tr: {
   "{n} analysis setting differs from the paper defaults. To check or change it, press <b>Settings</b>.":
     "{n} analiz ayarı makaledeki değerlerden farklı. Kontrol etmek ya da değiştirmek için <b>Ayarlar</b>'a basın.",
   "MaRQ is still starting; the button works in a moment.": "MaRQ hâlâ başlatılıyor; düğme birazdan çalışır.",
+  // tips after each step
+  "<b>Surface analysis finished.</b> Its views are in the browser on the left, its numbers under Properties, and <b>Report</b> makes a printable page of it. To compare two surfaces, keep this channel as <b>A</b>, the reference, or as <b>B</b>, the surface compared with it, then analyse the other one.":
+    "<b>Yüzey analizi tamamlandı.</b> Görünümleri soldaki model ağacında, sayıları Özellikler altında; <b>Rapor</b> yazdırılabilir bir sayfasını hazırlar. İki yüzeyi karşılaştırmak için bu kanalı referans olarak <b>A</b> ya da onunla karşılaştırılan yüzey olarak <b>B</b> olarak atayın, sonra diğerini analiz edin.",
+  "<b>Surface analysis finished.</b> Keep this channel as <b>B</b> to compare it with surface A. Its views are in the browser on the left, and <b>Report</b> makes a printable page of it.":
+    "<b>Yüzey analizi tamamlandı.</b> A yüzeyiyle karşılaştırmak için bu kanalı <b>B</b> olarak atayın. Görünümleri soldaki model ağacında; <b>Rapor</b> yazdırılabilir bir sayfasını hazırlar.",
+  "<b>Surface analysis finished.</b> Keep this channel as <b>A</b> to use it as the reference for surface B. Its views are in the browser on the left, and <b>Report</b> makes a printable page of it.":
+    "<b>Yüzey analizi tamamlandı.</b> B yüzeyinin referansı olarak kullanmak için bu kanalı <b>A</b> olarak atayın. Görünümleri soldaki model ağacında; <b>Rapor</b> yazdırılabilir bir sayfasını hazırlar.",
+  "<b>Surface analysis finished.</b> Keep this channel as <b>A</b> or <b>B</b> to replace that surface, then compare again. <b>Report</b> makes a printable page of it.":
+    "<b>Yüzey analizi tamamlandı.</b> O yüzeyin yerine koymak için bu kanalı <b>A</b> ya da <b>B</b> olarak atayın, sonra yeniden karşılaştırın. <b>Rapor</b> yazdırılabilir bir sayfasını hazırlar.",
+  "<b>Surfaces A and B are set.</b> <b>Compare</b> grades how closely B matches A, with RQ, RQ<sub>dx</sub>, RQ<sub>dy</sub> and RQ<sub>d</sub>.":
+    "<b>A ve B yüzeyleri hazır.</b> <b>Karşılaştır</b>, B'nin A'ya ne kadar benzediğini RQ, RQ<sub>dx</sub>, RQ<sub>dy</sub> ve RQ<sub>d</sub> ile değerlendirir.",
+  "<b>Surface A is set.</b> Now open the scan of the surface to compare with it, analyse it and keep it as <b>B</b>.":
+    "<b>A yüzeyi atandı.</b> Şimdi onunla karşılaştırılacak yüzeyin taramasını açın, analiz edin ve <b>B</b> olarak atayın.",
+  "<b>Surface B is set.</b> Now open the scan of the reference, analyse it and keep it as <b>A</b>.":
+    "<b>B yüzeyi atandı.</b> Şimdi referansın taramasını açın, analiz edin ve <b>A</b> olarak atayın.",
+  "<b>Comparison finished.</b> RQ<sub>d</sub> and the other correlations are under Properties; the browser lists the 3D views, the height and slope maps and the cross-sections of A and B. <b>Save the session</b> keeps every result to open again later, and <b>Batch files…</b> compares A with several surfaces at once.":
+    "<b>Karşılaştırma tamamlandı.</b> RQ<sub>d</sub> ve diğer korelasyonlar Özellikler altında; model ağacında 3B görünümler, yükseklik ve eğim haritaları ve A ile B'nin kesitleri var. <b>Oturumu kaydet</b> tüm sonuçları daha sonra yeniden açmak üzere saklar; <b>Toplu dosyalar…</b> A'yı aynı anda birçok yüzeyle karşılaştırır.",
+  "<b>Batch finished.</b> Every comparison is in the table of <b>Batch results</b>; <b>Results CSV</b> saves it as a spreadsheet.":
+    "<b>Toplu karşılaştırma tamamlandı.</b> Tüm karşılaştırmalar <b>Toplu sonuçlar</b> tablosunda; <b>Sonuçlar (CSV)</b> tabloyu hesap tablosu olarak kaydeder.",
+  "Hide tips": "İpuçlarını gizle",
+  "Turn the tips off; Help (?) turns them on again": "İpuçlarını kapat; Yardım (?) yeniden açar",
+  "Tips turned off; Help (?) turns them on again": "İpuçları kapatıldı; Yardım (?) yeniden açar",
+  "Show a tip after each step, with the next steps as buttons": "Her adımdan sonra, sonraki adımları düğme olarak gösteren bir ipucu göster",
 
   // navigation bar, log, drop, status bar
   "Fit the whole plot (double-click on the plot does the same)": "Grafiğin tamamını sığdır (grafiğe çift tıklamak da aynısını yapar)",
@@ -561,10 +583,10 @@ const I18N = { tr: {
 // Blocks with markup inside a sentence, translated whole (data-i18n="key")
 const I18N_HTML = { tr: {
   "empty.1": "Bir nokta bulutunu <b>Aç</b> ve <b>Analiz et</b>: yüzey yataylanır ve hizalanır, kanal bulunur ve ölçülür.",
-  "empty.2": "İç kalıp için <b>A olarak ata</b>, kalıplanmış parça için <b>B olarak ata</b>.",
-  "empty.3": "Kopyalamayı RQ, RQ<sub>dx</sub>, RQ<sub>dy</sub> ve RQ<sub>d</sub> ile derecelendirmek için <b>Karşılaştır</b>.",
-  "help.flow": "<b>İş akışı</b><br>1. Bir nokta bulutunu <b>Aç</b> ve <b>Analiz et</b>. 2. <b>A olarak ata</b> (iç kalıp) ya da <b>B olarak ata</b> (kalıplanmış parça). 3. İkisi de doluyken <b>Karşılaştır</b>. Her sonucun görünümleri <b>Model ağacı</b>'nda listelenir; sayılar <b>Özellikler</b> altındadır.",
-  "about.what": "MaRQ, optik profilometri nokta bulutlarında mikrokanalları ölçer ve bir kanalın iç kalıptan kalıplanmış parçaya ne kadar doğru kopyalandığını derecelendirir: yükseklik korelasyonu RQ, yönlü eğim korelasyonları RQ<sub>dx</sub> ve RQ<sub>dy</sub>, ve kanal içinde eğim büyüklüğü korelasyonu RQ<sub>d</sub> ile.",
+  "empty.2": "Karşılaştırılacak iki yüzey için <b>A olarak ata</b> ve <b>B olarak ata</b>.",
+  "empty.3": "B'nin A'ya ne kadar benzediğini RQ, RQ<sub>dx</sub>, RQ<sub>dy</sub> ve RQ<sub>d</sub> ile değerlendirmek için <b>Karşılaştır</b>.",
+  "help.flow": "<b>İş akışı</b><br>1. Bir nokta bulutunu <b>Aç</b> ve <b>Analiz et</b>. 2. <b>A olarak ata</b> (referans) ve <b>B olarak ata</b> (onunla karşılaştırılan yüzey). 3. İkisi de doluyken <b>Karşılaştır</b>. Her sonucun görünümleri <b>Model ağacı</b>'nda listelenir; sayılar <b>Özellikler</b> altındadır.",
+  "about.what": "MaRQ, optik profilometri nokta bulutlarında mikrokanalları ölçer ve bir kanalın iki yüzeyini, A ile B'yi, karşılaştırır: yükseklik korelasyonu RQ, yönlü eğim korelasyonları RQ<sub>dx</sub> ve RQ<sub>dy</sub>, ve kanal içinde eğim büyüklüğü korelasyonu RQ<sub>d</sub> ile.",
   "about.dev": "MaRQ yazılımı Mehmet Oğulcan Güngör tarafından geliştirilmiştir. Yazılım GNU Genel Kamu Lisansı, sürüm 3 ile yayımlanmıştır. Örnek veriler: CC BY 4.0.",
   "about.third": "Üçüncü taraf bileşenler: Plotly.js (MIT), three.js (MIT), Pyodide (MPL-2.0), NumPy ve SciPy (BSD-3-Clause), OpenBLAS (BSD-3-Clause). Bütün hesaplamalar bu bilgisayarda yapılır; hiçbir dosya yüklenmez.",
   "about.metrics": "<b>Ölçütler</b><br>RQ: iki yükseklik haritasının kanal içi maske üzerindeki Pearson korelasyonu. RQ<sub>dx</sub>, RQ<sub>dy</sub>: kanal boyunca ve enine işaretli eğimlerin korelasyonları. RQ<sub>d</sub>: belirtilen ızgara hücre boyutunda (makalede 5 µm) eğim büyüklüğü haritalarının korelasyonu; yükseklik korelasyonunun doyduğu yerde yan duvar biçimine duyarlı olduğu için derecelendirme ölçütüdür.",

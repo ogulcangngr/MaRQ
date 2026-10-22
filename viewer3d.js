@@ -61,7 +61,7 @@ function faceTexture(label, dark) {
   g.lineWidth = 4;
   g.strokeRect(2, 2, 124, 124);
   g.fillStyle = dark ? "#e0e0e0" : "#3a3a40";
-  g.font = `600 ${label.length > 6 ? 20 : 24}px -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", system-ui, Ubuntu, sans-serif`;
+  g.font = `600 ${label.length > 6 ? 20 : 24}px -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", system-ui, Ubuntu, "Droid Sans", sans-serif`;
   g.textAlign = "center"; g.textBaseline = "middle";
   g.fillText(label, 64, 66);
   const t = new THREE.CanvasTexture(c);
