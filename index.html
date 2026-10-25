@@ -13,9 +13,9 @@
     if (t !== "light" && t !== "dark") t = (window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light";
     document.documentElement.setAttribute("data-theme", t);</script>
   <!-- Plotly.js from the local bundle (vendor/), with the CDN as fallback when the bundle is absent -->
-  <script>window.__marqRuntime = { plotly: "local", plotlyVersion: "2.35.2" };</script>
-  <script src="vendor/plotly-2.35.2.min.js"
-          onerror="window.__marqRuntime.plotly='cdn';var s=document.createElement('script');s.src='https://cdn.plot.ly/plotly-2.35.2.min.js';s.crossOrigin='anonymous';document.head.appendChild(s);"></script>
+  <script>window.__marqRuntime = { plotly: "local", plotlyVersion: "4.1.2" };</script>
+  <script src="vendor/plotly-4.1.2.min.js"
+          onerror="window.__marqRuntime.plotly='cdn';var s=document.createElement('script');s.src='https://cdn.plot.ly/plotly-4.1.2.min.js';s.crossOrigin='anonymous';document.head.appendChild(s);"></script>
   <!-- the 3D viewport (three.js); without it MaRQ draws the 3D views with Plotly -->
   <script type="module" src="viewer3d.js"></script>
 </head>
@@ -40,6 +40,22 @@
       </div>
       <div class="trow leaf" data-view="view3d"><svg class="ico"><use href="#i-cube"/></svg><span class="tlabel">3D view</span></div>
       <div class="trow leaf" data-view="roughness"><svg class="ico"><use href="#i-map"/></svg><span class="tlabel">Roughness areas</span></div>
+    </div>
+  </div>
+</template>
+
+<!-- the node of one comparison in the tree (a copy for every comparison) -->
+<template id="tpl-comparison">
+  <div class="tnode group open comparison">
+    <div class="trow cnode"><svg class="ico tw"><use href="#i-chev"/></svg><svg class="ico"><use href="#i-compare"/></svg><span class="tlabel cname" data-i18n-skip></span><span class="tmeta cmeta" data-i18n-skip></span><button class="tx cremove" title="Remove this comparison from the session"><svg class="ico"><use href="#i-x"/></svg></button></div>
+    <div class="tchildren">
+      <div class="trow leaf" data-view="gradA"><svg class="ico"><use href="#i-cube"/></svg><span class="tlabel">Surface A</span></div>
+      <div class="trow leaf" data-view="gradB"><svg class="ico"><use href="#i-cube"/></svg><span class="tlabel">Surface B</span></div>
+      <div class="trow leaf" data-view="gradE"><svg class="ico"><use href="#i-cube"/></svg><span class="tlabel">Slope error</span></div>
+      <div class="trow leaf" data-view="gradheight"><svg class="ico"><use href="#i-map"/></svg><span class="tlabel">Height maps</span></div>
+      <div class="trow leaf" data-view="gradslope"><svg class="ico"><use href="#i-map"/></svg><span class="tlabel">Slope maps</span></div>
+      <div class="trow leaf" data-view="gradxs"><svg class="ico"><use href="#i-xsect"/></svg><span class="tlabel">Cross-sections of A and B</span></div>
+      <div class="trow leaf cbatch" data-view="batch" style="display:none"><svg class="ico"><use href="#i-table"/></svg><span class="tlabel">Batch results</span></div>
     </div>
   </div>
 </template>
@@ -89,6 +105,9 @@
     <symbol id="i-xsect" viewBox="0 0 24 24"><path d="M3 7h5l1.5 8h5L16 7h5"/><path d="M12 3v18" stroke-dasharray="2 2"/></symbol>
     <symbol id="i-x" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M8 12.3l2.8 2.8L16.2 9.5"/></symbol>
+    <symbol id="i-sidebar" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><path d="M9.5 4.5v15"/><path d="M6 8.5h1.5M6 11h1.5" stroke-width="1.3"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="11" rx="1.5"/><path d="M15.5 8.5V6A1.5 1.5 0 0 0 14 4.5H6A1.5 1.5 0 0 0 4.5 6v8A1.5 1.5 0 0 0 6 15.5h2.5"/></symbol>
+    <symbol id="i-outline" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="1.5" stroke-opacity=".45"/><path d="M7 15.5c0-4 2-7 5-7s5 3 5 7z" stroke-dasharray="2.4 1.6"/></symbol>
   </defs>
 </svg>
 
@@ -105,6 +124,7 @@
           <button role="menuitem" data-cmd="open-cloud"><svg class="ico"><use href="#i-open"/></svg><span>Open a point cloud…</span><kbd data-i18n-skip>Ctrl+O</kbd></button>
           <button role="menuitem" data-cmd="open-session"><svg class="ico"><use href="#i-open"/></svg><span>Open a session…</span></button>
           <button role="menuitem" data-cmd="save-session"><svg class="ico"><use href="#i-save"/></svg><span>Save the session…</span><kbd data-i18n-skip>Ctrl+S</kbd></button>
+          <button role="menuitem" data-cmd="example"><svg class="ico"><use href="#i-run"/></svg><span>Try an example</span></button>
           <div class="menu-sep"></div>
           <button role="menuitem" data-cmd="report"><svg class="ico"><use href="#i-report"/></svg><span>Report…</span></button>
           <button role="menuitem" data-cmd="figure"><svg class="ico"><use href="#i-figure"/></svg><span>Export a figure…</span></button>
@@ -191,27 +211,27 @@
         <div class="rstack">
           <label class="rcheck" title="Lock the y scale of the 2D plots to the x scale, so the channel keeps its true proportions. Off: each axis fills the panel, small variations become visible.">
             <input type="checkbox" id="equal-axes" checked><svg class="ico"><use href="#i-ratio"/></svg><span>True proportions</span></label>
-          <label class="rcheck" title="Zoom and pan all comparison maps together">
-            <input type="checkbox" id="link-maps" checked><svg class="ico"><use href="#i-link"/></svg><span>Link the maps</span></label>
-          <label class="rcheck" title="Keep the same 3D camera for surface A, surface B and the slope error">
-            <input type="checkbox" id="link-cameras" checked><svg class="ico"><use href="#i-cube"/></svg><span>Link the 3D views</span></label>
+          <!-- the links of the comparison views, set with their buttons below those views -->
+          <input type="checkbox" id="link-maps" checked hidden>
+          <input type="checkbox" id="link-cameras" checked hidden>
         </div>
         <div class="rstack">
           <label class="rselect" title="Colour scale of every height map (2D and 3D)"><span>Colours</span>
             <select id="palette-select">
-              <option value="Viridis" selected>Viridis</option>
+              <option value="Viridis">Viridis</option>
               <option value="Cividis">Cividis</option>
               <option value="Plasma">Plasma</option>
               <option value="Magma">Magma</option>
               <option value="Inferno">Inferno</option>
               <option value="Turbo">Turbo</option>
-              <option value="Earth">Earth</option>
+              <option value="Earth" selected>Earth</option>
             </select></label>
-          <label class="rselect" title="Mesh budget of the 3D views (cells); higher is sharper but slower to turn"><span>3D detail</span>
+          <label class="rselect" title="Mesh budget of the 3D views (cells); higher is sharper but slower to turn. Very high draws every measured cell, at the voxel size."><span>3D detail</span>
             <select id="quality-select">
               <option value="30000">Low</option>
-              <option value="80000" selected>Medium</option>
-              <option value="200000">High</option>
+              <option value="80000">Medium</option>
+              <option value="200000" selected>High</option>
+              <option value="-1">Very high</option>
             </select></label>
           <label class="rselect" title="Stretch the heights in the 3D views, to see shallow features"><span>Depth scale</span>
             <select id="exag-select">
@@ -243,7 +263,8 @@
 
     <aside id="leftpane">
       <section class="pane" id="browser-pane">
-        <div class="pane-head"><span>Browser</span></div>
+        <div class="pane-head"><span>Browser</span>
+          <button class="tx pane-hide" id="hide-left" title="Hide the browser; the button at the left of the view title brings it back"><svg class="ico"><use href="#i-sidebar"/></svg></button></div>
         <div class="tree" id="tree">
 
           <div class="tnode group open" data-group="inputs">
@@ -268,30 +289,11 @@
           </div>
 
           <div id="tree-analyses"></div>
+          <div id="tree-comparisons"></div>
 
-          <div class="tnode group open" data-group="compare" id="tree-compare" style="display:none">
-            <div class="trow"><svg class="ico tw"><use href="#i-chev"/></svg><span class="tlabel">Comparison</span><span class="tmeta">A and B</span></div>
-            <div class="tchildren">
-              <div class="trow leaf" data-view="gradA"><svg class="ico"><use href="#i-cube"/></svg><span class="tlabel">Surface A</span></div>
-              <div class="trow leaf" data-view="gradB"><svg class="ico"><use href="#i-cube"/></svg><span class="tlabel">Surface B</span></div>
-              <div class="trow leaf" data-view="gradE"><svg class="ico"><use href="#i-cube"/></svg><span class="tlabel">Slope error</span></div>
-              <div class="trow leaf" data-view="gradheight"><svg class="ico"><use href="#i-map"/></svg><span class="tlabel">Height maps</span></div>
-              <div class="trow leaf" data-view="gradslope"><svg class="ico"><use href="#i-map"/></svg><span class="tlabel">Slope maps</span></div>
-              <div class="trow leaf" data-view="gradxs"><svg class="ico"><use href="#i-xsect"/></svg><span class="tlabel">Cross-sections of A and B</span></div>
-              <div class="trow leaf" data-view="batch" id="tree-batch" style="display:none"><svg class="ico"><use href="#i-table"/></svg><span class="tlabel">Batch results</span></div>
-            </div>
-          </div>
+          <div class="trow leaf summary" data-view="summary" id="tree-summary" style="display:none" title="Every analysis and every comparison of this session in one table">
+            <svg class="ico"><use href="#i-table"/></svg><span class="tlabel">Summary of the session</span></div>
 
-        </div>
-      </section>
-
-      <div class="splitter-h" id="split-props" title="Drag to resize"></div>
-
-      <section class="pane" id="props-pane">
-        <div class="pane-head"><span>Properties</span><span class="pane-sub" id="props-sub" data-i18n-skip></span></div>
-        <div id="results-bar">
-          <div id="results-empty">The measured geometry, the roughness and the correlations appear here after an analysis.</div>
-          <div id="metrics-panel" data-i18n-skip style="display:none"></div>
         </div>
       </section>
     </aside>
@@ -299,7 +301,10 @@
     <div class="splitter-v" id="split-left" title="Drag to resize"></div>
 
     <main id="viewport">
-      <div id="vp-caption"><span id="vp-title" data-i18n-skip>Start</span><span id="vp-detail" data-i18n-skip></span></div>
+      <div id="vp-caption">
+        <button class="tx pane-show" id="show-left" title="Show the browser"><svg class="ico"><use href="#i-sidebar"/></svg></button>
+        <span id="vp-title" data-i18n-skip>Start</span><span id="vp-detail" data-i18n-skip></span>
+        <button class="tx pane-show right" id="show-right" title="Show the properties"><svg class="ico"><use href="#i-sidebar"/></svg></button></div>
       <!-- after each step: what finished and what can come next (filled by app.js) -->
       <div id="guide-bar" data-i18n-skip style="display:none">
         <svg class="ico"><use href="#i-check"/></svg>
@@ -320,7 +325,11 @@
               <li data-i18n="empty.2"><b>Keep as A</b> and <b>Keep as B</b> for the two surfaces to compare.</li>
               <li data-i18n="empty.3"><b>Compare</b> to grade how closely B matches A with RQ, RQ<sub>dx</sub>, RQ<sub>dy</sub> and RQ<sub>d</sub>.</li>
             </ol>
-            <button class="btn btn-primary" onclick="document.getElementById('file1-input').click()">Open a point cloud…</button>
+            <div class="btn-row">
+              <button class="btn btn-primary" onclick="document.getElementById('file1-input').click()">Open a point cloud…</button>
+              <button class="btn" id="try-example" onclick="runExample()" title="A synthetic 600 µm channel and a copy of it, 4 µm wider and 3 µm shallower: both analysed, kept as A and B and compared, step by step">
+                <svg class="ico"><use href="#i-run"/></svg><span>Try an example</span></button>
+            </div>
             <div class="empty-note">You can also drop a file anywhere on this window.</div>
           </div>
           <!-- after a file is opened: what was opened and the next step (filled by app.js) -->
@@ -360,6 +369,7 @@
           <div id="xs-plot"></div>
         </div>
         <div class="vp-layer html-view" id="batch-view" data-i18n-skip></div>
+        <div class="vp-layer html-view" id="summary-view" data-i18n-skip></div>
 
         <!-- 3D views: one viewport for all of them -->
         <div class="vp-layer" id="viewer3d">
@@ -385,6 +395,11 @@
             <button class="navbtn toggle on" data-act="pan" title="Drag to pan (the wheel zooms)"><svg class="ico"><use href="#i-pan"/></svg></button>
             <button class="navbtn toggle" data-act="zoombox" title="Drag a box to zoom into it"><svg class="ico"><use href="#i-zoombox"/></svg></button>
           </span>
+          <span class="nav-set" data-for="maps">
+            <span class="nav-sep"></span>
+            <button class="navbtn toggle on" data-act="outline" title="Show or hide the outline of the channel interior, the area over which the correlations are computed"><svg class="ico"><use href="#i-outline"/></svg></button>
+            <button class="navbtn toggle on" data-act="linkmaps" title="Zoom and pan the three maps together, and the height and slope maps on the same region"><svg class="ico"><use href="#i-link"/></svg></button>
+          </span>
           <span class="nav-set" data-for="3d">
             <button class="navbtn" data-act="home" title="Home view (H)"><svg class="ico"><use href="#i-home"/></svg></button>
             <button class="navbtn" data-act="fit" title="Fit the surface in the view (F; or double-click)"><svg class="ico"><use href="#i-fit"/></svg></button>
@@ -400,6 +415,8 @@
             <button class="navbtn toggle" data-act="measure" title="Measure: click two points on the surface for their distance (M)"><svg class="ico"><use href="#i-ruler"/></svg></button>
             <button class="navbtn toggle" data-act="section" title="Section: click two points on the surface for the height profile between them (S)"><svg class="ico"><use href="#i-section"/></svg></button>
             <button class="navbtn toggle" data-act="xsect" title="Cross-section: click one point on the surface for the profile across the channel through it (C)"><svg class="ico"><use href="#i-xsect"/></svg></button>
+            <span class="nav-cmp"><span class="nav-sep"></span>
+              <button class="navbtn toggle on" data-act="linkcams" title="Keep the same 3D camera for surface A, surface B and the slope error"><svg class="ico"><use href="#i-link"/></svg></button></span>
           </span>
           <span class="nav-sep"></span>
           <button class="navbtn" data-act="snapshot" title="Save this view as a PNG image"><svg class="ico"><use href="#i-camera"/></svg></button>
@@ -407,8 +424,19 @@
 
         <!-- Analysis log (slides over the viewport) -->
         <div id="log-drawer">
-          <div class="drawer-head"><span>Analysis log</span><button class="tx" onclick="toggleLog(false)" title="Close the log"><svg class="ico"><use href="#i-x"/></svg></button></div>
+          <div class="drawer-head"><span>Analysis log</span><span class="sb-flex"></span>
+            <button class="tx" onclick="copyLog()" title="Copy the log"><svg class="ico"><use href="#i-copy"/></svg></button>
+            <button class="tx" onclick="saveLog()" title="Save the log as a text file"><svg class="ico"><use href="#i-save"/></svg></button>
+            <button class="tx" onclick="toggleLog(false)" title="Close the log"><svg class="ico"><use href="#i-x"/></svg></button></div>
           <textarea id="log-box" readonly spellcheck="false" placeholder="The log of the analysis appears here."></textarea>
+        </div>
+
+        <!-- the run in progress: its steps, the one under way, the time, Cancel (filled by app.js) -->
+        <div id="run-card" class="run-card" role="status" aria-live="polite" data-i18n-skip style="display:none">
+          <div class="rc-head"><span class="rc-title"></span><span class="rc-time"></span></div>
+          <div class="rc-batch"></div><div class="rc-bar"><div></div></div>
+          <ol class="rc-steps"></ol>
+          <div class="rc-foot"><button class="btn btn-mini" id="rc-cancel">Cancel</button></div>
         </div>
 
         <div id="drop-overlay"><div>Drop the point cloud to open it</div></div>
@@ -422,6 +450,20 @@
         </div>
       </div>
     </main>
+
+    <div class="splitter-v" id="split-right" title="Drag to resize"></div>
+
+    <aside id="rightpane">
+      <section class="pane" id="props-pane">
+        <div class="pane-head"><span>Properties</span><span class="pane-sub" id="props-sub" data-i18n-skip></span>
+          <button class="tx" id="props-copy" style="display:none" title="Copy the properties as a table, to paste into a spreadsheet"><svg class="ico"><use href="#i-copy"/></svg></button>
+          <button class="tx pane-hide right" id="hide-right" title="Hide the properties; the button at the right of the view title brings them back"><svg class="ico"><use href="#i-sidebar"/></svg></button></div>
+        <div id="results-bar">
+          <div id="results-empty">The measured geometry, the roughness and the correlations appear here after an analysis.</div>
+          <div id="metrics-panel" data-i18n-skip style="display:none"></div>
+        </div>
+      </section>
+    </aside>
   </div>
 
   <!-- ── Status bar ──────────────────────────────────────────────────────────── -->
@@ -459,6 +501,11 @@
         <div class="settings-col">
           <div class="settings-title">Surface analysis</div>
           <div class="param-grid">
+            <div class="param-card">
+              <div class="param-card-top"><span class="param-label">Raised feature: turn the scan over first</span>
+                <input class="param-check" type="checkbox" id="p-raised"></div>
+              <span class="param-hint">For a raised channel-forming feature, a ridge, as on a mould master. MaRQ turns a raised feature over by itself, but only after the spike removal, which cuts away anything more than 40 µm above the flat surface; this turns the scan over before it. Off for a channel.</span>
+            </div>
             <div class="param-card">
               <div class="param-card-top"><span class="param-label">Voxel size (0 = automatic)</span>
                 <input class="param-input" type="number" min="0" id="p-voxel" value="5"></div>
@@ -525,24 +572,9 @@
                 <span class="param-hint">Distance from each edge of the scan discarded before the analysis, removing boundary artefacts.</span>
               </div>
               <div class="param-card">
-                <div class="param-card-top"><span class="param-label">Display cell size (0 = automatic)</span>
-                  <input class="param-input" type="number" min="0" id="p-cell" value="0" step="1"></div>
-                <span class="param-hint">Side of the square cells of the height maps and the 3D view, in point cloud units. Display only: the geometry and the roughness are computed from the points. 0 chooses the finest cell (never below the voxel size) that keeps each map within 160&thinsp;000 cells.</span>
-              </div>
-              <div class="param-card">
-                <div class="param-card-top"><span class="param-label">Display smoothing (cells)</span>
-                  <input class="param-input" type="number" min="0" id="p-sigma" value="0"></div>
-                <span class="param-hint">Gaussian blur radius on the display grids, in cells; 0 switches smoothing off.</span>
-              </div>
-              <div class="param-card">
                 <div class="param-card-top"><span class="param-label">Depth profile slices</span>
                   <input class="param-input" type="number" min="3" id="p-slices" value="80"></div>
                 <span class="param-hint">Number of slices along the channel for the local depth and its spread (the widths and the length are read on grid lines).</span>
-              </div>
-              <div class="param-card">
-                <div class="param-card-top"><span class="param-label">Header rows to skip</span>
-                  <input class="param-input" type="number" min="0" id="p-skiprows" value="0"></div>
-                <span class="param-hint">Number of header rows to skip when reading the point cloud file.</span>
               </div>
             </div>
           </details>
@@ -560,10 +592,26 @@
                 <input class="param-input" type="number" min="0" id="g-sigma" value="0"></div>
               <span class="param-hint">Gaussian blur before the slopes are computed. At least one grid cell is always applied, for stable slopes.</span>
             </div>
+          </div>
+          <div class="settings-title sub">Display of the surface analysis</div>
+          <div class="param-grid">
+            <div class="param-card">
+              <div class="param-card-top"><span class="param-label">Display cell size (0 = automatic)</span>
+                <input class="param-input" type="number" min="0" id="p-cell" value="0" step="1"></div>
+              <span class="param-hint">Side of the square cells of the height maps and the 3D view, in point cloud units. Display only: the geometry and the roughness are computed from the points. 0 chooses the finest cell (never below the voxel size) that keeps each map within 160&thinsp;000 cells.</span>
+            </div>
+            <div class="param-card">
+              <div class="param-card-top"><span class="param-label">Display smoothing (cells)</span>
+                <input class="param-input" type="number" min="0" id="p-sigma" value="0"></div>
+              <span class="param-hint">Gaussian blur radius on the display grids, in cells; 0 switches smoothing off.</span>
+            </div>
+          </div>
+          <div class="settings-title sub">Reading the files</div>
+          <div class="param-grid">
             <div class="param-card">
               <div class="param-card-top"><span class="param-label">Header rows to skip</span>
-                <input class="param-input" type="number" min="0" id="g-skiprows" value="0"></div>
-              <span class="param-hint">Number of header rows to skip when reading the point cloud files.</span>
+                <input class="param-input" type="number" min="0" id="p-skiprows" value="0"></div>
+              <span class="param-hint">Lines at the top of each point cloud file to leave out, in the analysis and in the comparison. With 0, lines of text at the top (column names, instrument data) are left out by themselves.</span>
             </div>
           </div>
           <div class="modal-note">Changed values are marked and remembered on this computer. The paper defaults are the values used in the paper.</div>
@@ -606,12 +654,21 @@
             <option value="1600x900">1600 × 900</option>
             <option value="1800x1000">1800 × 1000</option>
             <option value="custom">Custom</option>
+            <option value="mm90">Journal, one column (90 mm wide)</option>
+            <option value="mm190">Journal, two columns (190 mm wide)</option>
           </select>
         </label>
         <div class="field-row" id="exp-custom" style="display:none">
           <label class="field">Width <input type="number" id="exp-w" value="1400" min="300" max="6000"></label>
           <label class="field">Height <input type="number" id="exp-h" value="800" min="200" max="6000"></label>
         </div>
+        <div class="field-row" id="exp-mm" style="display:none">
+          <label class="field">Width (mm) <input type="number" id="exp-wmm" value="90" min="30" max="300"></label>
+          <label class="field">Height (mm) <input type="number" id="exp-hmm" value="85" min="20" max="300"></label>
+          <label class="field">Resolution
+            <select id="exp-dpi"><option value="300" selected>300 dots per inch</option><option value="600">600 dots per inch</option></select></label>
+        </div>
+        <div class="modal-note" id="exp-mm-note" style="display:none">At a journal size the figure is drawn at its printed size, with its text near 7 to 9 points and without the title of the view; a PNG is made at the chosen resolution, an SVG as vectors.</div>
         <div class="modal-note">The figure is rebuilt from the result in the chosen theme and size, with axes and a colour bar, so labels and line widths stay legible in a document. For a picture of the 3D viewport as it is on screen, use the camera button below the view.</div>
       </div>
       <div class="modal-foot"><button class="btn btn-primary" id="exp-go" onclick="runExport()">Export</button></div>
@@ -657,6 +714,9 @@
           <tr><th colspan="2">Sessions</th></tr>
           <tr><td>Save</td><td>File, Save the session (Ctrl+S): every result, its settings and surfaces A and B in one .marq file</td></tr>
           <tr><td>Open</td><td>File, Open a session, or drop the .marq file on the window: the results return without a new analysis</td></tr>
+          <tr><th colspan="2">Panes</th></tr>
+          <tr><td>Hide</td><td>the button at the right of the Browser or Properties title; the button at the edge of the view title brings the pane back</td></tr>
+          <tr><td>Copy</td><td>the copy button of Properties copies its numbers as a table, to paste into a spreadsheet</td></tr>
         </table>
       </div>
     </div>

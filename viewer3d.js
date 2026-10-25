@@ -10,7 +10,7 @@
    window.MarqViewer.create(container) returns a viewer; app.js gives it the surface traces that
    plots.py builds (x, y, z, optional surfacecolor, colour scale, cmin/cmax). */
 
-import * as THREE from "./vendor/three/three.module.min.js";
+import * as THREE from "./vendor/three/three.module.js";      // it imports ./three.core.js
 
 const DEG = Math.PI / 180;
 const FOV = 30;                                   // vertical field of view, perspective camera
@@ -177,6 +177,19 @@ class Viewer {
     const o = this.origin, data = (m) => ({ x: m.x + o.x, y: m.y + o.y, z: m.z, value: m.value });
     if (this.marks.length === 2) this._emit(this.tool, { a: data(this.marks[0]), b: data(this.marks[1]), ...this._measure() });
     else this._emit("marks", { a: data(this.marks[0]) });
+  }
+
+  // the points of the tool, when a panel over the lower `inset` pixels of the view would cover
+  // them: the view moves up until they sit in the middle of the part above the panel
+  revealMarks(inset) {
+    if (!this.marks.length || !(inset > 0) || !this.h) return;
+    const cam = this._camera();
+    const ys = this.marks.map((q) => (1 - new THREE.Vector3(q.x, q.y, q.z * this.exag).project(cam).y) / 2 * this.h);
+    const free = this.h - inset, low = Math.max(...ys);
+    if (low < free - 24) return;
+    const st = { ...this.state, target: this.state.target.clone() };
+    st.target.addScaledVector(this._dirs(st).up, -((Math.min(...ys) + low) / 2 - free / 2) * this._pixelSize());
+    this._go(st, true);
   }
 
   _measure() {
@@ -727,8 +740,9 @@ class Viewer {
     // +Y points along +Z, which keeps every label upright.
     const labels = this.cubeLabels || ["RIGHT", "LEFT", "TOP", "BOTTOM", "FRONT", "BACK"];
     const mats = labels.map((l) => new THREE.MeshBasicMaterial({ map: faceTexture(l, d) }));
+    // the +y face of the box (TOP after the turn) has its texture up along -z, which the turn
+    // brings to +Y: TOP reads upright from the front and in the top view without a rotation
     this.cube = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), mats);
-    this.cube.material[2].map.center.set(.5, .5); this.cube.material[2].map.rotation = Math.PI;     // TOP reads with +Y up
     this.cubeRoot = new THREE.Group();
     this.cube.rotation.x = Math.PI / 2;
     this.cubeRoot.add(this.cube);

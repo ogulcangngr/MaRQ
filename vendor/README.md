@@ -6,12 +6,11 @@ versions and verifies the package checksums against Pyodide's lock file.
 
 | File | What | Version | Licence | Source |
 |---|---|---|---|---|
-| `plotly-2.35.2.min.js` | Plotly.js, the plotting library | 2.35.2 | MIT | https://cdn.plot.ly/plotly-2.35.2.min.js |
-| `three/three.module.min.js` | three.js, the 3D viewport | r169 (0.169.0) | MIT | https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.min.js |
-| `pyodide/pyodide.js`, `pyodide.asm.js`, `pyodide.asm.wasm`, `python_stdlib.zip`, `pyodide-lock.json` | Pyodide, CPython 3.12 compiled to WebAssembly | 0.26.4 | MPL-2.0 (CPython: PSF) | https://cdn.jsdelivr.net/pyodide/v0.26.4/full/ |
-| `pyodide/numpy-1.26.4-*.whl` | NumPy | 1.26.4 | BSD-3-Clause | same |
-| `pyodide/scipy-1.12.0-*.whl` | SciPy | 1.12.0 | BSD-3-Clause | same |
-| `pyodide/openblas-0.3.26.zip` | OpenBLAS (SciPy dependency) | 0.3.26 | BSD-3-Clause | same |
+| `plotly-4.1.2.min.js` | Plotly.js, the plotting library | 4.1.2 | MIT | https://cdn.plot.ly/plotly-4.1.2.min.js |
+| `three/three.module.js`, `three/three.core.js` | three.js, the 3D viewport (the module imports the core) | r186 (0.186.1) | MIT | https://cdn.jsdelivr.net/npm/three@0.186.1/build/ |
+| `pyodide/pyodide.mjs`, `pyodide.asm.mjs`, `pyodide.asm.wasm`, `python_stdlib.zip`, `pyodide-lock.json` | Pyodide, CPython 3.14 compiled to WebAssembly | 314.0.7 | MPL-2.0 (CPython: PSF) | https://cdn.jsdelivr.net/pyodide/v314.0.7/full/ |
+| `pyodide/numpy-2.4.6-*.whl` | NumPy | 2.4.6 | BSD-3-Clause | same |
+| `pyodide/scipy-1.18.0-*.whl` | SciPy, with OpenBLAS inside (`scipy.libs/libopenblas.so`) | 1.18.0 | BSD-3-Clause | same |
 
 `index.html` and `worker.js` load these local copies first and fall back to the
 CDNs above only when a file is missing, so a checkout without this folder still

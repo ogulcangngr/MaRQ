@@ -1,38 +1,34 @@
 /* MaRQ web worker: boots Pyodide off the main thread and runs the analyses.
    The Python runtime is loaded from the local bundle (vendor/pyodide/) when present,
-   otherwise from the jsDelivr CDN. */
+   otherwise from the jsDelivr CDN. A module worker (app.js starts it with type "module"):
+   Pyodide no longer runs in classic workers since its 2026 releases. */
 
 const BASE            = self.location.href.replace(/worker\.js$/, "");
-const PYODIDE_VERSION = "0.26.4";
+const PYODIDE_VERSION = "314.0.7";
 const LOCAL_RUNTIME   = BASE + "vendor/pyodide/";
 const CDN_RUNTIME     = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
 
 let runtimeSource = "local";
-try {
-  importScripts(LOCAL_RUNTIME + "pyodide.js");
-} catch (e) {
-  runtimeSource = "cdn";
-  importScripts(CDN_RUNTIME + "pyodide.js");
-}
-
 let pyodide = null;
 const post = (m) => self.postMessage(m);
 
+// the runtime from the bundle; from the internet when the bundle is missing or damaged
+async function startRuntime(where) {
+  runtimeSource = where;
+  post({ type: "status", message: where === "local" ? "Loading the Python runtime (local bundle)…" : "Loading the Python runtime (CDN)…" });
+  const root = where === "local" ? LOCAL_RUNTIME : CDN_RUNTIME;
+  const { loadPyodide } = await import(root + "pyodide.mjs");
+  const py = await loadPyodide({ indexURL: root });
+  post({ type: "status", message: "Loading numpy & scipy…" });
+  await py.loadPackage(["numpy", "scipy"]);
+  return py;
+}
+
 async function init() {
-  post({ type: "status", message: runtimeSource === "local"
-        ? "Loading the Python runtime (local bundle)…" : "Loading the Python runtime (CDN)…" });
   try {
-    pyodide = await loadPyodide({ indexURL: runtimeSource === "local" ? LOCAL_RUNTIME : CDN_RUNTIME });
-    post({ type: "status", message: "Loading numpy & scipy…" });
-    await pyodide.loadPackage(["numpy", "scipy"]);
+    pyodide = await startRuntime("local");
   } catch (err) {
-    // a damaged or incomplete local bundle: the same runtime from the internet, when there is one
-    if (runtimeSource !== "local") throw err;
-    runtimeSource = "cdn";
-    post({ type: "status", message: "Loading the Python runtime (CDN)…" });
-    pyodide = await loadPyodide({ indexURL: CDN_RUNTIME });
-    post({ type: "status", message: "Loading numpy & scipy…" });
-    await pyodide.loadPackage(["numpy", "scipy"]);
+    pyodide = await startRuntime("cdn");
   }
 
   post({ type: "status", message: "Loading analysis modules…" });
@@ -72,14 +68,13 @@ const PY_SESSION = String.raw`
 import io as _sio, json as _sjson, zipfile as _szip
 import numpy as _snp
 
-# The display grids (under "grids": the points and maps the figures are drawn from) are kept in
-# single precision, which halves the file; everything the numbers and the crop come from keeps
-# double precision.
+# The display grids (under "grids", and the roughness view) are kept in single precision, which
+# halves them; everything the numbers and the crop come from keeps double precision.
 def _s_enc(o, arrays, path=""):
     if isinstance(o, _snp.ndarray):
         if o.dtype.kind in "biufc":
             k = "a%d" % len(arrays)
-            if o.dtype == _snp.float64 and path.startswith("/grids"):
+            if o.dtype == _snp.float64 and (path.startswith("/grids") or path.startswith("/roughness/vis_grid")):
                 arrays[k] = o.astype(_snp.float32)
                 return {"__nd__": k, "f64": True}
             arrays[k] = o
@@ -129,15 +124,46 @@ def _s_get(z, name):
         arrays = {k: npz[k] for k in npz.files}
     return _s_dec(_sjson.loads(z.read(name + ".json")), arrays)
 
+# What a reopened session does not need is left out (2026-10-25; about 40 % of a result): the
+# point lists behind the display grids, which nothing reads after the analysis (of the raw
+# points the rotation figure needs only the centre and the length of its arrow, kept as three
+# numbers); the crop's own copy of the cropped points, made again from them on opening; and the
+# slope components of a comparison, whose maps use the slope magnitudes.
+def _s_lean(kind, result):
+    r = dict(result)
+    g = dict(r.get("grids") or {})
+    if kind == "pvisual":
+        b = dict(g.get("before") or {})
+        if "xd" in b and len(b["xd"]):
+            xd, yd = _snp.asarray(b.pop("xd"), float), _snp.asarray(b.pop("yd"), float)
+            b["arrow"] = [float(xd.mean()), float(yd.mean()), float(min(_snp.ptp(xd), _snp.ptp(yd)) * 0.22)]
+        b.pop("zd", None)
+        g["before"] = b
+        g["after"] = {k: v for k, v in (g.get("after") or {}).items() if k not in ("xr", "yr", "zr")}
+        g["crop"] = {k: v for k, v in (g.get("crop") or {}).items() if k not in ("x", "y", "z")}
+    else:
+        g = {k: v for k, v in g.items() if k not in ("g1x", "g1y", "g2x", "g2y")}
+    r["grids"] = g
+    return r
+
+# and on opening: the crop's points again, exactly, from the cropped cloud
+def _s_full(kind, r):
+    c = (r.get("grids") or {}).get("crop")
+    if kind == "pvisual" and c is not None and "x" not in c and r.get("cropped_cloud") is not None:
+        P = _snp.asarray(r["cropped_cloud"], float)
+        c["x"], c["y"], c["z"] = P[:, 0], P[:, 1], P[:, 2]
+    return r
+
 def session_pack(state, want, slots):
     buf = _sio.BytesIO()
     with _szip.ZipFile(buf, "w", _szip.ZIP_DEFLATED) as z:
         z.writestr("marq_session.json", state)
         for aid in want.get("pvisual") or []:
             if aid in _results:
-                _s_put(z, "pvisual_" + aid, _results[aid])
-        if want.get("rq_gradient") and globals().get("_result2") is not None:
-            _s_put(z, "rq_gradient", _result2)
+                _s_put(z, "pvisual_" + aid, _s_lean("pvisual", _results[aid]))
+        for cid in want.get("rq_gradient") or []:
+            if cid in _results2:
+                _s_put(z, "rq_gradient_" + cid, _s_lean("rq_gradient", _results2[cid]))
         for slot, data in slots.items():
             z.writestr("slot_" + slot + ".txt", data)
     return buf.getvalue()
@@ -147,37 +173,48 @@ def session_unpack(data):
     names = z.namelist()
     if "marq_session.json" not in names:
         raise ValueError("not a MaRQ session file")
-    have = {"pvisual": [], "rq_gradient": False}
-    _results.clear(); _held.clear()
+    have = {"pvisual": [], "rq_gradient": []}
+    _results.clear(); _held.clear(); _results2.clear(); _held2.clear()
     for n in names:
         if n.startswith("pvisual") and n.endswith(".json"):
             aid = n[8:-5] if n.startswith("pvisual_") else "a1"          # "pvisual.json": a first-version file
-            _results[aid] = _s_get(z, n[:-5]); _held.append(aid)
+            _results[aid] = _s_full("pvisual", _s_get(z, n[:-5])); _held.append(aid)
             have["pvisual"].append(aid)
-    if "rq_gradient.json" in names:
-        globals()["_result2"] = _s_get(z, "rq_gradient")
-        have["rq_gradient"] = True
+        elif n.startswith("rq_gradient") and n.endswith(".json"):
+            cid = n[12:-5] if n.startswith("rq_gradient_") else "c1"     # "rq_gradient.json": one comparison (before 2026-10-25)
+            hold2(cid, _s_full("rq_gradient", _s_get(z, n[:-5])))
+            have["rq_gradient"].append(cid)
     slots = {n[5:-4]: z.read(n) for n in names if n.startswith("slot_")}
     return z.read("marq_session.json").decode("utf-8"), have, slots
 `;
 
-// The surface analyses the engine holds, by id (the newest MAX_HELD; an older one keeps its
-// figures in the page but can no longer be rebuilt), and the cross-sections of a result.
+// The surface analyses and the comparisons the engine holds, by id (the newest MAX_HELD analyses
+// and MAX_HELD2 comparisons; an older one keeps its figures in the page but can no longer be
+// rebuilt), and the cross-sections of a result.
 const PY_HELD = String.raw`
 import numpy as _xnp
 _results, _held, MAX_HELD = {}, [], 6
+_results2, _held2, MAX_HELD2 = {}, [], 4
 
-def hold(aid, result):
-    _results[aid] = result
-    if aid in _held:
-        _held.remove(aid)
-    _held.append(aid)
+def _hold_in(store, order, most, rid, result):
+    store[rid] = result
+    if rid in order:
+        order.remove(rid)
+    order.append(rid)
     dropped = []
-    while len(_held) > MAX_HELD:
-        old = _held.pop(0)
-        _results.pop(old, None)
+    while len(order) > most:
+        old = order.pop(0)
+        store.pop(old, None)
         dropped.append(old)
     return dropped
+
+def hold(aid, result):
+    return _hold_in(_results, _held, MAX_HELD, aid, result)
+
+def hold2(cid, result):
+    global _result2
+    _result2 = result
+    return _hold_in(_results2, _held2, MAX_HELD2, cid, result)
 
 def use(aid):
     global _result
@@ -186,10 +223,30 @@ def use(aid):
     _result = _results[aid]
     return _result
 
+def use2(cid):
+    global _result2
+    if cid not in _results2:
+        raise KeyError("this comparison is no longer held by the engine")
+    _result2 = _results2[cid]
+    return _result2
+
 def forget(aid):
     _results.pop(aid, None)
     if aid in _held:
         _held.remove(aid)
+
+def forget2(cid):
+    _results2.pop(cid, None)
+    if cid in _held2:
+        _held2.remove(cid)
+
+def _scaled_points(path, p, scale, log_fn):
+    """The points of a file not in micrometres, converted: read as the analysis reads a text
+    file, multiplied by scale (1000 for millimetres), and given to the analysis as an array."""
+    skip = int(p.get("skip_rows") or 0)
+    P = _xnp.loadtxt(path, delimiter=_detect_delimiter(path, skip), skiprows=skip)[:, :3] * scale
+    log_fn(f"  Converted to micrometres: every coordinate × {scale:g}")
+    return P
 
 def _pad(lo, hi, f=0.04):
     d = (hi - lo) * f or 1.0
@@ -207,10 +264,16 @@ def _xs_pvisual_range(result, P, vox, lo, hi):
     ix = _xnp.floor((Q[:, 0] - Q[:, 0].min()) / vox).astype(_xnp.int64)
     iy = _xnp.floor((Q[:, 1] - Q[:, 1].min()) / vox).astype(_xnp.int64)
     k = ix * (int(iy.max()) + 1) + iy
-    order = _xnp.argsort(k, kind="stable")
+    # the median of every bin at once: the points sorted by bin, then by height; the middle one
+    # of each bin, or the mean of the two middle ones (as numpy.median, not one call per bin)
+    order = _xnp.lexsort((Q[:, 2], k))
     ks, zs = k[order], Q[order, 2]
-    cut = _xnp.flatnonzero(_xnp.diff(ks)) + 1
-    med = _xnp.array([_xnp.median(g) for g in _xnp.split(zs, cut)]) if zs.size else _xnp.zeros(1)
+    if zs.size:
+        start = _xnp.r_[0, _xnp.flatnonzero(_xnp.diff(ks)) + 1]
+        n = _xnp.diff(_xnp.r_[start, zs.size])
+        med = (zs[start + (n - 1) // 2] + zs[start + n // 2]) / 2
+    else:
+        med = _xnp.zeros(1)
     rng = {"y": _pad(Q[:, 1].min(), Q[:, 1].max(), 0.0), "z": _pad(med.min(), med.max())}
     result["_xs_rng_key"], result["_xs_rng"] = key, rng
     return rng
@@ -275,22 +338,27 @@ function pyBytes(proxy) {
   try { return buf.data.slice(); } finally { buf.release(); proxy.destroy(); }
 }
 
-// Theme, 3D mesh budget, height palette and language travel with every request.
+// Theme, 3D mesh budget, height palette and language travel with every request, and the
+// figures to build (all of them unless a redraw names some).
 function setView(data) {
+  // a JavaScript null reaches Python as JsNull, not None, in Pyodide since 2025: undefined is None
+  pyodide.globals.set("_rt_keys", data.keys ? pyodide.toPy(data.keys) : undefined);
   pyodide.globals.set("_theme", data.theme || "dark");
   pyodide.globals.set("_lang", data.lang || "en");
   pyodide.globals.set("_q3d", data.quality || 0);
-  pyodide.globals.set("_cs", data.palette || "Viridis");
+  pyodide.globals.set("_cs", data.palette || "Earth");
   pyodide.globals.set("_equal_axes", data.equal !== false);
 }
 
 // Figures and summary numbers only: the point list stays in the worker and the
 // crop text is produced on demand (export_crop), so a result is a few MB, not tens.
+// _rt_keys: the figures to build (a redraw builds the one on screen), or None for all.
 const PY_PVISUAL_OUTPUT = `
 set_theme(_theme)
 set_equal(_equal_axes)
 set_language(_lang)
-_figs = build_pvisual_figs(_result, _q3d or None, _cs)
+_figs = (build_pvisual_figs(_result, _q3d or None, _cs) if _rt_keys is None
+         else {k: build_one_fig("pvisual", k, _result, _q3d or None, _cs) for k in _rt_keys})
 _output_json = figures_to_json({
     "log":            list(_log_lines),
     "figures":        _figs,
@@ -308,7 +376,8 @@ const PY_GRADIENT_OUTPUT = `
 set_theme(_theme)
 set_equal(_equal_axes)
 set_language(_lang)
-_figs2 = build_gradient_figs(_result2, _q3d or None, _cs)
+_figs2 = (build_gradient_figs(_result2, _q3d or None, _cs) if _rt_keys is None
+          else {k: build_one_fig("rq_gradient", k, _result2, _q3d or None, _cs) for k in _rt_keys})
 _output2_json = figures_to_json({
     "log":     list(_log_lines2),
     "figures": _figs2,
@@ -343,6 +412,14 @@ function withoutHeader(bytes, name, skipRows) {
   return bytes.subarray(off);
 }
 
+// the comparison just made is held as cid; returns the ids of those no longer held
+function heldAs(cid) {
+  pyodide.globals.set("_cid", cid || "c1");
+  const dp = pyodide.runPython("hold2(_cid, _result2)"), dropped = dp.toJs();
+  dp.destroy();
+  return dropped;
+}
+
 function fail(id, err, logName) {
   let log = [];
   try { if (logName) log = pyodide.globals.get(logName).toJs(); } catch {}
@@ -363,7 +440,11 @@ self.onmessage = async (e) => {
       pyodide.runPython(`
 import json as _json
 _log_fn = _live_log(_log_lines)
-_result = run_pvisual(_input1_path, _json.loads(_params_json), _log_fn)
+_pv_params = _json.loads(_params_json)
+_pv_scale = float(_pv_params.pop("input_scale", 1) or 1)
+_result = run_pvisual(_input1_path if _pv_scale == 1 else _scaled_points(_input1_path, _pv_params, _pv_scale, _log_fn),
+                      _pv_params, _log_fn)
+_result["grids"]["display_sigma"] = float(_pv_params.get("smooth_sigma") or 0)   # for the "Very high" 3D grid
 ` + PY_PVISUAL_OUTPUT);
       pyodide.globals.set("_aid", data.aid);
       const dp = pyodide.runPython("hold(_aid, _result)"), dropped = dp.toJs(); dp.destroy();
@@ -387,7 +468,8 @@ import json as _json
 _log_fn2 = _live_log(_log_lines2)
 _result2 = run_rq_gradient(_input1_path, _input2_path, _json.loads(_params2_json), _log_fn2)
 ` + PY_GRADIENT_OUTPUT);
-      post({ type: "result", id, kind: "rq_gradient", data: pyodide.globals.get("_output2_json") });
+      const dropped = heldAs(data.cid);
+      post({ type: "result", id, kind: "rq_gradient", cid: data.cid, dropped, data: pyodide.globals.get("_output2_json") });
     } catch (err) { fail(id, err, null); }
   }
 
@@ -401,6 +483,20 @@ _result2 = run_rq_gradient(_input1_path, _input2_path, _json.loads(_params2_json
       pyodide.globals.set("_input1_path", path1);
       pyodide.globals.set("_params2_json", JSON.stringify(data.params));
       setView(data);
+      // surface A is read once for the whole batch: every comparison gets a copy of the points
+      // as read, and the log lines of reading them (the comparison itself is unchanged)
+      pyodide.runPython(`
+import json as _json
+_b_log = []
+_b_A = _load_cloud(_input1_path, {"skip_rows": 0, **_json.loads(_params2_json)}, _b_log.append)
+_load_cloud_file = _load_cloud
+def _load_cloud(path, p, log_fn):
+    if path == _input1_path:
+        for _l in _b_log:
+            log_fn(_l)
+        return _b_A.copy()
+    return _load_cloud_file(path, p, log_fn)
+`);
       const n = data.items.length;
       for (let i = 0; i < n; i++) {
         const it = data.items[i];
@@ -433,24 +529,30 @@ _m_json = figures_to_json(_r2["metrics"])
       }
       if (!lastOk) throw new Error(rows.length ? rows[0].error : "no files");
       pyodide.runPython(PY_GRADIENT_OUTPUT);
-      post({ type: "result", id, kind: "rq_gradient", data: pyodide.globals.get("_output2_json"),
+      const dropped = heldAs(data.cid);
+      post({ type: "result", id, kind: "rq_gradient", cid: data.cid, dropped, data: pyodide.globals.get("_output2_json"),
              batch: rows, lastName: lastOk });
     } catch (err) { fail(id, err, null); }
+    finally {                        // the comparison reads its files itself again
+      try { pyodide.runPython("if '_load_cloud_file' in globals():\n    _load_cloud = _load_cloud_file\n    del _load_cloud_file, _b_A, _b_log"); } catch {}
+    }
   }
 
   if (type === "retheme") {
     // Rebuild the figures from the cached result with a new theme, palette or 3D budget.
     try {
       setView(data);
+      const partial = !!data.keys;
       if (data.kind === "pvisual") {
         pyodide.globals.set("_log_lines", pyodide.toPy([]));
         pyodide.globals.set("_aid", data.aid);
         pyodide.runPython("use(_aid)\n" + PY_PVISUAL_OUTPUT);
-        post({ type: "result", id, kind: "pvisual", aid: data.aid, data: pyodide.globals.get("_output_json"), retheme: true });
+        post({ type: "result", id, kind: "pvisual", aid: data.aid, data: pyodide.globals.get("_output_json"), retheme: true, partial });
       } else if (data.kind === "rq_gradient") {
         pyodide.globals.set("_log_lines2", pyodide.toPy([]));
-        pyodide.runPython(PY_GRADIENT_OUTPUT);
-        post({ type: "result", id, kind: "rq_gradient", data: pyodide.globals.get("_output2_json"), retheme: true });
+        pyodide.globals.set("_cid", data.cid || "c1");
+        pyodide.runPython("use2(_cid)\n" + PY_GRADIENT_OUTPUT);
+        post({ type: "result", id, kind: "rq_gradient", cid: data.cid, data: pyodide.globals.get("_output2_json"), retheme: true, partial });
       }
     } catch (err) { fail(id, new Error("Re-theme failed: " + err.message), null); }
   }
@@ -461,12 +563,13 @@ _m_json = figures_to_json(_r2["metrics"])
       setView(data);
       pyodide.globals.set("_fig_kind", data.kind);
       pyodide.globals.set("_fig_key", data.key);
-      pyodide.globals.set("_aid", data.aid || null);
+      pyodide.globals.set("_aid", data.aid || undefined);
+      pyodide.globals.set("_cid", data.cid || "c1");
       pyodide.runPython(`
 set_theme(_theme)
 set_equal(_equal_axes)
 set_language(_lang)
-_one = build_one_fig(_fig_kind, _fig_key, use(_aid) if _fig_kind == "pvisual" else _result2, _q3d or None, _cs)
+_one = build_one_fig(_fig_kind, _fig_key, use(_aid) if _fig_kind == "pvisual" else use2(_cid), _q3d or None, _cs)
 _one_json = figures_to_json(_one)
 `);
       post({ type: "figure", id, kind: data.kind, key: data.key, request: data.request,
@@ -508,19 +611,23 @@ _sess_slots = None`);
 
   if (type === "xsection") {
     try {
-      pyodide.globals.set("_aid", data.aid || null);
-      pyodide.globals.set("_xs_x", data.x == null ? null : Number(data.x));
-      pyodide.globals.set("_xs_lo", data.lo == null ? null : Number(data.lo));
-      pyodide.globals.set("_xs_hi", data.hi == null ? null : Number(data.hi));
+      pyodide.globals.set("_aid", data.aid || undefined);
+      pyodide.globals.set("_cid", data.cid || "c1");
+      pyodide.globals.set("_xs_x", data.x == null ? undefined : Number(data.x));
+      pyodide.globals.set("_xs_lo", data.lo == null ? undefined : Number(data.lo));
+      pyodide.globals.set("_xs_hi", data.hi == null ? undefined : Number(data.hi));
       pyodide.runPython(`
 import json as _json
-_xs_json = _json.dumps(xs_pvisual(use(_aid), _xs_x, _xs_lo, _xs_hi) if _aid else xs_gradient(_result2, _xs_x))`);
+_xs_json = _json.dumps(xs_pvisual(use(_aid), _xs_x, _xs_lo, _xs_hi) if _aid else xs_gradient(use2(_cid), _xs_x))`);
       post({ type: "xsection", id, req: data, data: pyodide.globals.get("_xs_json") });
     } catch (err) { fail(id, new Error("The cross-section could not be read: " + err.message), null); }
   }
 
   if (type === "forget") {
-    try { pyodide.globals.set("_aid", data.aid); pyodide.runPython("forget(_aid)"); } catch {}
+    try {
+      if (data.aid) { pyodide.globals.set("_aid", data.aid); pyodide.runPython("forget(_aid)"); }
+      if (data.cid) { pyodide.globals.set("_cid", data.cid); pyodide.runPython("forget2(_cid)"); }
+    } catch {}
   }
 
   if (type === "export_crop") {

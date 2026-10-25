@@ -5,7 +5,7 @@ All print output goes through log_fn; all results returned as a dict.
 """
 
 import numpy as np
-from scipy.ndimage import gaussian_filter
+from scipy.ndimage import gaussian_filter, binary_erosion
 from scipy.stats import pearsonr
 
 
@@ -56,10 +56,11 @@ def _nan_gaussian_filter(arr, sigma):
 
 
 def _rq_bin_grid(x, y, z, xi, yi):
-    """Bin scattered (x,y,z) points onto a regular xi×yi grid. NaN where no data."""
+    """Bin scattered (x,y,z) points onto a regular xi×yi grid, each cell centred on its grid
+    point (it holds the points nearer to that point than to its neighbours). NaN where no data."""
     res_x, res_y = len(xi), len(yi)
-    ix = np.clip(np.searchsorted(xi, x, side="right") - 1, 0, res_x - 1)
-    iy = np.clip(np.searchsorted(yi, y, side="right") - 1, 0, res_y - 1)
+    ix = np.searchsorted((xi[:-1] + xi[1:]) / 2, x, side="right")
+    iy = np.searchsorted((yi[:-1] + yi[1:]) / 2, y, side="right")
     gsum = np.zeros((res_y, res_x), dtype=np.float64)
     gcnt = np.zeros((res_y, res_x), dtype=np.float64)
     np.add.at(gsum, (iy, ix), z)
@@ -145,14 +146,24 @@ def _gradient_metrics(c1, c2, p, log_fn) -> dict:
     # Fixed physical spacing (isotropic, non-square): the same dx=dy=spacing for
     # every comparison, so r_mag is sampled identically and is comparable across
     # all channel widths instead of varying with a fixed NxN over varying extents.
+    # The grid points lie exactly the spacing apart from the start of the overlap (2026-10-25):
+    # before, round(extent / spacing) points were spread over the extent, one interval fewer
+    # than the cells, so the cells came out larger than stated (5.004 x 5.030 um for 5 um). Each
+    # cell is centred on its point, so the end cells reach past the overlap by up to half a
+    # cell. Cells running from one point to the next put their edges on the points of a surface
+    # sampled on an axis-aligned 5 um lattice, where rounding then decided the cell of every
+    # point. Outside 20 to max_res points per axis the extent is divided evenly instead.
     sp = float(p.get("grid_spacing", 5.0)) or 5.0
-    if p.get("grid_res"):
-        res_x = res_y = int(p["grid_res"])
-    else:
-        res_x = int(np.clip(round((x_max - x_min) / sp), 20, p["max_res"]))
-        res_y = int(np.clip(round((y_max - y_min) / sp), 20, p["max_res"]))
-    xi  = np.linspace(x_min, x_max, res_x)
-    yi  = np.linspace(y_min, y_max, res_y)
+
+    def _axis(lo, hi):
+        if p.get("grid_res"):
+            return np.linspace(lo, hi, int(p["grid_res"]))
+        n = int(np.ceil((hi - lo) / sp - 0.5 - 1e-9)) + 1
+        if 20 <= n <= p["max_res"]:
+            return lo + sp * np.arange(n)
+        return np.linspace(lo, hi, int(np.clip(n, 20, p["max_res"])))
+    xi, yi = _axis(x_min, x_max), _axis(y_min, y_max)
+    res_x, res_y = len(xi), len(yi)
     XI, YI = np.meshgrid(xi, yi)
     ncells = res_x * res_y
     log_fn(f"  Grid: {res_x}x{res_y}  (dx={xi[1]-xi[0]:.2f} dy={yi[1]-yi[0]:.2f} µm)")
@@ -193,6 +204,10 @@ def _gradient_metrics(c1, c2, p, log_fn) -> dict:
         zz = ZI[m]
         lo, hi = np.percentile(zz, 1), np.percentile(zz, 99)
         fl = m & (ZI <= lo + 0.05 * (hi - lo))           # flat floor only
+        # two cells away from the walls: the cells at the foot of a wall average floor and wall
+        # points, which on a CAD floor read as 1 to 3 µm of texture. Empty cells count as
+        # floor here, as a CAD cloud sparser than the grid leaves many (2026-10-25)
+        fl = fl & binary_erosion(fl | ~m, iterations=2)
         if fl.sum() < 50:
             return float("nan")
         A = np.column_stack([XI[fl], YI[fl], np.ones(int(fl.sum()))])

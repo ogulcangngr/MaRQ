@@ -6,8 +6,9 @@
    data-i18n="key" attribute and are translated as a whole (I18N_HTML), because the word
    order differs between languages. Text built by app.js goes through t().
 
-   The Turkish terms follow the thesis (iç kalıp, kalıplanmış parça, kopyalama kalitesi,
-   ölçüt, yan duvar); numbers take a decimal comma in Turkish. Exported files (CSV, JSON)
+   The Turkish terms follow the thesis (kopyalama kalitesi, ölçüt, yan duvar); surfaces A and B
+   are named as in English, the reference and the surface compared with it (referans,
+   karşılaştırılan yüzey); numbers take a decimal comma in Turkish. Exported files (CSV, JSON)
    stay in English with decimal points, so they read the same everywhere. */
 
 const LANGS = { en: "English", tr: "Türkçe" };
@@ -58,15 +59,12 @@ const I18N = { tr: {
   "Lock the y scale of the 2D plots to the x scale, so the channel keeps its true proportions. Off: each axis fills the panel, small variations become visible.":
     "2B grafiklerde y ölçeğini x ölçeğine kilitle; kanal gerçek oranlarını korur. Kapalıyken her eksen paneli doldurur, küçük değişimler görünür olur.",
   "True proportions": "Gerçek oranlar",
-  "Zoom and pan all comparison maps together": "Bütün karşılaştırma haritalarını birlikte yakınlaştır ve kaydır",
-  "Link the maps": "Haritaları bağla",
   "Keep the same 3D camera for surface A, surface B and the slope error": "A yüzeyi, B yüzeyi ve eğim hatası için aynı 3B kamerayı kullan",
-  "Link the 3D views": "3B görünümleri bağla",
   "Colour scale of every height map (2D and 3D)": "Bütün yükseklik haritalarının renk ölçeği (2B ve 3B)",
   "Colours": "Renkler",
-  "Mesh budget of the 3D views (cells); higher is sharper but slower to turn": "3B görünümlerin ağ bütçesi (hücre); yüksek değer daha keskin ama döndürmesi daha yavaş",
+  "Mesh budget of the 3D views (cells); higher is sharper but slower to turn. Very high draws every measured cell, at the voxel size.": "3B görünümlerin ağ bütçesi (hücre); yüksek değer daha keskin ama döndürmesi daha yavaş. Çok yüksek, ölçülen her hücreyi voksel boyutunda çizer.",
   "3D detail": "3B ayrıntı",
-  "Low": "Düşük", "Medium": "Orta", "High": "Yüksek",
+  "Low": "Düşük", "Medium": "Orta", "High": "Yüksek", "Very high": "Çok yüksek",
   "Stretch the heights in the 3D views, to see shallow features": "Sığ mikroyapıları görmek için 3B görünümlerde yükseklikleri büyüt",
   "Depth scale": "Derinlik ölçeği",
   "True (×1)": "Gerçek (×1)",
@@ -159,24 +157,24 @@ const I18N = { tr: {
     "{n} analiz ayarı makaledeki değerlerden farklı. Kontrol etmek ya da değiştirmek için <b>Ayarlar</b>'a basın.",
   "MaRQ is still starting; the button works in a moment.": "MaRQ hâlâ başlatılıyor; düğme birazdan çalışır.",
   // tips after each step
-  "<b>Surface analysis finished.</b> Its views are in the browser on the left, its numbers under Properties, and <b>Report</b> makes a printable page of it. To compare two surfaces, keep this channel as <b>A</b>, the reference, or as <b>B</b>, the surface compared with it, then analyse the other one.":
-    "<b>Yüzey analizi tamamlandı.</b> Görünümleri soldaki model ağacında, sayıları Özellikler altında; <b>Rapor</b> yazdırılabilir bir sayfasını hazırlar. İki yüzeyi karşılaştırmak için bu kanalı referans olarak <b>A</b> ya da onunla karşılaştırılan yüzey olarak <b>B</b> olarak atayın, sonra diğerini analiz edin.",
-  "<b>Surface analysis finished.</b> Keep this channel as <b>B</b> to compare it with surface A. Its views are in the browser on the left, and <b>Report</b> makes a printable page of it.":
-    "<b>Yüzey analizi tamamlandı.</b> A yüzeyiyle karşılaştırmak için bu kanalı <b>B</b> olarak atayın. Görünümleri soldaki model ağacında; <b>Rapor</b> yazdırılabilir bir sayfasını hazırlar.",
-  "<b>Surface analysis finished.</b> Keep this channel as <b>A</b> to use it as the reference for surface B. Its views are in the browser on the left, and <b>Report</b> makes a printable page of it.":
-    "<b>Yüzey analizi tamamlandı.</b> B yüzeyinin referansı olarak kullanmak için bu kanalı <b>A</b> olarak atayın. Görünümleri soldaki model ağacında; <b>Rapor</b> yazdırılabilir bir sayfasını hazırlar.",
-  "<b>Surface analysis finished.</b> Keep this channel as <b>A</b> or <b>B</b> to replace that surface, then compare again. <b>Report</b> makes a printable page of it.":
-    "<b>Yüzey analizi tamamlandı.</b> O yüzeyin yerine koymak için bu kanalı <b>A</b> ya da <b>B</b> olarak atayın, sonra yeniden karşılaştırın. <b>Rapor</b> yazdırılabilir bir sayfasını hazırlar.",
-  "<b>Surfaces A and B are set.</b> <b>Compare</b> grades how closely B matches A, with RQ, RQ<sub>dx</sub>, RQ<sub>dy</sub> and RQ<sub>d</sub>.":
-    "<b>A ve B yüzeyleri hazır.</b> <b>Karşılaştır</b>, B'nin A'ya ne kadar benzediğini RQ, RQ<sub>dx</sub>, RQ<sub>dy</sub> ve RQ<sub>d</sub> ile değerlendirir.",
-  "<b>Surface A is set.</b> Now open the scan of the surface to compare with it, analyse it and keep it as <b>B</b>.":
-    "<b>A yüzeyi atandı.</b> Şimdi onunla karşılaştırılacak yüzeyin taramasını açın, analiz edin ve <b>B</b> olarak atayın.",
-  "<b>Surface B is set.</b> Now open the scan of the reference, analyse it and keep it as <b>A</b>.":
-    "<b>B yüzeyi atandı.</b> Şimdi referansın taramasını açın, analiz edin ve <b>A</b> olarak atayın.",
-  "<b>Comparison finished.</b> RQ<sub>d</sub> and the other correlations are under Properties; the browser lists the 3D views, the height and slope maps and the cross-sections of A and B. <b>Save the session</b> keeps every result to open again later, and <b>Batch files…</b> compares A with several surfaces at once.":
-    "<b>Karşılaştırma tamamlandı.</b> RQ<sub>d</sub> ve diğer korelasyonlar Özellikler altında; model ağacında 3B görünümler, yükseklik ve eğim haritaları ve A ile B'nin kesitleri var. <b>Oturumu kaydet</b> tüm sonuçları daha sonra yeniden açmak üzere saklar; <b>Toplu dosyalar…</b> A'yı aynı anda birçok yüzeyle karşılaştırır.",
-  "<b>Batch finished.</b> Every comparison is in the table of <b>Batch results</b>; <b>Results CSV</b> saves it as a spreadsheet.":
-    "<b>Toplu karşılaştırma tamamlandı.</b> Tüm karşılaştırmalar <b>Toplu sonuçlar</b> tablosunda; <b>Sonuçlar (CSV)</b> tabloyu hesap tablosu olarak kaydeder.",
+  "<b>Analysis finished.</b> Keep it as <b>A</b>, the reference, or as <b>B</b>.":
+    "<b>Analiz tamamlandı.</b> Referans olarak <b>A</b> ya da <b>B</b> olarak atayın.",
+  "<b>Analysis finished.</b> Keep it as <b>B</b> to compare it with A.":
+    "<b>Analiz tamamlandı.</b> A ile karşılaştırmak için <b>B</b> olarak atayın.",
+  "<b>Analysis finished.</b> Keep it as <b>A</b>, the reference for B.":
+    "<b>Analiz tamamlandı.</b> B'nin referansı olarak <b>A</b> olarak atayın.",
+  "<b>Analysis finished.</b> It can replace surface <b>A</b> or <b>B</b>.":
+    "<b>Analiz tamamlandı.</b> <b>A</b> ya da <b>B</b> yüzeyinin yerine konabilir.",
+  "<b>Surfaces A and B are set.</b> <b>Compare</b> grades how closely B matches A.":
+    "<b>A ve B yüzeyleri hazır.</b> <b>Karşılaştır</b>, B'nin A'ya ne kadar benzediğini değerlendirir.",
+  "<b>Surface A is set.</b> Now open and analyse the other surface.":
+    "<b>A yüzeyi atandı.</b> Şimdi diğer yüzeyi açıp analiz edin.",
+  "<b>Surface B is set.</b> Now open and analyse the reference.":
+    "<b>B yüzeyi atandı.</b> Şimdi referansı açıp analiz edin.",
+  "<b>Comparison finished.</b> RQ<sub>d</sub> is under Properties.":
+    "<b>Karşılaştırma tamamlandı.</b> RQ<sub>d</sub> Özellikler altında.",
+  "<b>Batch finished.</b> Every comparison is in <b>Batch results</b>.":
+    "<b>Toplu karşılaştırma tamamlandı.</b> Tüm karşılaştırmalar <b>Toplu sonuçlar</b> içinde.",
   "Hide tips": "İpuçlarını gizle",
   "Turn the tips off; Help (?) turns them on again": "İpuçlarını kapat; Yardım (?) yeniden açar",
   "Tips turned off; Help (?) turns them on again": "İpuçları kapatıldı; Yardım (?) yeniden açar",
@@ -251,12 +249,12 @@ const I18N = { tr: {
   "Number of slices along the channel for the local depth and its spread (the widths and the length are read on grid lines).":
     "Yerel derinlik ve dağılımı için kanal boyunca dilim sayısı (genişlikler ve uzunluk ızgara çizgilerinde okunur).",
   "Header rows to skip": "Atlanacak başlık satırları",
-  "Number of header rows to skip when reading the point cloud file.": "Nokta bulutu dosyası okunurken atlanacak başlık satırı sayısı.",
+  "Lines at the top of each point cloud file to leave out, in the analysis and in the comparison. With 0, lines of text at the top (column names, instrument data) are left out by themselves.":
+    "Her nokta bulutu dosyasının başında dışarıda bırakılacak satırlar, analizde ve karşılaştırmada. 0 iken baştaki metin satırları (sütun adları, cihaz bilgileri) kendiliğinden dışarıda bırakılır.",
   "Grid spacing (µm)": "Izgara aralığı (µm)",
   "Smoothing before the slopes (µm)": "Eğimlerden önce yumuşatma (µm)",
   "Gaussian blur before the slopes are computed. At least one grid cell is always applied, for stable slopes.":
     "Eğimler hesaplanmadan önce Gauss bulanıklığı. Kararlı eğimler için en az bir ızgara hücresi her zaman uygulanır.",
-  "Number of header rows to skip when reading the point cloud files.": "Nokta bulutu dosyaları okunurken atlanacak başlık satırı sayısı.",
   "Changed values are marked and remembered on this computer. The paper defaults are the values used in the paper.":
     "Değiştirilen değerler işaretlenir ve bu bilgisayarda hatırlanır. Makaledeki değerler, makalede kullanılan değerlerdir.",
 
@@ -321,7 +319,6 @@ const I18N = { tr: {
   "Loading analysis modules…": "Analiz modülleri yükleniyor…",
   "Ready": "Hazır",
   "Ready (offline bundle)": "Hazır (çevrimdışı paket)",
-  "Offline bundle": "Çevrimdışı paket",
   "Runtime from the internet": "Çalışma ortamı internetten",
   "Analysing the surface…": "Yüzey analiz ediliyor…",
   "Surface analysis complete": "Yüzey analizi tamamlandı",
@@ -375,7 +372,8 @@ const I18N = { tr: {
   "SD, central 80 %": "SS, ortadaki %80",
   "Opening width": "Ağız genişliği",
   "Corner rounding": "Köşe yuvarlaklığı",
-  "floor, rim": "taban, ağız",
+  "floor": "taban",
+  "rim": "ağız",
   "Floor length": "Taban uzunluğu",
   "Opening length": "Ağız uzunluğu",
   "Feature": "Mikroyapı",
@@ -383,8 +381,8 @@ const I18N = { tr: {
   "protrusion, rotated": "çıkıntı, döndürüldü",
   "Roughness, ISO 25178": "Pürüzlülük, ISO 25178",
   "Floor": "Taban",
-  "Field, left": "Çevre yüzey, sol",
-  "Field, right": "Çevre yüzey, sağ",
+  "Field, −Y side": "Çevre yüzey, −Y tarafı",
+  "Field, +Y side": "Çevre yüzey, +Y tarafı",
   "Rotation about Z": "Z ekseni etrafında dönme",
   "Residual tilt": "Kalan eğiklik",
   "Voxel size": "Voksel boyutu",
@@ -425,8 +423,8 @@ const I18N = { tr: {
     "Çevre yüzeye yakın kanal genişliği (varsayılan derinliğin %10'u), ızgara çizgilerinin ortancası, standart sapmalarıyla birlikte.",
   "Median height of the deepest 5 % of the mean cross-section bins, below the field at z = 0.":
     "Ortalama kesitin en derin %5'lik aralıklarının ortanca yüksekliği, z = 0'daki çevre yüzeyin altında.",
-  "Mid-wall angle from the vertical: a straight line through the wall positions at 25-75 % of the depth on every grid line, median over the lines and both walls (left and right in brackets). Below 3° the wall spans too few grid cells to be resolved.":
-    "Düşeyden yan duvarın orta bölge açısı: her ızgara çizgisinde derinliğin %25–75'indeki yan duvar konumlarından geçen doğru; çizgiler ve iki duvar üzerinden ortanca (parantez içinde sol ve sağ). 3°'nin altında duvar, çözümlenemeyecek kadar az ızgara hücresine yayılır.",
+  "Mid-wall angle from the vertical: a straight line through the wall positions at 25-75 % of the depth on every grid line, median over the lines and both walls (the walls at −Y and +Y in brackets). Below 3° the wall spans too few grid cells to be resolved.":
+    "Düşeyden yan duvarın orta bölge açısı: her ızgara çizgisinde derinliğin %25–75'indeki yan duvar konumlarından geçen doğru; çizgiler ve iki duvar üzerinden ortanca (parantez içinde −Y ve +Y tarafındaki duvarlar). 3°'nin altında duvar, çözümlenemeyecek kadar az ızgara hücresine yayılır.",
   "Corner rounding: how far the wall lies inside the extended mid-wall line at the floor level (floor corner) and outside it at the opening level (rim corner), per corner.":
     "Köşe yuvarlaklığı: duvarın, uzatılmış orta yan duvar çizgisinin taban seviyesinde ne kadar içinde (taban köşesi) ve ağız seviyesinde ne kadar dışında (ağız köşesi) kaldığı, her köşe için.",
   "Channel length along the centre line at the floor level: median of the grid lines along the channel near its centre line, each end read from the outside in, with their standard deviation.":
@@ -502,7 +500,6 @@ const I18N = { tr: {
   "Depth ×{k}": "Derinlik ×{k}",
   // File menu, sessions
   "File": "Dosya",
-  "Open a point cloud…": "Nokta bulutu aç…",
   "Open a session…": "Oturum aç…",
   "Save the session…": "Oturumu kaydet…",
   "Report…": "Rapor…",
@@ -565,11 +562,24 @@ const I18N = { tr: {
 
   // the analyses in the tree, the split maps, cross-sections, saving
   "Remove this analysis from the session": "Bu analizi oturumdan çıkar",
-  "Remove the analysis of {name} from this session? Its results leave the session and the exports.":
-    "{name} analizi bu oturumdan çıkarılsın mı? Sonuçları oturumdan ve dışa aktarmalardan çıkar.",
+  "Remove the analysis?": "Analiz çıkarılsın mı?",
+  "Remove the analysis of <b>{name}</b> from this session? Its results leave the session and the exports.":
+    "<b>{name}</b> analizi bu oturumdan çıkarılsın mı? Sonuçları oturumdan ve dışa aktarmalardan çıkar.",
   "Shown as it was drawn: the engine no longer holds this analysis (it keeps the newest six). Analyse its file again to rebuild it, export it or keep its crop.":
     "Çizildiği hâliyle gösteriliyor: analiz motoru bu analizi artık tutmuyor (en yeni altısını tutar). Yeniden oluşturmak, dışa aktarmak ya da kırpımını atamak için dosyasını yeniden analiz edin.",
   "Drawing the analysis…": "Analiz çiziliyor…",
+  "The figures could not be drawn again": "Şekiller yeniden çizilemedi",
+  "One surface has no measured texture on its floor (A {a} µm, B {b} µm), as a CAD design: against an idealised surface RQ and the channel dimensions are the primary measures, and RQ<sub>d</sub> is given as well.":
+    "Yüzeylerden birinin tabanında ölçülmüş doku yok (A {a} µm, B {b} µm), bir CAD tasarımında olduğu gibi: ideal bir yüzeye karşı birincil ölçüler RQ ve kanal boyutlarıdır; RQ<sub>d</sub> de verilir.",
+  "Stop the analysis?": "Analiz durdurulsun mu?",
+  "Stopping restarts the analysis engine. The {n} results it holds stay on screen, but they can no longer be exported, saved in a session, kept as A or B or drawn again. Save the session first if you need them: wait for this step to finish, then File, Save the session.":
+    "Durdurmak analiz motorunu yeniden başlatır. Motorun tuttuğu {n} sonuç ekranda kalır, ancak artık dışa aktarılamaz, oturuma kaydedilemez, A ya da B olarak atanamaz ve yeniden çizilemez. Bunlara ihtiyacınız varsa önce oturumu kaydedin: bu adımın bitmesini bekleyin, sonra Dosya, Oturumu kaydet.",
+  "Keep running": "Devam etsin",
+  "Stop": "Durdur",
+  "This point cloud could not be analysed": "Bu nokta bulutu analiz edilemedi",
+  "The message above the view says why. Open another point cloud, or change the settings and analyse it again.":
+    "Nedeni görünümün üstündeki iletide yazıyor. Başka bir nokta bulutu açın ya da ayarları değiştirip yeniden analiz edin.",
+  "Analyse again": "Yeniden analiz et",
   "Height maps": "Yükseklik haritaları",
   "Slope maps": "Eğim haritaları",
   "Height and slope maps (all six)": "Yükseklik ve eğim haritaları (altısı birden)",
@@ -598,6 +608,113 @@ const I18N = { tr: {
   "out of memory": "bellek yetmedi", "not a text file": "metin dosyası değil",
   "text where numbers are expected": "sayı yerine metin", "no points in the file": "dosyada nokta yok",
   "fewer than three columns": "üçten az sütun", "too few points": "çok az nokta", "damaged X3P file": "bozuk X3P dosyası",
+
+  // 2026-10-25: units, the example, repeated surfaces, results made with other settings, panes, copying
+  "millimetres": "milimetre", "metres": "metre", "nanometres": "nanometre",
+  "Not in micrometres?": "Mikrometre değil mi?",
+  "The points of <b>{name}</b> span {s} across. MaRQ reads coordinates in micrometres, where a scan of a microchannel spans hundreds to tens of thousands. This file looks like it is in {unit}. Convert it to micrometres ({k}) for the analysis?":
+    "<b>{name}</b> dosyasındaki noktalar {s} genişliğe yayılıyor. MaRQ koordinatları mikrometre olarak okur; mikrometre cinsinden bir mikrokanal taraması yüzlerce ile on binlerce arasında yayılır. Bu dosya {unit} cinsinden görünüyor. Analiz için mikrometreye ({k}) çevrilsin mi?",
+  "Convert to micrometres": "Mikrometreye çevir",
+  "Use the numbers as they are": "Sayıları olduğu gibi kullan",
+  "in {unit}, converted to micrometres": "{unit} cinsinden, mikrometreye çevrildi",
+  "Point cloud units": "Nokta bulutu birimi",
+  "{unit}, converted": "{unit}, çevrildi",
+  "Try an example": "Örnekle dene",
+  "A synthetic 600 µm channel and a copy of it, 4 µm wider and 3 µm shallower: both analysed, kept as A and B and compared, step by step":
+    "Yapay bir 600 µm kanal ve 4 µm daha geniş, 3 µm daha sığ bir kopyası: ikisi de analiz edilir, A ve B olarak atanır ve adım adım karşılaştırılır",
+  "Replace surfaces A and B?": "A ve B yüzeyleri değiştirilsin mi?",
+  "The example keeps its two channels as A and B, in place of the surfaces there now. The results so far stay in the session.":
+    "Örnek, iki kanalını şu anki yüzeylerin yerine A ve B olarak atar. Şimdiye kadarki sonuçlar oturumda kalır.",
+  "Run the example": "Örneği çalıştır",
+  "A and B are the same file": "A ve B aynı dosya",
+  "Surfaces A and B hold the same points, so the comparison gives RQ = 1. Open or keep another surface as B.":
+    "A ve B yüzeyleri aynı noktaları içeriyor, bu yüzden karşılaştırma RQ = 1 verir. B olarak başka bir yüzey açın ya da atayın.",
+  "Compare anyway": "Yine de karşılaştır",
+  "Repeated surfaces in the batch": "Toplu listede tekrarlanan yüzeyler",
+  "{names}: the same points as surface A, so compared with it they give RQ = 1.":
+    "{names}: A yüzeyiyle aynı noktalar, bu yüzden onunla karşılaştırıldığında RQ = 1 verir.",
+  "{names}: the same points as another file of the batch.": "{names}: toplu listedeki başka bir dosyayla aynı noktalar.",
+  "Leave them out": "Bunları çıkar",
+  "Compare them anyway": "Yine de karşılaştır",
+  "Made with other settings": "Başka ayarlarla yapıldı",
+  "Made with other settings than those in Settings now": "Ayarlar'daki şimdiki değerlerden farklı ayarlarla yapıldı",
+  "Changed since this analysis: {list}. Its numbers are those of the earlier settings; analyse the file again to use the new ones.":
+    "Bu analizden sonra değişenler: {list}. Sayıları önceki ayarlarındır; yenilerini kullanmak için dosyayı yeniden analiz edin.",
+  "Changed since this comparison: {list}. Its numbers are those of the earlier settings; compare again to use the new ones.":
+    "Bu karşılaştırmadan sonra değişenler: {list}. Sayıları önceki ayarlarındır; yenilerini kullanmak için yeniden karşılaştırın.",
+  "Replace the results?": "Sonuçlar değiştirilsin mi?",
+  "Open the session": "Oturumu aç",
+  "Display of the surface analysis": "Yüzey analizinin gösterimi",
+  "Reading the files": "Dosyaların okunması",
+  "Hide the browser; the button at the left of the view title brings it back": "Model ağacını gizle; görünüm başlığının solundaki düğme geri getirir",
+  "Hide the properties; the button at the right of the view title brings them back": "Özellikleri gizle; görünüm başlığının sağındaki düğme geri getirir",
+  "Show the browser": "Model ağacını göster",
+  "Show the properties": "Özellikleri göster",
+  "Copy the properties as a table, to paste into a spreadsheet": "Özellikleri bir hesap tablosuna yapıştırmak üzere tablo olarak kopyala",
+  "Properties copied: paste them into a spreadsheet": "Özellikler kopyalandı: bir hesap tablosuna yapıştırın",
+  "Copy the log": "Günlüğü kopyala",
+  "Save the log as a text file": "Günlüğü metin dosyası olarak kaydet",
+  "Log copied": "Günlük kopyalandı",
+  "The text could not be copied": "Metin kopyalanamadı",
+  "Show or hide the outline of the channel interior, the area over which the correlations are computed":
+    "Korelasyonların hesaplandığı alan olan kanal içinin dış çizgisini göster ya da gizle",
+  "Panes": "Bölmeler",
+  "Hide": "Gizle",
+  "Copy": "Kopyala",
+  "the button at the right of the Browser or Properties title; the button at the edge of the view title brings the pane back":
+    "Model ağacı ya da Özellikler başlığının sağındaki düğme; görünüm başlığının kenarındaki düğme bölmeyi geri getirir",
+  "the copy button of Properties copies its numbers as a table, to paste into a spreadsheet":
+    "Özellikler'in kopyalama düğmesi sayılarını bir hesap tablosuna yapıştırmak üzere tablo olarak kopyalar",
+
+  // 2026-10-25: progress in the view, journal sizes, the links below the views, every comparison
+  "Analysing {name}": "{name} analiz ediliyor",
+  "Comparing {b} with {a}": "{b}, {a} ile karşılaştırılıyor",
+  "Comparing {n} surfaces with {a}": "{n} yüzey {a} ile karşılaştırılıyor",
+  "Reading the two surfaces": "İki yüzey okunuyor",
+  "Common grid": "Ortak ızgara",
+  "Slopes and correlations": "Eğimler ve korelasyonlar",
+  "Building the figures": "Şekiller oluşturuluyor",
+  "{s} s": "{s} sn",
+  "Pair {i} of {n}: {name}": "Çift {i}/{n}: {name}",
+  "Journal, one column (90 mm wide)": "Dergi, tek sütun (90 mm genişlik)",
+  "Journal, two columns (190 mm wide)": "Dergi, iki sütun (190 mm genişlik)",
+  "Width (mm)": "Genişlik (mm)",
+  "Height (mm)": "Yükseklik (mm)",
+  "Resolution": "Çözünürlük",
+  "300 dots per inch": "inç başına 300 nokta",
+  "600 dots per inch": "inç başına 600 nokta",
+  "At a journal size the figure is drawn at its printed size, with its text near 7 to 9 points and without the title of the view; a PNG is made at the chosen resolution, an SVG as vectors.":
+    "Dergi boyutunda şekil basılacağı boyutta, yazıları 7 ile 9 punto arasında ve görünümün başlığı olmadan çizilir; PNG seçilen çözünürlükte, SVG vektör olarak hazırlanır.",
+  "Figure exported ({fmt}, {w} × {h} mm at {dpi} dots per inch)": "Şekil dışa aktarıldı ({fmt}, {w} × {h} mm, inç başına {dpi} nokta)",
+  "Zoom and pan the three maps together, and the height and slope maps on the same region":
+    "Üç haritayı birlikte yakınlaştır ve kaydır; yükseklik ve eğim haritaları aynı bölgeyi göstersin",
+  "Remove this comparison from the session": "Bu karşılaştırmayı oturumdan çıkar",
+  "Summary of the session": "Oturumun özeti",
+  "Every analysis and every comparison of this session in one table": "Bu oturumun bütün analizleri ve karşılaştırmaları tek bir tabloda",
+  "{n} surfaces": "{n} yüzey",
+  "Batch of {n}": "{n} yüzeylik toplu",
+  "vs {name}": "{name} ile",
+  "Remove the comparison?": "Karşılaştırma çıkarılsın mı?",
+  "Remove the comparison of <b>{b}</b> with <b>{a}</b> from this session? Its results leave the session and the exports.":
+    "<b>{b}</b> ile <b>{a}</b> karşılaştırması bu oturumdan çıkarılsın mı? Sonuçları oturumdan ve dışa aktarmalardan çıkar.",
+  "Analyses": "Analizler",
+  "Comparisons": "Karşılaştırmalar",
+  "Point cloud": "Nokta bulutu",
+  "Grid": "Izgara",
+  "The key result of each comparison is in colour. Show opens a result the browser lists; Results CSV saves every number with its settings.":
+    "Her karşılaştırmanın temel sonucu renklidir. Göster, model ağacında listelenen bir sonucu açar; Sonuçlar (CSV) her sayıyı ayarlarıyla birlikte kaydeder.",
+
+  // 2026-10-25: a raised feature turned over before the analysis
+  "Raised feature: turn the scan over first": "Çıkıntı: taramayı önce ters çevir",
+  "For a raised channel-forming feature, a ridge, as on a mould master. MaRQ turns a raised feature over by itself, but only after the spike removal, which cuts away anything more than 40 µm above the flat surface; this turns the scan over before it. Off for a channel.":
+    "Kanalı oluşturan çıkıntı biçimli bir yapı için, örneğin bir kalıp ana parçasındaki sırt. MaRQ çıkıntıyı kendiliğinden ters çevirir, ancak düz yüzeyin 40 µm'den fazla üstünde kalan her şeyi kesip atan sivri nokta temizliğinden sonra; bu seçenek taramayı ondan önce ters çevirir. Kanal için kapalı.",
+  "raised, turned over (Settings)": "çıkıntı, ters çevrildi (Ayarlar)",
+  "If the scan shows a raised feature, a ridge, tick Raised feature in Settings and analyse it again.":
+    "Tarama çıkıntı biçimli bir yapı, bir sırt gösteriyorsa Ayarlar'da Çıkıntı seçeneğini işaretleyip yeniden analiz edin.",
+  "The scan was turned over (Raised feature, in Settings): for a channel, untick it and analyse again.":
+    "Tarama ters çevrildi (Ayarlar'da Çıkıntı): bir kanal için işareti kaldırıp yeniden analiz edin.",
+  "yes": "evet",
+  "no": "hayır",
 }};
 
 // Blocks with markup inside a sentence, translated whole (data-i18n="key")

@@ -86,7 +86,7 @@ server works too (`npx serve`, the Live Server extension of VS Code). The archiv
 it against the sample data of the archive.
 
 **Offline.** `vendor/` holds Plotly.js, three.js and the Pyodide runtime with NumPy and
-SciPy (84 MB; versions and licences in `vendor/README.md`), so the first start needs no
+SciPy (37 MB; versions and licences in `vendor/README.md`), so the first start needs no
 download and the status bar reads "Ready (offline bundle)". If `vendor/` is missing,
 for example after a source-only download, the page falls back to the CDNs and needs
 internet for the first start; `python tools/fetch_vendor.py` restores the bundle.
@@ -104,24 +104,43 @@ internet for the first start; `python tools/fetch_vendor.py` restores the bundle
   on screen, its name in red, is the one *Keep as A*, *Keep as B*, *Save crop*, the
   exports and the report use; A and B beside a name mark the analyses whose crops fill the
   slots. The engine keeps the newest six analyses (an older one can still be viewed), and
-  the × of a node removes its analysis from the session.
-- **Properties** (left, below): the measured values of the result on screen, with an
-  explanation of each on hover.
+  the × of a node removes its analysis from the session. Every comparison, and every
+  batch, has a node of its own in the same way (B by its name, "vs" A beside it); the
+  engine keeps the newest four. *Summary of the session* lists every analysis and every
+  comparison in one table, batch rows and results no longer held included, with a button
+  to open each one the browser lists. A dot beside a result marks one made with other
+  settings than those now in *Settings*; Properties then says which.
+- **Properties** (right): the measured values of the result on screen, with an
+  explanation of each on hover. Lengths are given to 0.1 µm, angles to 0.1° and the
+  correlations to three decimals, as in the figures and the report; the two walls and the
+  two field strips are named by their side of the channel, −Y and +Y. The copy button in
+  its title copies the values as a table, to paste into a spreadsheet.
 - **Viewport** (centre): the view selected in the browser, its title and details above,
   the navigation bar below. A file dropped anywhere on the window is opened as the
   scan to analyse.
 - **Status bar** (bottom): the progress of a run (click it for the live analysis log
-  with every step and quality-control value), the coordinates under the cursor, whether
-  the settings are the paper's, and whether the runtime is the offline bundle.
-- **Title bar**: the *File* menu (open a point cloud or a session, save the session, the
-  report and the exports), the language (English, Türkçe), the light or dark theme, help
+  with every step and quality-control value, which can be copied or saved as a text
+  file), the coordinates under the cursor, whether
+  the settings are the paper's, and, when it is not the offline bundle, where the runtime
+  comes from. While an analysis or a comparison runs, a card over the view lists its
+  steps, marks those done and the one under way, counts the seconds and has *Cancel*; for
+  a batch it shows the pair and a progress bar.
+- **Title bar**: the *File* menu (open a point cloud or a session, save the session, try
+  the example, the report and the exports), the language (English, Türkçe), the light or dark theme, help
   and About. Without a choice MaRQ follows the language and the theme of the system.
 
-The panes can be resized by dragging their borders. Below 1366 pixels every size shrinks
+The panes can be resized by dragging their borders. The button in the title of the
+Browser and of Properties hides that pane, for a wider view; the button at that end of the
+view title brings it back, and the choice is remembered. Below 1366 pixels every size shrinks
 with the window, so the ribbon and the panes keep their proportions on a small laptop
 screen; above, a wider window gives the viewport more room. A running
 analysis can be cancelled (*Cancel* in the ribbon); the engine restarts in a few
 seconds.
+
+**Example.** *Try an example*, on the start page or in the *File* menu, makes a synthetic
+600 µm channel and a copy of it, 4 µm wider and 3 µm shallower, both with the same
+surface texture of about 2 µm, then analyses both, keeps them as A and B and compares
+them, one step after the other, so every view can be seen without a scan of one's own.
 
 **Navigating.** In the 3D views, drag with the left button to turn the surface about the
 point under the cursor (Z stays up), drag with the right or middle button (or Shift and
@@ -151,15 +170,19 @@ the same scale on both, so the channel keeps its shape and a variation is shown 
 proportion to the channel's size; switch it off to let each axis fill the panel when a
 small variation has to be read. **Link the maps** zooms and pans the six comparison maps
 together; **Link the 3D views** keeps one camera for surface A, surface B and the slope
-error. *Colours* sets the colour scale of the height maps and *3D detail* the mesh of
-the 3D views.
+error. *Colours* sets the colour scale of the height maps (Earth unless changed) and *3D detail*
+the mesh of the 3D views (High unless changed; *Very high* draws every cell, the analysis
+crop at the voxel size and the comparison grid at its full spacing).
 
 ## Input formats
 
 - Delimited text point clouds: `.txt`, `.xyz`, `.asc`, `.csv`, three columns x y z,
   any common delimiter. Lines of text at the top (column names, instrument metadata) are
-  skipped by themselves; *Header rows to skip* (Settings) sets their number by hand. Units
-  are those of the file; the paper's data are in micrometres.
+  skipped by themselves; *Header rows to skip* (Settings) sets their number by hand.
+  MaRQ works in micrometres. A file whose coordinates span less than 150 units across
+  (millimetres or metres) or more than 150 000 (nanometres) is taken for another unit when
+  it is opened for an analysis, and MaRQ offers to convert it; the factor is kept with the
+  analysis (`input_scale` in the exports).
 - ISO 25178-72 X3P files (`.x3p`), converted to micrometres on loading.
 
 To test the X3P path without an instrument file, run `python tests/make_test_x3p.py`.
@@ -173,14 +196,16 @@ the reported depth is 60 µm.
 
 1. **Open** the point cloud (or drop it on the window).
 2. Leave the settings at their defaults; they are the values used in the paper.
-   *Settings* (ribbon) lists them: Voxel size 5, Field band 2.5 median absolute
+   *Settings* (ribbon) lists them: Raised feature off, Voxel size 5, Field band 2.5 median absolute
    deviations, Crop margin along the channel 180, Crop margin across the channel 100,
    Opening level 0.10 and Floor level 0.90 of the depth, Floor roughness strip width 0.5
    of the channel width, Floor roughness strip length 4000, Field roughness strip width
-   400 and length 4000; under *Advanced*: Edge margin 100, Display cell size 0
-   (automatic), Display smoothing 0, Depth profile slices 80, Header rows to skip 0.
-   Units are those of the file. Changed values are marked and the status bar says how
-   many differ from the paper; *Paper defaults* restores them; *Save* and *Load* write
+   400 and length 4000; under *Advanced*: Edge margin 100 and Depth profile slices 80;
+   in the right column, Display cell size 0 (automatic) and Display smoothing 0, which
+   change only the display, and Header rows to skip 0, which applies to the comparison
+   as well. Changed values are marked and the status bar says how many differ from the
+   paper; a result made with other settings than those in the dialog is marked in the
+   browser; *Paper defaults* restores them; *Save* and *Load* write
    and read a JSON settings file; the values are remembered on the computer.
 3. **Analyse**. The properties show the widths, the depth, the wall angle, the corner
    rounding, the lengths, the roughness and the alignment; the browser lists the views:
@@ -209,6 +234,12 @@ the reported depth is 60 µm.
    far the wall lies inside that line at the floor level and outside it at the opening
    level. The length is read on lines along the channel, each end from the outside in,
    and the exported crop spans the two ends plus the crop margin.
+
+   A raised feature, a ridge as on a mould master, is turned over into a channel (a proper
+   rotation, so its handedness is kept). MaRQ does it by itself, but only after the spike
+   removal, which cuts away everything more than 40 µm above the flat surface; for a ridge
+   higher than that, tick *Raised feature* in *Settings*, and the scan is turned over
+   first. When a scan shows no clear channel, the message says so.
 4. **Save crop** saves the levelled, aligned, voxel-thinned crop (x y z in micrometres,
    field at z = 0, channel along x, centred). **Keep as A** and **Keep as B** place the
    same crop directly in the comparison slots. These crops are the inputs of
@@ -220,7 +251,10 @@ the reported depth is 60 µm.
    either with *Keep as A* and *Keep as B* after analysing each surface or with *Open A*
    and *Open B* for crop files. MaRQ asks before keeping when the point cloud in the scan
    slot has not been analysed yet, refuses to keep one analysis as both A and B, and asks
-   before taking a file without "crop" in its name as A, B or a batch file. Any two surfaces of the same channel can be compared. In
+   before taking a file without "crop" in its name as A, B or a batch file. It also asks
+   before comparing two surfaces that hold the same points (which gives RQ = 1), and before
+   a batch with files that hold the points of A or repeat another file of the batch,
+   found by their contents, not their names. Any two surfaces of the same channel can be compared. In
    the study behind MaRQ the reference was the mould insert and the compared surface the
    moulded part; for tool degradation both were the same insert at two shots, the
    earlier one as A.
@@ -234,15 +268,20 @@ the reported depth is 60 µm.
    the user; the paper defines no acceptance thresholds. The views are *Surface A* and
    *Surface B* in 3D, the *Slope error* drawn in 3D on surface B, the *Height maps* (A, B
    and the signed difference A − B) and the *Slope maps* (the slope magnitudes of A and B
-   and the unsigned slope error), each with the outline of the channel-interior mask, and
+   and the unsigned slope error), each with the outline of the channel-interior mask (a
+   button below the maps shows or hides it), and
    the *Cross-sections of A and B* at a chosen position along the channel, as for one
    surface, with the height difference A − B on a second axis; the height and difference
    axes are fixed at their largest ranges over the channel. The two map views zoom and pan together. The log states which orientation of B was kept, the
    valid-cell fraction and the mask size; its metrics table is that of the kept
    orientation.
 4. **Batch**: choose several files with *Batch files…* and click **Run batch**. The
-   *Batch results* view lists RQ, RQdx, RQdy and RQd for every file; *Show* re-runs one
-   pair for its figures.
+   batch has its own node; its *Batch results* view lists RQ, RQdx, RQdy and RQd for every
+   file, and *Show* re-runs one pair for its figures. Surface A is read once for the whole
+   batch; the numbers are those of each pair compared alone.
+
+A new theme, colour scale, 3D detail or language redraws the figure on screen at once and
+the other figures of each result when their views are opened.
 
 RQd is defined at a stated grid cell size. Values computed at different cell sizes
 are not comparable; the paper reports RQd at 5 µm, chosen from the instrument's
@@ -254,16 +293,25 @@ lateral resolution.
   or in the current theme, with its text in the interface language, English or Turkish,
   at a chosen size; the figure is rebuilt at that size, with axes and a colour bar, so
   labels and line widths stay legible; the six comparison maps can also be exported as one
-  figure. The camera button below a view saves it as a PNG as it is on screen.
+  figure. Two journal sizes, one column (90 mm wide) and two columns (190 mm), draw the
+  figure at its printed size, its text near 7 to 9 points and without the title of the view,
+  as a PNG at 300 or 600 dots per inch (the file states its resolution) or as an SVG; the
+  width and height can be changed in millimetres. The camera button below a view saves it
+  as a PNG as it is on screen. The buttons below the comparison maps link their zoom and
+  show the outline of the channel interior; those below the comparison's 3D views link
+  their cameras.
 - **Results JSON**: every number, every setting and the per-line and per-slice
   series of the session, with the software and runtime versions.
 - **Results CSV**: one row per analysed surface and one per comparison.
 - **Report** (Export, or the File menu): one printable page per result, with the numbers
   of the properties panel, the settings (those that differ from the paper's in bold) and
-  the main figures in the light theme. Print it or save it as PDF from the dialog, or save
-  it as an HTML file.
+  the main figures in the light theme, drawn near the size they are printed at, so their
+  labels stay readable on A4. Print it or save it as PDF from the dialog, or save it as an
+  HTML file.
 - **Session** (File, *Save the session*, Ctrl+S): a `.marq` file with every result the
-  engine holds, the session record, the settings and surfaces A and B. *Open a session*,
+  engine holds (the analyses and the comparisons), the session record, the settings and
+  surfaces A and B, without what a reopened session does not need (the point lists behind
+  the display grids and the slope components; about 40 % of a result). *Open a session*,
   or dropping the file on the window, brings the results back without a new analysis:
   they can be viewed, exported, compared again and rebuilt in another theme or language.
   The file holds data only (JSON and NumPy arrays), nothing that runs.
@@ -291,6 +339,7 @@ so they read the same in every spreadsheet and script.
 | `MaRQ.exe`, `MaRQ.command`, `MaRQ.sh`, `launchers/` | Launchers that need nothing installed (Windows; macOS; Linux), built from the Go sources in `launcher/` by `tools/build_launchers.py` |
 | `MaRQ.bat`, `run_marq.py` | Fallback launchers through Python 3 |
 | `tests/e2e_check.py`, `tests/e2e_synthetic.py`, `tests/e2e_features.py` | Browser tests of a running MaRQ: the numbers against the sample data or a synthetic channel, and the interface on a synthetic insert and part |
+| `tests/test_cores.py` | Tests of the analysis modules without a browser: synthetic channels of known shape, and the recorded numbers of the test channel and its copy (`tests/test_cores_expected.json`), run by the GitHub check with the NumPy and SciPy of MaRQ's runtime |
 | `tests/launcher_check.py` | Test of a launcher without a browser: what it serves, one MaRQ per folder, the stop when the last window closes |
 | `vendor/` | Bundled Plotly.js, three.js and the Pyodide runtime with NumPy and SciPy, for offline use |
 | `tools/fetch_vendor.py` | Re-downloads and verifies the bundle at the pinned versions |

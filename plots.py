@@ -40,11 +40,11 @@ _SCALES = {
 
 
 def _scale(name):
-    return _SCALES.get(str(name), _SCALES["Viridis"])
+    return _SCALES.get(str(name), _SCALES["Earth"])
 
 
 _T = dict(_THEMES["dark"])          # active theme colours
-_CS = _scale("Viridis")             # height colour scale (palette selector)
+_CS = _scale("Earth")               # height colour scale (palette selector)
 EQUAL = True                        # 1:1 axis scales on the 2D plots: a µm on x is a µm on y
 
 SLOPE_CS = _scale("Inferno")        # slope-magnitude maps and the slope error
@@ -53,7 +53,8 @@ FONT = '-apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", system-ui, "
 U = "µm"
 
 Z_DTICK_3D       = 100      # Z tick spacing in the single-surface 3D view
-DEFAULT_3D_CELLS = 80_000   # 3D mesh budget when the interface passes none
+DEFAULT_3D_CELLS = 200_000  # 3D mesh budget when the interface passes none
+FULL_3D          = -1       # 3D budget of "Very high": every cell, the analysis crop gridded at the voxel size
 MAP_FULL_CELLS   = 300_000  # 2D comparison maps are sent at full resolution up to this size
 
 
@@ -66,7 +67,7 @@ def set_theme(name):
 def set_palette(name):
     """Colour scale of every height map (2D and 3D)."""
     global _CS
-    _CS = _scale(name or "Viridis")
+    _CS = _scale(name or "Earth")
 
 
 def set_equal(flag):
@@ -116,7 +117,7 @@ def _arr(a, nd=None):
 def _step(shape, max_cells):
     """Isotropic downsampling step that keeps a 2D grid within max_cells."""
     n = int(shape[0]) * int(shape[1])
-    if not max_cells or n <= max_cells:
+    if not max_cells or max_cells < 0 or n <= max_cells:      # FULL_3D: no downsampling
         return 1
     return int(math.ceil(math.sqrt(n / float(max_cells))))
 
@@ -203,10 +204,12 @@ def _panel_title(text, xaxis, yaxis, size=13):
                 size=size, color=C("TEXT"), xanchor="center", yanchor="bottom", yshift=6)
 
 
-def _heatmap(x, y, z, cs, name, cbar=None, nd=2, **kw):
+def _heatmap(x, y, z, cs, name, cbar=None, nd=2, unit=U, zd=1, **kw):
+    """A map; its value is shown with zd decimals and its unit (in the hover label, and through
+    meta in the interface's coordinate readout)."""
     d = {"type": "heatmap", "x": x, "y": y, "z": _arr(z, nd), "colorscale": cs,
-         "name": name, "hoverongaps": False,
-         "hovertemplate": "<b>" + name + "</b><br>x %{x:.0f} µm, y %{y:.0f} µm<br>%{z:.3f}<extra></extra>",
+         "name": name, "hoverongaps": False, "meta": {"unit": unit, "nd": zd},
+         "hovertemplate": "<b>" + name + "</b><br>x %{x:.0f} µm, y %{y:.0f} µm<br>%{z:." + str(zd) + "f} " + unit + "<extra></extra>",
          "showscale": cbar is not None}
     if cbar is not None:
         d["colorbar"] = cbar
@@ -265,10 +268,13 @@ def make_rotation_fig(result):
     ag  = result["grids"]["after"]
     rot = result["rotation"]
 
-    xd, yd = np.asarray(bg["xd"], float), np.asarray(bg["yd"], float)
     ca   = rot["channel_axis"]
-    cx_, cy_ = float(xd.mean()), float(yd.mean())
-    alen = float(min(np.ptp(xd), np.ptp(yd)) * 0.22)
+    if "arrow" in bg:                         # a reopened session keeps only the arrow, not the raw points
+        cx_, cy_, alen = (float(v) for v in bg["arrow"])
+    else:
+        xd, yd = np.asarray(bg["xd"], float), np.asarray(bg["yd"], float)
+        cx_, cy_ = float(xd.mean()), float(yd.mean())
+        alen = float(min(np.ptp(xd), np.ptp(yd)) * 0.22)
 
     after_txt = "After: field levelled, channel along X"
     if rot.get("converted"):
@@ -315,9 +321,9 @@ def make_channel_fig(result):
     ch  = result["channel"]
 
     rx = np.asarray(sl["rx"], float); cy = np.asarray(sl["cy"], float)
-    cy_s = np.asarray(sl["cy_std"], float); wx = np.asarray(sl["width_x"], float)
+    wx = np.asarray(sl["width_x"], float)
     ry = np.asarray(sl["ry"], float); cx = np.asarray(sl["cx"], float)
-    cx_s = np.asarray(sl["cx_std"], float); ly = np.asarray(sl["length_y"], float)
+    ly = np.asarray(sl["length_y"], float)
     box = sl["crop_box"]
 
     def two_lines(px1, py1, px2, py2):
@@ -341,26 +347,18 @@ def make_channel_fig(result):
     data = [
         _heatmap(ag["XI"][0].tolist(), ag["YI"][:, 0].tolist(), ag["ZI"], _CS, "Height",
                  cbar=_cbar(f"Height ({U})", x=1.01, xanchor="left"), showlegend=False),
-        {"type": "scatter", "x": (list(rx) + list(rx[::-1])),
-         "y": (list(cy + 2 * cy_s) + list((cy - 2 * cy_s)[::-1])),
-         "fill": "toself", "fillcolor": _rgba(C("RED"), 0.18), "line": {"width": 0},
-         "hoverinfo": "skip", "showlegend": False, "name": "centre Y ±2 SD"},
         {"type": "scatter", "x": rx.tolist(), "y": cy.tolist(), "mode": "lines",
-         "line": {"color": C("RED"), "width": 2}, "name": "Centre Y per grid line across the channel"},
+         "line": {"color": C("RED"), "width": 2}, "name": "Centre line"},
         {"type": "scatter", "x": wx_x, "y": wx_y, "mode": "lines",
          "line": {"color": edge_col, "width": 1.5, "dash": "dash"},
          "name": "Floor width edges"},
-        {"type": "scatter", "x": (list(cx + 2 * cx_s) + list((cx - 2 * cx_s)[::-1])),
-         "y": (list(ry) + list(ry[::-1])),
-         "fill": "toself", "fillcolor": _rgba(C("BLUE"), 0.18), "line": {"width": 0},
-         "hoverinfo": "skip", "showlegend": False, "name": "centre X ±2 SD"},
         {"type": "scatter", "x": cx.tolist(), "y": ry.tolist(), "mode": "lines",
-         "line": {"color": C("BLUE"), "width": 2}, "name": "Centre X per grid line along the channel"},
+         "line": {"color": C("BLUE"), "width": 2}, "name": "Longitudinal centre"},
         {"type": "scatter", "x": ly_x, "y": ly_y, "mode": "lines",
          "line": {"color": edge_col, "width": 1.5, "dash": "dot"},
          "name": "Floor length edges"},
         {"type": "scatter", "x": box_px, "y": box_py, "mode": "lines",
-         "line": {"color": C("YELLOW"), "width": 2}, "name": "Crop box (exported channel)"},
+         "line": {"color": C("YELLOW"), "width": 2}, "name": "Crop box"},
     ]
     return {"data": data, "layout": layout}
 
@@ -376,20 +374,19 @@ def _band(x, lo, hi, colour, name):
 def make_profile_ycenter_fig(result):
     sl, ch = result["slices"], result["channel"]
     rx = np.asarray(sl["rx"], float); cy = np.asarray(sl["cy"], float)
-    cy_s = np.asarray(sl["cy_std"], float)
     cY, cY_c = ch["center_y"], ch["center_y_conf"]
 
     layout = _base(showlegend=True, legend=_legend_bottom(), margin={"t": 60, "b": 100, "l": 70, "r": 30})
-    layout["title"] = _title(f"Channel centre line  |  mean Y = {cY:.2f} {U}, "
-                             f"SD over the central 80 % of the grid lines {cY_c:.2f} {U}")
+    layout["title"] = _title(f"Channel centre line  |  mean Y = {cY:.1f} {U}, "
+                             f"SD over the central 80 % of the grid lines {cY_c:.1f} {U}")
     layout["xaxis"] = _axis(f"X, position along the channel ({U})")
     layout["yaxis"] = _axis(f"Centre Y ({U})", **_eq("x"))
     return {
         "data": [
             {"type": "scatter", "x": rx.tolist(), "y": cy.tolist(), "mode": "lines",
-             "line": {"color": C("BLUE"), "width": 2}, "name": "Centre Y per grid line across the channel"},
+             "line": {"color": C("BLUE"), "width": 2}, "name": "Centre Y per grid line"},
             {"type": "scatter", "x": [float(rx[0]), float(rx[-1])], "y": [cY, cY], "mode": "lines",
-             "line": {"color": C("RED"), "width": 1.2, "dash": "dash"}, "name": f"Mean {cY:.2f} {U}"},
+             "line": {"color": C("RED"), "width": 1.2, "dash": "dash"}, "name": f"Mean {cY:.1f} {U}"},
         ],
         "layout": layout,
     }
@@ -398,20 +395,19 @@ def make_profile_ycenter_fig(result):
 def make_profile_xcenter_fig(result):
     sl, ch = result["slices"], result["channel"]
     ry = np.asarray(sl["ry"], float); cx = np.asarray(sl["cx"], float)
-    cx_s = np.asarray(sl["cx_std"], float)
     cX, cX_c = ch["center_x"], ch["center_x_conf"]
 
     layout = _base(showlegend=True, legend=_legend_bottom(), margin={"t": 60, "b": 100, "l": 70, "r": 30})
-    layout["title"] = _title(f"Longitudinal centre per grid line along the channel  |  mean X = {cX:.2f} {U}, "
-                             f"SD {cX_c:.2f} {U}")
+    layout["title"] = _title(f"Longitudinal centre per grid line along the channel  |  mean X = {cX:.1f} {U}, "
+                             f"SD {cX_c:.1f} {U}")
     layout["xaxis"] = _axis(f"Y, position across the channel ({U})")
     layout["yaxis"] = _axis(f"Centre X ({U})", **_eq("x"))
     return {
         "data": [
             {"type": "scatter", "x": ry.tolist(), "y": cx.tolist(), "mode": "lines",
-             "line": {"color": C("GREEN"), "width": 2}, "name": "Centre X per grid line along the channel"},
+             "line": {"color": C("GREEN"), "width": 2}, "name": "Centre X per grid line"},
             {"type": "scatter", "x": [float(ry[0]), float(ry[-1])], "y": [cX, cX], "mode": "lines",
-             "line": {"color": C("RED"), "width": 1.2, "dash": "dash"}, "name": f"Mean {cX:.2f} {U}"},
+             "line": {"color": C("RED"), "width": 1.2, "dash": "dash"}, "name": f"Mean {cX:.1f} {U}"},
         ],
         "layout": layout,
     }
@@ -440,15 +436,15 @@ def make_profile_widthlength_fig(result):
         "data": [
             _band(rx, wx - wx_s, wx + wx_s, C("YELLOW"), "width ±1 SD over 11 lines"),
             {"type": "scatter", "x": rx.tolist(), "y": wx.tolist(), "mode": "lines",
-             "line": {"color": C("YELLOW"), "width": 2}, "name": "Floor width per grid line across the channel"},
+             "line": {"color": C("YELLOW"), "width": 2}, "name": "Floor width per grid line"},
             {"type": "scatter", "x": [float(rx[0]), float(rx[-1])], "y": [mW, mW], "mode": "lines",
-             "line": {"color": C("RED"), "width": 1.2, "dash": "dash"}, "name": f"Floor width, median of the lines {mW:.1f} {U}"},
+             "line": {"color": C("RED"), "width": 1.2, "dash": "dash"}, "name": f"Median width {mW:.1f} {U}"},
             {**_band(ry, ly - ly_s, ly + ly_s, C("PURPLE"), "length ±1 SD over 11 lines"), "xaxis": "x2", "yaxis": "y2"},
             {"type": "scatter", "x": ry.tolist(), "y": ly.tolist(), "mode": "lines",
-             "line": {"color": C("PURPLE"), "width": 2}, "name": "Floor length per grid line along the channel",
+             "line": {"color": C("PURPLE"), "width": 2}, "name": "Floor length per grid line",
              "xaxis": "x2", "yaxis": "y2"},
             {"type": "scatter", "x": [float(ry[0]), float(ry[-1])], "y": [mL, mL], "mode": "lines",
-             "line": {"color": C("RED"), "width": 1.2, "dash": "dot"}, "name": f"Floor length, median of the lines {mL:.1f} {U}",
+             "line": {"color": C("RED"), "width": 1.2, "dash": "dot"}, "name": f"Median length {mL:.1f} {U}",
              "xaxis": "x2", "yaxis": "y2"},
         ],
         "layout": layout,
@@ -482,29 +478,33 @@ def make_cross_section_fig(result):
     pos = np.asarray(sl["depth_pos"], float); dep = np.asarray(sl["depth_x"], float)
     valid = np.asarray(sl["depth_valid"], bool)
     dsd = ch.get("channel_depth_slice_std_central80")
-    dsd_txt = f", SD over the central 80 % of slices {dsd:.2f} {U}" if dsd is not None and np.isfinite(dsd) else ""
 
     def hline(y, colour, dash, name, x_from=x0, x_to=x1):
         return {"type": "scatter", "x": [x_from, x_to], "y": [y, y], "mode": "lines",
                 "line": {"color": colour, "width": 1.3, "dash": dash}, "name": name, "hoverinfo": "name"}
 
+    # the level lines, each named at the right edge of the plot (above or below its line, so the
+    # close pairs, field and opening, floor-width level and floor, keep apart)
+    levels = [(0.0, C("TEXT2"), "dot", "Field, z = 0", "bottom"),
+              (fl, C("GREEN"), "dash", f"Floor level {fl:.1f} {U}", "top"),
+              (ft, C("YELLOW"), "dot", f"Floor-width level ({fpct} % of depth)", "bottom"),
+              (ot, C("PURPLE"), "dot", f"Opening level ({opct} % of depth)", "top")]
     data = [
         {"type": "scatter", "x": yc.tolist(), "y": zb.tolist(), "mode": "lines",
          "line": {"color": C("BLUE"), "width": 2.2}, "name": "Mean cross-section", "showlegend": False,
-         "hovertemplate": "y %{x:.1f}<br>z %{y:.2f}<extra></extra>"},
-        {**hline(0.0, C("TEXT2"), "dot", "Field, z = 0"), "showlegend": False},
-        {**hline(fl, C("GREEN"), "dash", f"Floor level {fl:.1f} {U}"), "showlegend": False},
-        {**hline(ft, C("YELLOW"), "dot", f"Floor-width level ({fpct} % of depth)"), "showlegend": False},
-        {**hline(ot, C("PURPLE"), "dot", f"Opening level ({opct} % of depth)"), "showlegend": False},
-    ]
+         "hovertemplate": f"y %{{x:.1f}} {U}<br>z %{{y:.1f}} {U}<extra></extra>"},
+    ] + [{**hline(y, col, dash, name), "showlegend": False} for y, col, dash, name, _ in levels]
+    level_labels = [_ann(name, 0.995, y, xref="x domain", yref="y", size=11, color=col, xanchor="right", yanchor=side,
+                         bgcolor=_rgba(C("BG"), 0.7))
+                    for y, col, dash, name, side in levels if np.isfinite(y)]
     if all(np.isfinite(v) for v in fe):
         data.append({"type": "scatter", "x": list(fe), "y": [ft, ft], "mode": "markers",
                      "marker": {"color": C("YELLOW"), "size": 9, "symbol": "diamond"},
-                     "name": f"Floor width {ch['floor_width']:.1f} {U} ({fpct} % of depth)", "hoverinfo": "name+x"})
+                     "name": f"Floor width {ch['floor_width']:.1f} {U}", "hoverinfo": "name+x"})
     if all(np.isfinite(v) for v in oe):
         data.append({"type": "scatter", "x": list(oe), "y": [ot, ot], "mode": "markers",
                      "marker": {"color": C("PURPLE"), "size": 9, "symbol": "diamond"},
-                     "name": f"Opening width {ch['opening_width']:.1f} {U} ({opct} % of depth)", "hoverinfo": "name+x"})
+                     "name": f"Opening width {ch['opening_width']:.1f} {U}", "hoverinfo": "name+x"})
     fr, wl, wr, band = pr.get("wall_fractions"), pr.get("wall_left"), pr.get("wall_right"), pr.get("wall_band")
     if fr and band and depth and np.isfinite(depth):
         # mid-wall line of each wall: fitted through the median wall positions of the
@@ -520,16 +520,15 @@ def make_cross_section_fig(result):
             wa = ch.get("wall_angle_deg")
             data.append({"type": "scatter", "x": lx, "y": ly_, "mode": "lines",
                          "line": {"color": C("RED"), "width": 1.4, "dash": "dash"},
-                         "name": f"Mid-wall lines (25–75 % of depth), wall angle {wa:.1f}°"
-                                 if wa is not None and np.isfinite(wa) else "Mid-wall lines (25–75 % of depth)",
+                         "name": f"Mid-wall lines, wall angle {wa:.1f}°"
+                                 if wa is not None and np.isfinite(wa) else "Mid-wall lines",
                          "hoverinfo": "name"})
     if valid.any():
         data.append({"type": "scatter", "x": pos[valid].tolist(), "y": dep[valid].tolist(),
                      "mode": "lines+markers", "marker": {"size": 4}, "line": {"color": C("GREEN"), "width": 1.6},
-                     "name": "Local depth per slice"
-                             + (f" (SD, central 80 %: {dsd:.2f} {U})" if dsd is not None and np.isfinite(dsd) else ""),
+                     "name": "Local depth per slice" + (f" (SD {dsd:.1f} {U})" if dsd is not None and np.isfinite(dsd) else ""),
                      "xaxis": "x2", "yaxis": "y2",
-                     "hovertemplate": "x %{x:.0f}<br>depth %{y:.2f}<extra></extra>"})
+                     "hovertemplate": f"x %{{x:.0f}} {U}<br>depth %{{y:.1f}} {U}<extra></extra>"})
         data.append({"type": "scatter", "x": [float(pos.min()), float(pos.max())], "y": [depth, depth],
                      "mode": "lines", "line": {"color": C("RED"), "width": 1.2, "dash": "dash"},
                      "name": f"Mean depth {depth:.1f} {U}", "xaxis": "x2", "yaxis": "y2", "hoverinfo": "name",
@@ -550,15 +549,30 @@ def make_cross_section_fig(result):
     layout["yaxis"]  = _axis(f"Height ({U})", domain=[0.58, 1.0], **_eq("x"))
     layout["xaxis2"] = _axis(f"X, along the channel ({U})", anchor="y2")
     layout["yaxis2"] = _axis(f"Local depth ({U})", domain=[0.0, 0.36], anchor="x2", **_eq("x2"))
+    layout["annotations"] = level_labels
     return {"data": data, "layout": layout}
 
 
 # ── 3D channel view ────────────────────────────────────────────────────────────
 
+def _crop_heights(result, max_cells):
+    """Height grid of the 3D channel view. At FULL_3D the crop points are gridded again at the
+    voxel size when the display grid was coarser (its cell limit keeps the 2D maps light)."""
+    g    = result["grids"]
+    crop = g["crop"]
+    ZI   = np.asarray(crop["ZI"], float)
+    vox  = float(result["rotation"].get("voxel_size") or 0)
+    grid = globals().get("_pv_make_grid")     # pvisual_core runs in the same namespace in the worker
+    if (max_cells != FULL_3D or grid is None or not vox > 0 or len(crop.get("x", [])) == 0
+            or not float(g["cells"].get("crop") or 0) > vox * 1.01):
+        return ZI
+    return grid(crop["x"], crop["y"], crop["z"], vox, g.get("display_sigma", 0), min_cell=vox)[2]
+
+
 def make_3d_fig(result, max_cells=None, colorscale=None):
     crop = result["grids"]["crop"]
     ch   = result["channel"]
-    ZI   = np.asarray(crop["ZI"], float)
+    ZI   = _crop_heights(result, max_cells)
     S    = _step(ZI.shape, max_cells or DEFAULT_3D_CELLS)
     cs   = colorscale or _CS
 
@@ -581,7 +595,7 @@ def make_3d_fig(result, max_cells=None, colorscale=None):
             {"type": "surface", "x": xi_c.tolist(), "y": yi_c.tolist(),
              "z": _arr(ZI[::S, ::S], 2), "colorscale": cs, "showscale": True,
              "lighting": _LIGHTING, "name": "Height",
-             "hovertemplate": "x %{x:.0f}<br>y %{y:.0f}<br>z %{z:.1f}<extra></extra>",
+             "hovertemplate": "x %{x:.0f} µm<br>y %{y:.0f} µm<br>z %{z:.1f} µm<extra></extra>",
              "colorbar": _cbar(f"Height ({U})", thickness=14)},
         ],
         "layout": _layout3d(title, _scene(aspect, f"X, channel axis ({U})",
@@ -621,9 +635,10 @@ def make_roughness_fig(result):
     data = [
         _heatmap(xi_c.tolist(), yi_c.tolist(), ZI, _CS, "Height",
                  cbar=_cbar(f"Height ({U})", x=1.01, xanchor="left"), showlegend=False),
-        _rect(rgh["regions"]["floor"],      C("GREEN"), "Floor",       rgh["floor"]),
-        _rect(rgh["regions"]["surf_left"],  C("BLUE"),  "Field left",  rgh["surf_left"]),
-        _rect(rgh["regions"]["surf_right"], C("RED"),   "Field right", rgh["surf_right"]),
+        # the field strips by their side of the channel: on this map -Y is the lower one
+        _rect(rgh["regions"]["floor"],      C("GREEN"), "Floor",    rgh["floor"]),
+        _rect(rgh["regions"]["surf_left"],  C("BLUE"),  "Field −Y", rgh["surf_left"]),
+        _rect(rgh["regions"]["surf_right"], C("RED"),   "Field +Y", rgh["surf_right"]),
     ]
     layout = _base(margin={"t": 60, "b": 125, "l": 65, "r": 80}, showlegend=True,
                    legend={**_legend_bottom(), "font": {"size": 11}})
@@ -666,7 +681,7 @@ def _surface_fig(result, which, max_cells=None):
                  "of B and A, drawn on the shape of B" + exag)
 
     trace.update({"type": "surface", "x": x, "y": y, "showscale": True, "lighting": _LIGHTING,
-                  "hovertemplate": "x %{x:.0f}<br>y %{y:.0f}<br>z %{z:.1f}<extra></extra>"})
+                  "hovertemplate": "x %{x:.0f} µm<br>y %{y:.0f} µm<br>z %{z:.1f} µm<extra></extra>"})
     return {"data": [trace],
             "layout": _layout3d(title, _scene(aspect, f"X ({U})", f"Y ({U})", f"Height ({U})"))}
 
@@ -839,14 +854,18 @@ def make_gradient_maps_fig(result, which=None):
             layout[ykey] = _axis(ylabel[key], domain=rows[r], anchor=xa, showticklabels=(c == 1),
                                  **link_y, **_eq(xa, constrain="domain"))
         data.append(_heatmap(xi, yi, z[::S, ::S], cs, name, cbar=cb.get(key), nd=nd,
+                             unit=U if key[0] in "ZE" and key != "ED" else "µm/µm", zd=nd,
                              zmin=zmin, zmax=zmax, xaxis=xa, yaxis=ya))
         if split and mask.any():
-            # the outline of the mask as one line of ready segments, cheap to redraw on every zoom
+            # the outline of the mask as one line of ready segments, cheap to redraw on every zoom;
+            # two-tone, a dark edge under the green line, so it shows on every colour of the maps
+            # (meta.outline: the interface shows or hides it)
             if outline is None:
                 outline = _mask_edges(xi, yi, mask[::S, ::S])
-            data.append({"type": "scatter", "mode": "lines", "x": outline[0], "y": outline[1],
-                         "line": {"color": _rgba(C("MASK"), 0.9), "width": 1.1}, "connectgaps": False,
-                         "hoverinfo": "skip", "showlegend": False, "xaxis": xa, "yaxis": ya, "name": "mask"})
+            for colour, width in (("rgba(0,0,0,0.55)", 3.0), (_rgba(C("MASK"), 0.95), 1.2)):
+                data.append({"type": "scatter", "mode": "lines", "x": outline[0], "y": outline[1],
+                             "line": {"color": colour, "width": width}, "connectgaps": False, "meta": {"outline": True},
+                             "hoverinfo": "skip", "showlegend": False, "xaxis": xa, "yaxis": ya, "name": "mask"})
         elif mx and not split:
             data.append({"type": "scatter", "x": mx, "y": my, "mode": "markers",
                          "marker": {"size": 1.4, "color": _rgba(C("MASK"), 0.8)}, "hoverinfo": "skip",
@@ -915,20 +934,22 @@ def set_language(lang):
 
 
 _TR = {
-    "Centre X per grid line along the channel": "Kanal boyunca her ızgara çizgisinde merkez X",
-    "Centre Y per grid line across the channel": "Kanal enine her ızgara çizgisinde merkez Y",
-    "Crop box (exported channel)": "Kırpma kutusu (dışa aktarılan kanal)",
+    "Centre line": "Merkez çizgisi",
+    "Longitudinal centre": "Boyuna merkez",
+    "Centre X per grid line": "Her ızgara çizgisinde merkez X",
+    "Centre Y per grid line": "Her ızgara çizgisinde merkez Y",
+    "Crop box": "Kırpma kutusu",
     "Difference A − B": "Fark A − B",
     "Difference": "Fark",
-    "Field left": "Sol çevre yüzey",
-    "Field right": "Sağ çevre yüzey",
+    "Field −Y": "Çevre yüzey −Y",
+    "Field +Y": "Çevre yüzey +Y",
     "Field": "Çevre yüzey",
     "Floor": "Taban",
     "Floor length edges": "Taban uzunluğu uçları",
-    "Floor length per grid line along the channel": "Kanal boyunca her ızgara çizgisinde taban uzunluğu",
+    "Floor length per grid line": "Her ızgara çizgisinde taban uzunluğu",
     "Floor length": "Taban uzunluğu",
     "Floor width edges": "Taban genişliği kenarları",
-    "Floor width per grid line across the channel": "Kanal enine her ızgara çizgisinde taban genişliği",
+    "Floor width per grid line": "Her ızgara çizgisinde taban genişliği",
     "Floor width": "Taban genişliği",
     "Height": "Yükseklik",
     "Height A": "Yükseklik A",
@@ -942,8 +963,6 @@ _TR = {
     "Error": "Hata",
     "after": "sonra",
     "before": "önce",
-    "centre X ±2 SD": "merkez X ±2 SS",
-    "centre Y ±2 SD": "merkez Y ±2 SS",
     "mask": "maske",
     "Slice without a valid floor": "Geçerli tabanı olmayan dilim",
     "No data": "Veri yok",
@@ -990,7 +1009,7 @@ _TR = {
     "height": "yükseklik",
     "rotated 180° about Z to match A": "A'ya uyması için Z ekseni etrafında 180° döndürüldü",
     "Local depth per slice": "Dilim başına yerel derinlik",
-    "Mid-wall lines (25–75 % of depth)": "Orta yan duvar çizgileri (derinliğin %25–75'i)",
+    "Mid-wall lines": "Orta yan duvar çizgileri",
 }
 
 # templates: {} matches a number with its unit; the Turkish order may differ
@@ -1011,16 +1030,17 @@ _TR_TPL = [
     ("rotation φ = {}", "dönme φ = {}"),
     ("residual tilt {} (XZ) and {} (YZ)", "kalan eğiklik {} (XZ) ve {} (YZ)"),
     ("axis variance {} %", "eksen varyansı %{}"),
-    ("median of the lines {}", "çizgilerin ortancası {}"),
+    ("Median width {}", "Ortanca genişlik {}"),
+    ("Median length {}", "Ortanca uzunluk {}"),
     ("Floor level {}", "Taban seviyesi {}"),
-    ("Floor width {} ({} % of depth)", "Taban genişliği {} (derinlik %{})"),
-    ("Opening width {} ({} % of depth)", "Ağız genişliği {} (derinlik %{})"),
+    ("Floor width {}", "Taban genişliği {}"),
+    ("Opening width {}", "Ağız genişliği {}"),
     ("Floor-width level ({} % of depth)", "Taban genişliği seviyesi (derinlik %{})"),
     ("Opening level ({} % of depth)", "Ağız seviyesi (derinlik %{})"),
-    ("Local depth per slice (SD, central 80 %: {})", "Dilim başına yerel derinlik (SS, ortadaki %80: {})"),
+    ("Local depth per slice (SD {})", "Dilim başına yerel derinlik (SS {})"),
     ("Mean depth {}", "Ortalama derinlik {}"),
     ("Mean {}", "Ortalama {}"),
-    ("Mid-wall lines (25–75 % of depth), wall angle {}", "Orta yan duvar çizgileri (derinliğin %25–75'i), yan duvar açısı {}"),
+    ("Mid-wall lines, wall angle {}", "Orta yan duvar çizgileri, yan duvar açısı {}"),
     ("width ±1 SD over {} lines", "genişlik ±1 SS, {} çizgi üzerinden"),
     ("length ±1 SD over {} lines", "uzunluk ±1 SS, {} çizgi üzerinden"),
     ("{}: no data", "{}: veri yok"),

@@ -6,9 +6,9 @@ runs without internet access ("offline bundle").
 
 Files (versions pinned; change the constants to upgrade, then re-run):
   vendor/plotly-<PLOTLY_VERSION>.min.js           Plotly.js (MIT)          from cdn.plot.ly
-  vendor/three/three.module.min.js                three.js (MIT), the 3D   from cdn.jsdelivr.net
-                                                  viewport
-  vendor/pyodide/pyodide.js, pyodide.asm.js,      Pyodide (MPL-2.0)        from cdn.jsdelivr.net
+  vendor/three/three.module.js, three.core.js     three.js (MIT), the 3D   from cdn.jsdelivr.net
+                                                  viewport (the module imports the core)
+  vendor/pyodide/pyodide.mjs, pyodide.asm.mjs,    Pyodide (MPL-2.0)        from cdn.jsdelivr.net
                  pyodide.asm.wasm, python_stdlib.zip, pyodide-lock.json
   vendor/pyodide/<wheels>                         numpy, scipy and their   listed in pyodide-lock.json,
                                                   dependencies (BSD)       sha256 verified against it
@@ -22,15 +22,16 @@ import os
 import sys
 import urllib.request
 
-PLOTLY_VERSION  = "2.35.2"
-THREE_VERSION   = "0.169.0"
-PYODIDE_VERSION = "0.26.4"
+PLOTLY_VERSION  = "4.1.2"
+THREE_VERSION   = "0.186.1"
+PYODIDE_VERSION = "314.0.7"           # numbered after CPython 3.14 since 2026
 PACKAGES        = ["numpy", "scipy"]          # transitive dependencies are added from the lock file
 
 PLOTLY_URL  = f"https://cdn.plot.ly/plotly-{PLOTLY_VERSION}.min.js"
-THREE_URL   = f"https://cdn.jsdelivr.net/npm/three@{THREE_VERSION}/build/three.module.min.js"
+THREE_URL   = f"https://cdn.jsdelivr.net/npm/three@{THREE_VERSION}/build/"
+THREE_FILES = ["three.module.js", "three.core.js"]       # as published: the module imports ./three.core.js
 PYODIDE_CDN = f"https://cdn.jsdelivr.net/pyodide/v{PYODIDE_VERSION}/full/"
-CORE_FILES  = ["pyodide.js", "pyodide.asm.js", "pyodide.asm.wasm", "python_stdlib.zip", "pyodide-lock.json"]
+CORE_FILES  = ["pyodide.mjs", "pyodide.asm.mjs", "pyodide.asm.wasm", "python_stdlib.zip", "pyodide-lock.json"]   # a module worker imports pyodide.mjs
 
 ROOT   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VENDOR = os.path.join(ROOT, "vendor")
@@ -76,7 +77,8 @@ def main():
     print("Plotly.js")
     ok &= fetch(PLOTLY_URL, os.path.join(VENDOR, f"plotly-{PLOTLY_VERSION}.min.js"))
     print("three.js")
-    ok &= fetch(THREE_URL, os.path.join(VENDOR, "three", "three.module.min.js"))
+    for name in THREE_FILES:
+        ok &= fetch(THREE_URL + name, os.path.join(VENDOR, "three", name))
 
     print("Pyodide core")
     for name in CORE_FILES:

@@ -227,6 +227,167 @@ so every downstream number was recomputed.
   - Every text in the plots is one point larger: titles, axis titles and ticks, legends,
     colour bars, annotations and hover labels (`plots.py`), the profile plots of the
     cross-section panels, and the colour bar, scale bar and labels of the 3D view.
+- Layout and view (2026-10-24). No analysis change.
+  - Properties is a pane of its own on the right of the viewport, so the browser has the
+    full height on the left. Both side panes can be resized and their widths are
+    remembered.
+  - The axes of the 2D plots carry twice as many ticks as Plotly would choose for their
+    drawn length (on screen, in exported figures and in the report). Axes with ticks of
+    their own keep them.
+  - Earth is the default colour scale and High the default 3D detail. A new 3D detail,
+    Very high, draws every cell: the comparison grid at its full spacing, and the crop of
+    an analysis gridded again at the voxel size. On the 600 µm sample pair, High drew a
+    quarter of the 5 µm comparison grid (every second cell in each direction, 68 000 of
+    271 000 cells) and the analysis crop on its 6.6 µm display grid (160 000 cells);
+    Very high draws 271 000 and 275 000 cells.
+- Fixes from a review of the interface (2026-10-25). No analysis change.
+  - Two view changes in quick succession (the theme, then the colours) left an analysis
+    drawn with the first; it is now drawn again with the latest options.
+  - Against an idealised reference (a CAD design, recognised by its floor without
+    texture) Properties, the batch table and the report mark RQ as the key result, as
+    the engine has always reported it (`metrics.primary`), with a note giving the floor
+    textures of A and B.
+  - Cancel asks first when the engine holds results, because restarting it ends their
+    exports, sessions and redraws.
+  - The TOP face of the view cube reads upright.
+  - The status bar no longer stays on "Drawing the analysis…" once a view of a reopened
+    session is drawn.
+  - The error for text in a point cloud names the real line of the file (NumPy counts
+    neither blank lines nor # comments), and the start page says that the analysis
+    failed instead of keeping its green check.
+  - CSV: new columns at the end (Ssk and Sku of both field strips, the spreads of the
+    mid-depth width and the wall angle over the grid lines, the valid-line fractions,
+    the y cell size, the floor textures and the primary measure). A pair compared again
+    with the same settings, or shown again from the batch table, stays one row of the
+    exports.
+  - A failed redraw of the figures has a title in its notice.
+- Voxel thinning (2026-10-25). An analysis change for some clouds. The voxels were told
+  apart by one number, ix·1 000 003 + iy·1 009 + iz, which two distant voxels can share:
+  (ix, iy + 991, iz + 84) and (ix + 1, iy, iz). Their points were then averaged into one
+  point between the two. The exact voxel index now separates them, and the voxels keep
+  their earlier order, so a cloud without a shared number is thinned bit for bit as
+  before. A shared number needs a scan more than 991 voxels across and more than 84
+  voxels deep: of the 120 scans of the paper, at 5 µm voxels it occurred only in three
+  White inserts after shot 5, whose values in the paper (the mean drift of White) round
+  as before; at 3 µm in 113 and at 1 µm in 115 (a few hundred and a few tens of voxels
+  each), the voxel sizes of two of the paper's sensitivity studies.
+- Conveniences from the same review (2026-10-25). No analysis change: the sample data
+  give the same numbers.
+  - A text point cloud whose coordinates span less than 150 units across (millimetres or
+    metres) or more than 150 000 (nanometres) is taken for another unit when it is opened
+    for an analysis; MaRQ offers to convert it to micrometres. The engine reads the file,
+    multiplies the coordinates and gives the points to the unchanged analysis; the factor
+    is kept with the analysis (Properties, `input_scale` in the JSON and at the end of the
+    CSV columns).
+  - *Try an example* (start page, File menu): a synthetic 600 µm channel and a copy of it,
+    4 µm wider and 3 µm shallower, both with one surface texture of about 2 µm, made in
+    the page, analysed, kept as A and B and compared, one step after the other.
+  - Results made with other settings than those now in *Settings* are marked in the
+    browser, and Properties names the settings that changed.
+  - MaRQ asks in its own dialog, not the browser's, before removing an analysis and
+    before opening a session over unsaved results. It asks before comparing two surfaces
+    that hold the same points, and before a batch with files that hold the points of A or
+    repeat another file of the batch (by their contents, not their names).
+  - The tip after each step is one short line and goes when a view of another result is
+    opened. The browser opens the groups of the view on screen and scrolls to it.
+  - The cross-section panel no longer hides the clicked point: the 3D view moves up
+    until the point is in sight above the panel.
+  - The browser and Properties can be hidden for a wider view (the button in their
+    title; the button at that end of the view title brings them back; remembered).
+  - Properties can be copied as a table for a spreadsheet; the log can be copied and
+    saved as a text file.
+  - One *Header rows to skip* serves the analysis and the comparison; the display
+    settings and it fill the right half of the Settings dialog.
+  - Properties: lengths to 0.1 µm, angles to 0.1°, correlations to three decimals (as in
+    the batch table, the figures and the report); the parts of a value labelled ("floor
+    9.4 · rim 0.1 µm", "XZ 0.01° · YZ 0.02°"); the two walls and the two field strips
+    named by their side of the channel, −Y and +Y, which reads the same on the maps and
+    on the cross-sections ("Field, left" was the lower strip on the map).
+  - Figures: the level lines of the mean cross-section labelled at the right edge; shorter
+    legends; units in the hover readouts; the 3D colour bar on round values; the outline of the channel
+    interior two-tone, so it shows on every colour scale, and shown or hidden with a
+    button below the maps.
+  - Ticked view options are grey, so red marks only the commands, the selection and the
+    key results; white on red in the dark theme is readable (5.6 to 1).
+  - The report draws its figures near the size they are printed at, with larger labels,
+    and keeps each result on one A4 page.
+  - Removed: the zero-width centre bands of the channel map, an unused setting of the
+    plotting library, a repeated translation and stale wording in the translation file.
+- Second round from the same review (2026-10-25). No analysis change: the sample data give
+  the same numbers.
+  - Every comparison is kept: each comparison and each batch has a node in the browser
+    with its views (the engine holds the newest four), can be removed, and goes into the
+    report and the session. *Summary of the session* lists every analysis and every
+    comparison in one table, batch rows and results no longer held included, with a button
+    to open each one. A session file of before (one comparison) opens as before.
+  - A progress card over the view while a run goes on: its steps, those done and the one
+    under way, the seconds, and *Cancel*; for a batch, the pair and a progress bar.
+  - Journal sizes in the figure export: one column (90 mm) and two columns (190 mm), drawn
+    at the printed size with the text near 7 to 9 points and without the title of the view,
+    as a PNG at 300 or 600 dots per inch (with its resolution stated in the file) or an SVG.
+  - Lighter ribbon: the links of the comparison maps and 3D views are buttons below those
+    views; the runtime is named in the status bar only when it is not the offline bundle.
+  - Faster: a new theme, colour scale, 3D detail or language redraws the figure on screen
+    and the others when their views are opened (one figure takes about a tenth of the time
+    of all, and a tenth of the data); a batch reads surface A once (the numbers are those
+    of each pair alone); the fixed axes of the cross-sections of an analysis are found in
+    one pass (the first cross-section took about 2 s, about 55 times longer; the axes are
+    the same).
+  - Smaller session files: what a reopened session does not need is left out (the point
+    lists behind the display grids, the crop's own copy of its points, made again from the
+    cropped cloud, and the slope components of a comparison), and the roughness view grid is
+    kept in single precision like the other display grids: about 40 % less, with the crop,
+    the numbers and the cross-sections the same and the figures as from a full file.
+  - Tests of the analysis modules without a browser (`tests/test_cores.py`): synthetic
+    channels of known shape (widths, depth, wall angle and length within a few tenths of a
+    micrometre; a scan turned and tilted; a surface compared with itself; a copy turned half
+    round; the idealised mode; the voxel thinning; the X3P reader; the figures in both
+    languages) and the recorded numbers of the test channel and its copy, which must stay
+    the same to 1e-6 and match the browser to 1e-4. A GitHub check runs them with the NumPy
+    1.26.4 and SciPy 1.12.0 of the runtime; they pass with NumPy 2.4.6 and SciPy 1.17.1 too.
+    One test fails on purpose until it is decided how to fix what it found: a raised channel
+    (a ridge) more than 40 µm high is cut away by the despike step, which runs before the
+    turn-over, so it cannot be measured (none of the paper's 120 scans is raised).
+- Raised features, the comparison grid and the libraries (2026-10-25).
+  - *Raised feature: turn the scan over first* (Settings, off by default): a ridge, as on a
+    mould master, is turned over (the proper rotation of step 4) before the spike removal,
+    which would otherwise cut away everything more than 40 µm above the flat surface. A
+    lower ridge is still turned over by itself. When a scan shows no clear channel, the
+    message points to the setting. Off, every result is as before.
+  - The comparison grid has cells of exactly the stated spacing. Its points were spread over
+    the overlap, round(extent / spacing) of them, one interval fewer than the cells, so the
+    cells were larger than stated (5.004 x 5.030 µm for 5 µm on the 600 µm sample pair;
+    5.002 to 5.020 µm along the channel and 5.011 to 5.106 µm across it over the paper's 245
+    comparisons, the narrow channels the most). The points now lie the spacing apart from
+    the start of the overlap, and each cell is centred on its point, so a surface sampled on
+    an axis-aligned lattice of the same spacing (a synthetic surface, or a gridded instrument
+    file at 1, 2.5 or 5 µm) has its points inside the cells: with cells running from one point
+    to the next, its points lay on the cell edges and rounding decided their cell (a perfect
+    copy turned by 0.25 deg and registered back gave RQd 0.991 instead of 1.000). An analysis
+    change for every comparison: RQ, RQdx, RQdy and RQd move in the third or fourth decimal
+    (over the same comparisons RQd by a median of 0.001, at most 0.014 on the High Temp and
+    Rigid 10K channels and 0.021 on the White ones); the paper was computed again.
+  - An idealised reference (a CAD surface) is recognised by its smooth floor, now measured
+    two cells away from the walls (empty cells count as floor, as a CAD cloud sparser than the
+    grid leaves many). The cells at the foot of a wall average floor and wall points, and on
+    a CAD floor they read as 0.8 to 2.1 µm of texture, against a limit of 1.5 µm: the paper's
+    100 µm CAD reference was not recognised, so its comparisons showed RQd instead of RQ as
+    the key result, and with the centred grid cells three more references would have crossed
+    the limit. The five now read 0.000 to 0.007 µm and measured surfaces 3.0 µm or more. The
+    paper names its CAD references explicitly, so none of its numbers changes.
+  - The automatic voxel size (Voxel size 0) used a NumPy call that NumPy 2 removed; it now
+    uses one that gives the same value in both.
+  - Libraries: Pyodide 0.26.4 to 314.0.7 (Python 3.14, NumPy 2.4.6, SciPy 1.18.0, the
+    versions of the desktop Python the paper's numbers are computed with, but SciPy 1.17.1),
+    Plotly.js 2.35.2 to 4.1.2, three.js r169 to r186. The bundle is 37 MB instead of 84.
+    Pyodide no longer runs in classic web workers: the engine is a module worker and
+    imports pyodide.mjs. A JavaScript null reaches Python as JsNull, not None, so the
+    engine passes undefined. Plotly 4 syncs an overlaying axis with the one below; the
+    difference axis of the cross-sections keeps its own ticks. three.js publishes its build
+    as two files (the module imports three.core.js); both are in the bundle. The tests of
+    the analysis modules run with NumPy 2.4.6 and SciPy 1.18.0 in the GitHub check; between
+    NumPy 1.26.4 / SciPy 1.12.0 and NumPy 2.4.6 / SciPy 1.17.1 their recorded numbers differ
+    by at most 2e-13.
 
 ## 0.9 (2026-09-30)
 

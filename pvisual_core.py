@@ -64,6 +64,11 @@ _PV_DEFAULTS = {
     "line_step":            0.0,      # spacing of the lines, µm; 0 = twice the cell
     "line_central":         0.80,     # central fraction of the channel length used
     "line_max_gap":         3,        # empty cells a level crossing may be interpolated across
+    # a raised feature (a ridge, as on a mould master) is turned over before the despike step,
+    # which would otherwise remove it with the spikes above the field; MaRQ turns a feature
+    # over by itself only in step 4, after the despike, so a ridge higher than despike_margin
+    # needs this (2026-10-25). Off, nothing changes.
+    "turn_over":      False,
     # kept for UI back-compat (no longer used by the field-referenced method):
     "channel_pctl":   5,
     "z_search_frac":  0.50,
@@ -92,10 +97,20 @@ def _detect_delimiter(file_path, skip_rows=0):
 def _voxel_downsample(points, voxel_size):
     mins      = points.min(axis=0)
     voxel_idx = np.floor((points - mins) / voxel_size).astype(np.int32)
+    # The voxels are ordered by the key of the first 1.0 release, so the thinned cloud keeps its
+    # order. That key alone is not unique: (ix, iy + 991, iz + 84) and (ix + 1, iy, iz) share it,
+    # and their points were averaged into one point between the two. The exact voxel index now
+    # separates such voxels; a cloud without a shared key is thinned exactly as before.
     keys      = (voxel_idx[:, 0].astype(np.int64) * 1_000_003 +
                  voxel_idx[:, 1].astype(np.int64) * 1_009 +
                  voxel_idx[:, 2].astype(np.int64))
-    _, inv = np.unique(keys, return_inverse=True)
+    idx64     = voxel_idx.astype(np.int64)
+    exact     = np.ravel_multi_index(tuple(idx64.T), tuple(int(d) + 1 for d in idx64.max(axis=0)))
+    order     = np.lexsort((exact, keys))
+    first     = np.ones(len(order), dtype=bool)
+    first[1:] = exact[order[1:]] != exact[order[:-1]]
+    inv       = np.empty(len(order), dtype=np.int64)
+    inv[order] = np.cumsum(first) - 1
     n      = inv.max() + 1
     sampled = np.zeros((n, 3), dtype=np.float64)
     counts  = np.zeros(n, dtype=np.float64)
@@ -691,6 +706,10 @@ def run_pvisual(file_path: str, params: dict = None, log_fn=print) -> dict:
               (y >= y.min() + margin) & (y <= y.max() - margin))
     points = points[mask]
     log_fn(f"  Margin {margin} → {len(points):,} points remaining")
+    if p.get("turn_over"):
+        # the same proper rotation as step 4 (180° about the in-plane X axis: x, -y, -z)
+        points = np.column_stack([points[:, 0], -points[:, 1], -points[:, 2]])
+        log_fn("  Turned over (Settings: raised feature): the ridge is now a channel")
 
     # ── Step 2.5: Despike — focus-variation spikes above the field AND deep
     #    optical dropouts far below any real channel feature ──────────
@@ -714,7 +733,7 @@ def run_pvisual(file_path: str, params: dict = None, log_fn=print) -> dict:
     log_fn("\nSTEP 3 — Voxel downsampling")
     t0 = time.time()
     vs = p["voxel_size"]
-    voxel_size = (max(points[:, 0].ptp(), points[:, 1].ptp()) / p["vsdivider"]
+    voxel_size = (max(np.ptp(points[:, 0]), np.ptp(points[:, 1])) / p["vsdivider"]
                   if (vs is None or vs <= 0) else float(vs))
     ds = _voxel_downsample(points, voxel_size)
     xd, yd, zd = ds[:, 0], ds[:, 1], ds[:, 2]
@@ -917,7 +936,8 @@ def run_pvisual(file_path: str, params: dict = None, log_fn=print) -> dict:
             "var_pct":      float(var_pct),
             "voxel_size":   float(voxel_size),
             "channel_axis": channel_axis.tolist(),
-            "converted":    bool(converted),
+            "converted":    bool(converted) != bool(p.get("turn_over")),   # the scan's feature was raised
+            "turned_over":  bool(p.get("turn_over")),
             "field_tilt_xz": field_xz,
             "field_tilt_yz": field_yz,
         },

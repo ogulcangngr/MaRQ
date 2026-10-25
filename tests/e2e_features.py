@@ -7,8 +7,10 @@ With the internet blocked: analyses the insert and the part, keeps them as A and
 them (the metrics against tests/test_features_expected.json; --record writes that file), then
 goes through the views a user opens: both analyses in the tree, the height and slope maps, the
 cross-section at a position, the 3D view with the one-click cross-section (when the headless
-browser has WebGL), the report, the language, and a session saved and opened again in a fresh
-page. Exit code 0 when everything holds.
+browser has WebGL), the report, the language, a session saved and opened again in a fresh
+page, and the conveniences (one header-rows setting, results made with other settings marked,
+the side panes hidden, MaRQ's own dialogs, a file in millimetres, the example). Exit code 0 when
+everything holds.
 """
 import os, sys, json, time, zipfile, argparse, tempfile, subprocess
 from playwright.sync_api import sync_playwright
@@ -169,16 +171,58 @@ with sync_playwright() as p:
         page.click('#file-menu [data-cmd="save-session"]')
     sess = os.path.join(tmp, "session.marq"); d.value.save_as(sess)
     names = set(zipfile.ZipFile(sess).namelist())
-    check("session file", {"marq_session.json", "rq_gradient.json", "rq_gradient.npz", "slot_A.txt", "slot_B.txt"} <= names
-          and sum(n.startswith("pvisual_") and n.endswith(".npz") for n in names) == 2, f"{os.path.getsize(sess) / 1e6:.1f} MB")
+    check("session file", {"marq_session.json", "slot_A.txt", "slot_B.txt"} <= names
+          and sum(n.startswith("pvisual_") and n.endswith(".npz") for n in names) == 2
+          and sum(n.startswith("rq_gradient_") and n.endswith(".npz") for n in names) == 1, f"{os.path.getsize(sess) / 1e6:.1f} MB")
     check("results saved", page.evaluate("() => resultCount() === _savedCount"))
     phase[0] = "reload"; page.reload(); wait(page, "() => ready"); phase[0] = ""
     page.set_input_files("#session-input", sess)
     wait(page, "() => _figs.rq_gradient && _figs.pvisual && !_restoring", 300); time.sleep(1)
     m2 = page.evaluate("() => session.comparisons[0].metrics")
     check("session opened again", all(abs(m2[k] - m[k]) < 1e-12 for k in KEYS) and page.evaluate("() => Object.keys(_A).length") == 2)
-    page.click("#run-gradient"); wait(page, "() => !running && session.comparisons.length === 2")
-    check("compared again after opening it", abs(page.evaluate("() => session.comparisons[1].metrics.r_mag") - m["r_mag"]) < 1e-9)
+    n0 = page.evaluate("() => _serial.rq_gradient")
+    page.click("#run-gradient"); wait(page, f"() => !running && _serial.rq_gradient > {n0}")
+    # the same pair with the same settings stays one row of the exports
+    check("compared again after opening it, still one row", page.evaluate("() => session.comparisons.length") == 1
+          and abs(page.evaluate("() => session.comparisons[0].metrics.r_mag") - m["r_mag"]) < 1e-9)
+
+    # conveniences: one header-rows setting, results made with other settings, the side panes,
+    # MaRQ's own dialogs, a file in millimetres, the example
+    both = page.evaluate("""() => { const e = document.getElementById('p-skiprows'); e.value = '2'; e.dispatchEvent(new Event('input'));
+        const r = [document.querySelectorAll('#modal-settings input[id$="skiprows"]').length, getPvisualParams().skip_rows, getGradientParams().skip_rows];
+        e.value = '0'; e.dispatchEvent(new Event('input')); return r; }""")
+    check("one header-rows setting for the analysis and the comparison", both == [1, 2, 2], both)
+    stale = page.evaluate("""() => { const e = document.getElementById('g-spacing'); e.value = '6'; e.dispatchEvent(new Event('input'));
+        const on = document.querySelector('#tree-comparisons .tnode.comparison').classList.contains('stale');
+        e.value = '5'; e.dispatchEvent(new Event('input')); return [on, document.querySelector('#tree-comparisons .tnode.comparison').classList.contains('stale')]; }""")
+    check("a result made with other settings is marked", stale == [True, False], stale)
+    w0 = page.evaluate("() => document.getElementById('viewport').clientWidth")
+    page.click("#hide-left"); page.click("#hide-right"); time.sleep(0.5)
+    w1 = page.evaluate("() => document.getElementById('viewport').clientWidth")
+    page.click("#show-left"); page.click("#show-right"); time.sleep(0.5)
+    check("side panes hidden and shown again", w1 > w0 + 400 and abs(page.evaluate("() => document.getElementById('viewport').clientWidth") - w0) < 3, f"{w0} -> {w1} px")
+    page.evaluate("() => document.querySelector('#tree-analyses .aremove').click()"); time.sleep(0.4)
+    asked = page.evaluate("() => document.getElementById('modal-ask').style.display === 'flex' && document.getElementById('ask-title').textContent")
+    page.evaluate("() => closeModal('modal-ask')")
+    check("removing an analysis asks in MaRQ's own dialog", asked == "Remove the analysis?", asked)
+    mm = os.path.join(tmp, "test_channel_600um_in_mm.txt")
+    with open(INS) as fi, open(mm, "w") as fo:
+        for line in fi:
+            fo.write(" ".join(f"{float(v) / 1000:.5f}" for v in line.split()) + "\n")
+    n = page.evaluate("() => session.analyses.length")
+    page.set_input_files("#file1-input", mm); time.sleep(1)
+    unit = page.evaluate("() => document.getElementById('modal-ask').style.display === 'flex' && document.getElementById('ask-title').textContent")
+    page.evaluate("() => [...document.querySelectorAll('#ask-buttons button')][0].click()"); time.sleep(0.3)
+    page.click("#run-pvisual"); wait(page, f"() => !running && session.analyses.length === {n + 1}")
+    fw = page.evaluate("() => [session.analyses.find(a => a.file === 'test_channel_600um.txt').channel.floor_width, session.analyses.at(-1).channel.floor_width, session.analyses.at(-1).parameters.input_scale]")
+    check("a file in millimetres found and converted", unit == "Not in micrometres?" and fw[2] == 1000 and abs(fw[0] - fw[1]) < 0.05, f"{unit}; {fw}")
+    nc = page.evaluate("() => session.comparisons.length")
+    page.click("#file-menu-btn"); time.sleep(0.3)
+    page.click('#file-menu [data-cmd="example"]'); time.sleep(0.4)
+    page.evaluate("() => { const b = document.querySelector('#ask-buttons .btn-primary'); if (document.getElementById('modal-ask').style.display === 'flex' && b) b.click(); }")
+    wait(page, f"() => !running && session.comparisons.length === {nc + 1} && _example === null", 600)
+    ex = page.evaluate("() => [session.comparisons.at(-1).file_a, session.comparisons.at(-1).metrics.primary]")
+    check("the example: analysed, kept as A and B, compared", ex[0].startswith("example_channel_600um") and ex[1] == "r_mag", ex)
     b.close()
 
 if cut_off:

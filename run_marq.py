@@ -238,7 +238,7 @@ def main():
             (not tab and open_window(running)) or webbrowser.open(running)
         return
     url = f"http://127.0.0.1:{server.server_address[1]}/"
-    bundled = os.path.exists(os.path.join(HERE, "vendor", "pyodide", "pyodide.js"))
+    bundled = os.path.exists(os.path.join(HERE, "vendor", "pyodide", "pyodide.mjs"))
     print(f"MaRQ {VERSION}, the Microchannel and Replication Quality Analyzer\n")
     print(f"  MaRQ is running at   {url}")
     print(f"  Folder               {HERE}")

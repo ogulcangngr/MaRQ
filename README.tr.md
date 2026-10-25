@@ -90,7 +90,7 @@ için ne yapılacağını listeler. `tests/e2e_check.py`, çalışan bir MaRQ'ı
 ya da WebKit'te çalıştırır ve arşivin örnek verileriyle denetler.
 
 **Çevrimdışı.** `vendor/` klasörü Plotly.js, three.js ve NumPy ile SciPy içeren Pyodide
-çalışma ortamını barındırır (84 MB; sürümler ve lisanslar `vendor/README.md` içinde).
+çalışma ortamını barındırır (37 MB; sürümler ve lisanslar `vendor/README.md` içinde).
 Bu yüzden ilk başlatma hiçbir şey indirmez ve durum çubuğunda "Hazır (çevrimdışı paket)"
 yazar. `vendor/` yoksa, örneğin yalnızca kaynak kod indirildiyse, sayfa içerik dağıtım
 ağlarına (CDN) döner ve ilk başlatmada internet gerekir; `python tools/fetch_vendor.py`
@@ -110,25 +110,42 @@ paketi geri getirir.
   ata*, *Kırpımı kaydet*, dışa aktarmalar ve raporun kullandığı analizdir; bir adın yanındaki
   A ve B, kırpımları yuvaları dolduran analizleri gösterir. Analiz motoru en yeni altı
   analizi tutar (daha eskisi yine görüntülenebilir); bir düğümün × düğmesi analizini
-  oturumdan çıkarır.
-- **Özellikler** (solda, altta): ekrandaki sonucun ölçülen değerleri; fareyle üzerine
-  gelindiğinde her birinin açıklaması çıkar.
+  oturumdan çıkarır. Her karşılaştırmanın ve her toplu karşılaştırmanın da aynı biçimde
+  kendi düğümü vardır (B adıyla, yanında A); motor en yeni dördünü tutar. *Oturumun özeti*
+  bütün analizleri ve karşılaştırmaları, toplu satırlar ve artık tutulmayan sonuçlar dahil,
+  tek bir tabloda listeler; model ağacındakiler bir düğmeyle açılır. Bir sonucun yanındaki nokta, onun *Ayarlar*'daki şimdiki değerlerden
+  farklı ayarlarla yapıldığını gösterir; Özellikler hangilerinin değiştiğini söyler.
+- **Özellikler** (sağda): ekrandaki sonucun ölçülen değerleri; fareyle üzerine
+  gelindiğinde her birinin açıklaması çıkar. Uzunluklar 0,1 µm, açılar 0,1° ve
+  korelasyonlar üç ondalıkla verilir, şekillerde ve raporda olduğu gibi; iki yan duvar ve
+  iki çevre yüzey şeridi kanalın tarafıyla, −Y ve +Y, adlandırılır. Başlığındaki kopyalama
+  düğmesi değerleri bir hesap tablosuna yapıştırmak üzere tablo olarak kopyalar.
 - **Görünüm alanı** (ortada): model ağacında seçilen görünüm; üstünde başlığı ve ayrıntıları,
   altında gezinme çubuğu. Pencerenin herhangi bir yerine bırakılan dosya, analiz edilecek
   tarama olarak açılır.
 - **Durum çubuğu** (altta): bir çalıştırmanın ilerleyişi (her adımı ve kalite denetim
-  değerini gösteren canlı analiz günlüğü için tıklayın), imlecin altındaki koordinatlar,
-  ayarların makaledeki değerler olup olmadığı ve çalışma ortamının çevrimdışı paket olup
-  olmadığı.
+  değerini gösteren canlı analiz günlüğü için tıklayın; günlük kopyalanabilir ya da metin
+  dosyası olarak kaydedilebilir), imlecin altındaki koordinatlar,
+  ayarların makaledeki değerler olup olmadığı ve, çevrimdışı paket değilse, çalışma
+  ortamının nereden geldiği. Bir analiz ya da karşılaştırma sürerken görünümün üstündeki bir
+  kart adımlarını listeler, bitenleri ve sürmekte olanı işaretler, saniyeleri sayar ve *İptal*
+  düğmesini taşır; toplu karşılaştırmada çifti ve bir ilerleme çubuğunu gösterir.
 - **Başlık çubuğu**: *Dosya* menüsü (nokta bulutu ya da oturum açma, oturumu kaydetme,
-  rapor ve dışa aktarmalar), dil (English, Türkçe), açık ya da koyu tema, yardım ve Hakkında.
+  örnekle deneme, rapor ve dışa aktarmalar), dil (English, Türkçe), açık ya da koyu tema, yardım ve Hakkında.
   Seçim yapılmamışsa MaRQ sistemin dilini ve temasını izler.
 
-Bölmeler kenarları sürüklenerek boyutlandırılabilir. 1366 pikselin altında bütün boyutlar
+Bölmeler kenarları sürüklenerek boyutlandırılabilir. Model ağacının ve Özellikler'in
+başlığındaki düğme, daha geniş bir görünüm için o bölmeyi gizler; görünüm başlığının o
+ucundaki düğme bölmeyi geri getirir ve seçim hatırlanır. 1366 pikselin altında bütün boyutlar
 pencereyle birlikte küçülür; böylece şerit ve bölmeler küçük bir dizüstü ekranında da
 oranlarını korur. Daha geniş bir pencere görünüm alanına daha çok yer bırakır.
 Süren bir analiz iptal edilebilir (şeritte *İptal*); motor birkaç saniyede yeniden
 başlar.
+
+**Örnek.** Başlangıç sayfasındaki ya da *Dosya* menüsündeki *Örnekle dene*, yapay bir
+600 µm kanal ve onun 4 µm daha geniş, 3 µm daha sığ bir kopyasını, ikisi de yaklaşık 2 µm
+aynı yüzey dokusuyla, oluşturur; sonra ikisini analiz eder, A ve B olarak atar ve
+karşılaştırır, adım adım; böylece kendi taramanız olmadan bütün görünümler görülebilir.
 
 **Gezinme.** 3B görünümlerde yüzeyi imlecin altındaki noktanın çevresinde döndürmek için
 sol düğmeyle sürükleyin (Z yukarıda kalır); kaydırmak için sağ ya da orta düğmeyle (veya
@@ -157,15 +174,19 @@ aynı ölçeği kullanır; böylece kanal biçimini korur ve bir değişim kanal
 orantılı gösterilir. Küçük bir değişimin okunması gerektiğinde, her eksenin paneli
 doldurması için kapatın. **Haritaları bağla** altı karşılaştırma haritasını birlikte
 yakınlaştırır ve kaydırır; **3B görünümleri bağla** A yüzeyi, B yüzeyi ve eğim hatası için
-tek bir kamera kullanır. *Renkler* yükseklik haritalarının renk ölçeğini, *3B ayrıntı* 3B
-görünümlerin ağını belirler.
+tek bir kamera kullanır. *Renkler* yükseklik haritalarının renk ölçeğini (değiştirilmedikçe Earth), *3B ayrıntı* 3B
+görünümlerin ağını belirler (değiştirilmedikçe Yüksek; *Çok yüksek* her hücreyi çizer: analiz
+kırpımını voksel boyutunda, karşılaştırma ızgarasını tam aralığında).
 
 ## Girdi biçimleri
 
 - Ayraçlı metin nokta bulutları: `.txt`, `.xyz`, `.asc`, `.csv`; x y z olmak üzere üç
   sütun, yaygın herhangi bir ayraç. Dosyanın başındaki metin satırları (sütun adları, cihaz
   bilgileri) kendiliğinden atlanır; *Atlanacak başlık satırları* (Ayarlar) sayılarını elle
-  belirler. Birimler dosyanınkilerdir; makalenin verileri mikrometredir.
+  belirler. MaRQ mikrometre ile çalışır. Koordinatları 150 birimden daha dar
+  (milimetre ya da metre) ya da 150 000 birimden daha geniş (nanometre) bir alana yayılan
+  bir dosya, analiz için açıldığında başka bir birimde sayılır ve MaRQ onu çevirmeyi
+  önerir; çarpan analizle birlikte saklanır (dışa aktarmalarda `input_scale`).
 - ISO 25178-72 X3P dosyaları (`.x3p`); yüklenirken mikrometreye çevrilir.
 
 X3P yolunu bir cihaz dosyası olmadan denemek için `python tests/make_test_x3p.py`
@@ -179,14 +200,16 @@ gerisi varsayılan değerlerdeyken analiz edin; günlüğün ilk satırlarında 
 
 1. Nokta bulutunu **Aç**ın (ya da pencereye bırakın).
 2. Ayarları varsayılan değerlerinde bırakın; bunlar makalede kullanılan değerlerdir.
-   *Ayarlar* (şerit) bunları listeler: Voksel boyutu 5, Çevre yüzey bandı 2,5 ortanca mutlak
+   *Ayarlar* (şerit) bunları listeler: Çıkıntı kapalı, Voksel boyutu 5, Çevre yüzey bandı 2,5 ortanca mutlak
    sapma, Kanal boyunca kırpma payı 180, Kanal enine kırpma payı 100, derinliğin 0,10'u
    Ağız seviyesi ve 0,90'ı Taban seviyesi, kanal genişliğinin 0,5'i Taban pürüzlülük
    şeridi genişliği, Taban pürüzlülük şeridi uzunluğu 4000, Çevre yüzey pürüzlülük şeridi
-   genişliği 400 ve uzunluğu 4000; *Gelişmiş* altında: Kenar payı 100, Gösterim hücre
-   boyutu 0 (otomatik), Gösterim yumuşatması 0, Derinlik profili dilimleri 80, Atlanacak
-   başlık satırları 0. Birimler dosyanınkilerdir. Değiştirilen değerler işaretlenir ve
-   durum çubuğu kaçının makaledekinden farklı olduğunu söyler; *Makaledeki değerler*
+   genişliği 400 ve uzunluğu 4000; *Gelişmiş* altında: Kenar payı 100 ve Derinlik profili
+   dilimleri 80; sağ sütunda, yalnızca gösterimi değiştiren Gösterim hücre boyutu 0
+   (otomatik) ve Gösterim yumuşatması 0, ve karşılaştırmada da geçerli olan Atlanacak
+   başlık satırları 0. Değiştirilen değerler işaretlenir ve durum çubuğu kaçının
+   makaledekinden farklı olduğunu söyler; iletişim kutusundakilerden farklı ayarlarla
+   yapılmış bir sonuç model ağacında işaretlenir; *Makaledeki değerler*
    bunları geri getirir; *Kaydet* ve *Yükle* bir JSON ayar dosyası yazar ve okur;
    değerler bilgisayarda hatırlanır.
 3. **Analiz et**. Özellikler genişlikleri, derinliği, yan duvar açısını, köşe yuvarlaklığını,
@@ -217,6 +240,12 @@ gerisi varsayılan değerlerdeyken analiz edin; günlüğün ilk satırlarında 
    seviyesinde ne kadar dışında kaldığıdır. Uzunluk kanal boyunca çizgiler üzerinde, her
    uç dışarıdan içeriye doğru okunur; dışa aktarılan kırpım iki ucu ve kırpma payını
    kapsar.
+
+   Çıkıntı biçimli bir yapı, örneğin bir kalıp ana parçasındaki sırt, kanala çevrilir
+   (gerçek bir döndürme; el yönü korunur). MaRQ bunu kendiliğinden yapar, ancak düz yüzeyin
+   40 µm'den fazla üstündeki her şeyi kesip atan sivri nokta temizliğinden sonra; daha
+   yüksek bir sırt için *Ayarlar*'da *Çıkıntı*'yı işaretleyin, tarama önce ters çevrilir.
+   Tarama belirgin bir kanal göstermediğinde ileti bunu söyler.
 4. **Kırpımı kaydet**, yataylanmış, hizalanmış, voksellerle seyreltilmiş kırpımı kaydeder
    (mikrometre cinsinden x y z, çevre yüzey z = 0'da, kanal x boyunca, ortalanmış). **A olarak
    ata** ve **B olarak ata** aynı kırpımı doğrudan karşılaştırma yuvalarına yerleştirir.
@@ -226,7 +255,10 @@ gerisi varsayılan değerlerdeyken analiz edin; günlüğün ilk satırlarında 
 
 1. A yüzeyini (referans) ve B yüzeyini (karşılaştırılan yüzey) kırpımlarla doldurun: ya
    her yüzeyi analiz ettikten sonra *A olarak ata* ve *B olarak ata* ile, ya da kırpım
-   dosyaları için *A'yı aç* ve *B'yi aç* ile. Aynı kanalın herhangi iki yüzeyi
+   dosyaları için *A'yı aç* ve *B'yi aç* ile. MaRQ aynı noktaları içeren iki yüzeyi
+   karşılaştırmadan önce (RQ = 1 verir) ve A'nın noktalarını içeren ya da listedeki başka
+   bir dosyayı tekrarlayan dosyalarla toplu karşılaştırmadan önce sorar; dosyaları adlarına
+   göre değil içeriklerine göre tanır. Aynı kanalın herhangi iki yüzeyi
    karşılaştırılabilir. MaRQ'ın geliştirildiği çalışmada referans iç kalıp, karşılaştırılan
    yüzey kalıplanmış parçaydı; kalıp bozunması için ikisi de iki farklı kalıplamadaki aynı
    iç kalıptı, önceki A oldu.
@@ -240,13 +272,19 @@ gerisi varsayılan değerlerdeyken analiz edin; günlüğün ilk satırlarında 
    eşiği tanımlamaz. Görünümler şunlardır: 3B'de *A yüzeyi* ve *B yüzeyi*, B yüzeyi
    üzerinde 3B çizilmiş *Eğim hatası*, *Yükseklik haritaları* (A, B ve işaretli fark A − B)
    ve *Eğim haritaları* (A ile B'nin eğim büyüklükleri ve işaretsiz eğim hatası), her biri
-   kanal içi maskenin sınırıyla, ve tek yüzeydeki gibi kanal boyunca seçilen bir konumda
+   kanal içi maskenin sınırıyla (haritaların altındaki bir düğme onu gösterir ya da
+   gizler), ve tek yüzeydeki gibi kanal boyunca seçilen bir konumda
    *A ve B kesitleri*, ikinci eksende yükseklik farkı A − B ile; yükseklik ve fark eksenleri
    kanal boyunca en geniş aralıklarında sabittir. İki harita görünümü birlikte yakınlaştırılır ve kaydırılır. Günlük, B'nin hangi yönünün korunduğunu,
    geçerli hücre oranını ve maske boyutunu belirtir; ölçüt tablosu korunan yöne aittir.
 4. **Toplu işlem**: *Toplu dosyalar…* ile birden çok dosya seçin ve **Toplu karşılaştır**'a
    tıklayın. *Toplu sonuçlar* görünümü her dosya için RQ, RQdx, RQdy ve RQd değerlerini
-   listeler; *Göster* bir çifti şekilleri için yeniden çalıştırır.
+   listeler; *Göster* bir çifti şekilleri için yeniden çalıştırır. Toplu karşılaştırmanın
+   kendi düğümü vardır; A yüzeyi bütün liste için bir kez okunur, sayılar her çiftin tek
+   başına karşılaştırıldığındakilerdir.
+
+Yeni bir tema, renk ölçeği, 3B ayrıntı ya da dil, ekrandaki şekli hemen, her sonucun diğer
+şekillerini görünümleri açıldığında yeniden çizer.
 
 RQd belirtilen bir ızgara hücre boyutunda tanımlıdır. Farklı hücre boyutlarında
 hesaplanan değerler karşılaştırılamaz; makale RQd'yi, cihazın yanal çözünürlüğüne göre
@@ -258,17 +296,26 @@ seçilen 5 µm'de bildirir.
   temada ya da geçerli temada; metni arayüz dilinde, İngilizce ya da Türkçe; seçilen
   boyutta. Şekil o boyutta eksenler ve renk çubuğuyla yeniden oluşturulur; böylece
   etiketler ve çizgi kalınlıkları okunaklı kalır; altı karşılaştırma haritası tek bir şekil
-  olarak da dışa aktarılabilir. Bir görünümün altındaki kamera düğmesi onu ekranda göründüğü
-  gibi PNG olarak kaydeder.
+  olarak da dışa aktarılabilir. İki dergi boyutu, tek sütun (90 mm genişlik) ve iki sütun
+  (190 mm), şekli basılacağı boyutta, yazıları 7 ile 9 punto arasında ve görünümün başlığı
+  olmadan çizer: inç başına 300 ya da 600 noktalık bir PNG (dosya çözünürlüğünü belirtir)
+  ya da bir SVG; genişlik ve yükseklik milimetre olarak değiştirilebilir. Bir görünümün
+  altındaki kamera düğmesi onu ekranda göründüğü gibi PNG olarak kaydeder. Karşılaştırma
+  haritalarının altındaki düğmeler yakınlaştırmalarını bağlar ve kanal içinin dış çizgisini
+  gösterir; karşılaştırmanın 3B görünümlerinin altındaki düğme kameralarını bağlar.
 - **Sonuçlar (JSON)**: oturumun bütün sayıları, bütün ayarları ve çizgi ile dilim başına
   serileri; yazılım ve çalışma ortamı sürümleriyle.
 - **Sonuçlar (CSV)**: analiz edilen her yüzey için bir satır ve her karşılaştırma için bir
   satır.
 - **Rapor** (Dışa aktar ya da Dosya menüsü): her sonuç için yazdırılabilir bir sayfa:
   Özellikler bölmesindeki sayılar, ayarlar (makaledekinden farklı olanlar kalın) ve açık
-  temada ana şekiller. İletişim kutusundan yazdırılabilir ya da PDF olarak kaydedilebilir,
+  temada, A4'te etiketleri okunur kalsın diye basıldıkları boyuta yakın çizilen ana
+  şekiller. İletişim kutusundan yazdırılabilir ya da PDF olarak kaydedilebilir,
   veya bir HTML dosyası olarak kaydedilebilir.
-- **Oturum** (Dosya, *Oturumu kaydet*, Ctrl+S): analiz motorunun tuttuğu bütün sonuçları,
+- **Oturum** (Dosya, *Oturumu kaydet*, Ctrl+S): yeniden açılan bir oturumun gerek
+  duymadığı şeyler (gösterim ızgaralarının ardındaki nokta listeleri ve eğim bileşenleri;
+  bir sonucun yaklaşık %40'ı) dışında, analiz motorunun tuttuğu bütün sonuçları (analizler
+  ve karşılaştırmalar),
   oturum kaydını, ayarları ve A ile B yüzeylerini içeren bir `.marq` dosyası. *Oturum aç*
   ya da dosyayı pencereye bırakmak, sonuçları yeni bir analiz olmadan geri getirir:
   görüntülenebilir, dışa aktarılabilir, yeniden karşılaştırılabilir ve başka bir temada ya
@@ -298,6 +345,7 @@ her tabloda ve betikte aynı biçimde okunurlar.
 | `MaRQ.exe`, `MaRQ.command`, `MaRQ.sh`, `launchers/` | Hiçbir kurulum gerektirmeyen başlatıcılar (Windows; macOS; Linux); `launcher/` klasöründeki Go kaynaklarından `tools/build_launchers.py` ile derlenir |
 | `MaRQ.bat`, `run_marq.py` | Python 3 üzerinden yedek başlatıcılar |
 | `tests/e2e_check.py`, `tests/e2e_synthetic.py`, `tests/e2e_features.py` | Çalışan bir MaRQ'ın tarayıcı testleri: sayılar örnek verilere ya da yapay bir kanala karşı, arayüz yapay bir iç kalıp ve parça üzerinde |
+| `tests/test_cores.py` | Analiz modüllerinin tarayıcısız testleri: biçimi bilinen yapay kanallar ve test kanalı ile kopyasının kayıtlı sayıları (`tests/test_cores_expected.json`); GitHub denetimi bunları MaRQ çalışma ortamının NumPy ve SciPy sürümleriyle çalıştırır |
 | `tests/launcher_check.py` | Bir başlatıcının tarayıcısız testi: sunduğu dosyalar, klasör başına tek MaRQ, son pencere kapanınca durma |
 | `vendor/` | Çevrimdışı kullanım için gömülü Plotly.js, three.js ve NumPy ile SciPy içeren Pyodide çalışma ortamı |
 | `tools/fetch_vendor.py` | Paketi sabitlenmiş sürümlerde yeniden indirir ve doğrular |
