@@ -194,27 +194,42 @@ the reported depth is 60 µm.
 
 ## Limits
 
-MaRQ is built for one straight channel, or ridge, in a flat surrounding field. The channel can
-have any depth and any width, and it can be a small part of the scan or most of it, provided
-the scan keeps a strip of flat field along both sides, on which the surface is levelled.
-Three things are fixed:
+MaRQ is built for one straight channel, or ridge, in a flat surrounding field, on which the
+surface is levelled. It is tested on synthetic channels of known geometry (`tests/test_cores.py`)
+at the paper's settings, a voxel of 5 µm:
 
-- Material more than 40 µm above the field is removed before the analysis as spikes of the
-  instrument, and with it any rim or burr beside the channel that rises higher. Points far
-  below the channel floor are removed as optical dropouts: below the larger of 380 µm and
-  1.15 times the depth of the floor (the log gives both limits and how many points they
-  removed).
-- The comparison grid keeps its stated spacing at any length, up to 8 million cells (for
-  example 40 mm by 5 mm at 5 µm); a larger grid stops with a message to choose a larger
-  spacing or to crop the surfaces.
-- A surface whose floor carries less than 1.5 µm of texture is taken for an idealised (CAD)
-  surface: RQ becomes the key result of its comparisons.
+- **Depth.** The depth is read correctly at every depth tested, from 3 µm to 5 mm, also with
+  optical dropouts below the floor. The widths and the wall angle need the wall to run sideways
+  over a few voxels, which a wall 10° from the vertical does in channels deeper than about
+  100 µm. For a shallower channel choose a smaller voxel if the scan is sampled finely enough:
+  at 1 µm, channels from 20 µm deep are measured in full. In a channel only a few times deeper
+  than the roughness of its floor, the floor width at 90 % of the depth lies within that
+  roughness and has no clear value.
+- **Width.** The channel can cover most of the scan, provided a strip of flat field wider than
+  the edge margin (100 µm, Settings) remains along both sides. It can also be as narrow as about
+  0.3 % of the scan width (a 30 µm channel in a 20 mm scan), with a floor at least four voxels
+  wide. Next to a sharp floor or rim corner a width or a length can read up to about 2 µm off,
+  less than half a voxel.
+- **Raised features.** A ridge is found and turned over into a channel, whatever its height.
+  Rims or burrs beside a channel are allowed while they rise less above the field than the
+  channel goes below it; a channel with taller rims is taken for a ridge, and *Feature* set to
+  *Channel* in *Settings* measures it. In the same way, grooves beside a ridge that are deeper
+  than the ridge is high make it look like a channel, and *Ridge* measures it.
+- **Fixed limits.** Material more than 40 µm above the field is removed before the analysis as
+  spikes of the instrument, and with it any rim or burr beside the channel that rises higher.
+  Points far below the channel floor are removed as optical dropouts: below the larger of
+  380 µm and 1.15 times the depth of the floor (the log gives both limits and how many points
+  they removed). The comparison grid keeps its stated spacing at any length, up to 8 million
+  cells (for example 40 mm by 5 mm at 5 µm); a larger grid stops with a message to choose a
+  larger spacing or to crop the surfaces. A surface whose floor carries less than 1.5 µm of
+  texture is taken for an idealised (CAD) surface: RQ becomes the key result of its
+  comparisons.
 
 ## Workflow A: one surface
 
 1. **Open** the point cloud (or drop it on the window).
 2. Leave the settings at their defaults; they are the values used in the paper.
-   *Settings* (ribbon) lists them: Raised feature off, Voxel size 5, Field band 2.5 median absolute
+   *Settings* (ribbon) lists them: Feature Automatic, Voxel size 5, Field band 2.5 median absolute
    deviations, Crop margin along the channel 180, Crop margin across the channel 100,
    Opening level 0.10 and Floor level 0.90 of the depth, Floor roughness strip width 0.5
    of the measured floor width (the paper's batch used the nominal width, so the floor
@@ -261,9 +276,12 @@ Three things are fixed:
 
    A raised feature, a ridge as on a mould master, is found and turned over into a channel by
    MaRQ itself, before the spike removal (a proper rotation, so its handedness is kept): the
-   surface reaches further above the field than below it. *Raised feature* in *Settings*
-   turns a scan over in any case, for one where the ridge is not found. When a scan shows no
-   clear channel, the message says so.
+   surface reaches further above the field than below it. *Feature* in *Settings*, Automatic
+   by default, can say instead that the scan holds a *Channel* or a *Ridge*, for a scan where
+   that rule fails, as a channel whose rims rise higher than it is deep (*How it decides*,
+   under the setting, shows the cases). The choice goes back to Automatic when another file
+   is opened. When nothing lies on the chosen side, or a scan shows no clear channel, the
+   message says so.
 4. **Save crop** saves the levelled, aligned, voxel-thinned crop (x y z in micrometres,
    field at z = 0, channel along x, centred). **Keep as A** and **Keep as B** place the
    same crop directly in the comparison slots. These crops are the inputs of

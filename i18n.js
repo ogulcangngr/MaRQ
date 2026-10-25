@@ -704,15 +704,39 @@ const I18N = { tr: {
   "The key result of each comparison is in colour. Show opens a result the browser lists; Results CSV saves every number with its settings.":
     "Her karşılaştırmanın temel sonucu renklidir. Göster, model ağacında listelenen bir sonucu açar; Sonuçlar (CSV) her sayıyı ayarlarıyla birlikte kaydeder.",
 
-  // 2026-10-25: a raised feature turned over before the analysis
-  "Raised feature: turn the scan over first": "Çıkıntı: taramayı önce ters çevir",
-  "For a raised channel-forming feature, a ridge, as on a mould master. MaRQ finds a raised feature and turns it over by itself; this turns the scan over in any case, for a scan where it is not found. Off for a channel.":
-    "Kanalı oluşturan çıkıntı biçimli bir yapı için, örneğin bir kalıp ana parçasındaki sırt. MaRQ çıkıntıyı kendiliğinden bulur ve ters çevirir; bu seçenek, çıkıntının bulunamadığı bir taramayı her durumda ters çevirir. Kanal için kapalı.",
-  "raised, turned over (Settings)": "çıkıntı, ters çevrildi (Ayarlar)",
-  "If the scan shows a raised feature, a ridge, tick Raised feature in Settings and analyse it again.":
-    "Tarama çıkıntı biçimli bir yapı, bir sırt gösteriyorsa Ayarlar'da Çıkıntı seçeneğini işaretleyip yeniden analiz edin.",
-  "The scan was turned over (Raised feature, in Settings): for a channel, untick it and analyse again.":
-    "Tarama ters çevrildi (Ayarlar'da Çıkıntı): bir kanal için işareti kaldırıp yeniden analiz edin.",
+  // 2026-10-25: the Feature setting, Automatic, Channel or Ridge ("Feature" is above: Mikroyapı)
+  "Automatic": "Otomatik",
+  "Channel": "Kanal",
+  "Ridge": "Sırt",
+  "Automatic finds whether the scan holds a channel or a ridge, as on a mould master, and turns a ridge over into the channel it moulds. Choose Channel or Ridge when it decides wrongly, as for a channel whose rims rise higher than it is deep. The choice goes back to Automatic when another file is opened.":
+    "Otomatik, taramada bir kanal mı yoksa kalıp ana parçasındaki gibi bir sırt mı olduğunu bulur ve sırtı, kalıpladığı kanala dönüştürmek için ters çevirir. Yanlış karar verdiğinde Kanal ya da Sırt seçin; örneğin kenar kabarıklıkları derinliğinden yüksek olan bir kanal için. Seçim, başka bir dosya açıldığında Otomatik'e döner.",
+  "How it decides": "Nasıl karar verir",
+  "Channel or ridge": "Kanal ya da sırt",
+  "MaRQ measures a channel, a depression in the flat surface around it. A ridge, as on a mould master, is first turned over into the channel it moulds. Automatic decides which of the two a scan holds by how far the surface reaches below and above the flat surface, and the larger reach wins.":
+    "MaRQ bir kanalı, yani çevresindeki düz yüzeyde bir çukuru ölçer. Kalıp ana parçasındaki gibi bir sırt, önce kalıpladığı kanala dönüştürmek için ters çevrilir. Otomatik, taramada bu ikisinden hangisi olduğuna yüzeyin düz yüzeyin ne kadar altına ve üstüne uzandığına bakarak karar verir; daha uzağa uzanan taraf kazanır.",
+  "A channel.": "Bir kanal.",
+  "Automatic measures it.": "Otomatik onu ölçer.",
+  "A channel with rims lower than its depth.": "Kenar kabarıklıkları derinliğinden alçak bir kanal.",
+  "A channel with rims higher than its depth.": "Kenar kabarıklıkları derinliğinden yüksek bir kanal.",
+  "Automatic takes it for a ridge, so choose Channel.": "Otomatik onu sırt sanar, bu yüzden Kanal seçin.",
+  "A ridge.": "Bir sırt.",
+  "Automatic turns it over and measures it.": "Otomatik onu ters çevirir ve ölçer.",
+  "The heights alone cannot tell the third surface from a ridge, because turned over it is an ordinary surface too, two grooves beside a raised strip. In the same way, grooves beside a ridge that are deeper than the ridge is high make it look like a channel, so choose Ridge for such a scan.":
+    "Yükseklikler tek başına üçüncü yüzeyi bir sırttan ayıramaz, çünkü ters çevrildiğinde o da sıradan bir yüzeydir: kabarık bir şeridin iki yanında iki oluk. Aynı biçimde, bir sırtın yanında sırtın yüksekliğinden derin oluklar onu kanal gibi gösterir; böyle bir tarama için Sırt seçin.",
+  "The choice holds for the file open now and goes back to Automatic when another file is opened. If nothing lies on the chosen side, MaRQ says so after the analysis.":
+    "Seçim şu an açık dosya için geçerlidir ve başka bir dosya açıldığında Otomatik'e döner. Seçilen tarafta hiçbir şey yoksa MaRQ bunu analizden sonra bildirir.",
+  "Opened {name}. Feature is Automatic again.": "{name} açıldı. Mikroyapı yeniden Otomatik.",
+  "depression (Feature: Channel, in Settings)": "çukur (Ayarlar'da Mikroyapı: Kanal)",
+  "raised, turned over (Feature: Ridge, in Settings)": "çıkıntı, ters çevrildi (Ayarlar'da Mikroyapı: Sırt)",
+  "Check the Feature setting": "Mikroyapı ayarını denetleyin",
+  "Feature is set to Channel in Settings, but nothing in this scan lies below the flat surface around it, so it most likely shows a ridge and the measured geometry has no meaning. Set Feature to Ridge or Automatic and analyse it again.":
+    "Ayarlar'da Mikroyapı Kanal olarak seçili, ama bu taramada çevredeki düz yüzeyin altında hiçbir şey yok; büyük olasılıkla bir sırt gösteriyor ve ölçülen geometrinin bir anlamı yok. Mikroyapı'yı Sırt ya da Otomatik yapıp yeniden analiz edin.",
+  "Feature is set to Ridge in Settings, but nothing in this scan rises above the flat surface around it, so it most likely shows a channel and the measured geometry has no meaning. Set Feature to Channel or Automatic and analyse it again.":
+    "Ayarlar'da Mikroyapı Sırt olarak seçili, ama bu taramada çevredeki düz yüzeyin üstüne çıkan hiçbir şey yok; büyük olasılıkla bir kanal gösteriyor ve ölçülen geometrinin bir anlamı yok. Mikroyapı'yı Kanal ya da Otomatik yapıp yeniden analiz edin.",
+  "If the scan shows a raised feature, a ridge, set Feature to Ridge in Settings and analyse it again.":
+    "Tarama çıkıntı biçimli bir yapı, bir sırt gösteriyorsa Ayarlar'da Mikroyapı'yı Sırt yapıp yeniden analiz edin.",
+  "The scan was turned over (Feature: Ridge, in Settings): for a channel, set Feature to Automatic or Channel and analyse it again.":
+    "Tarama ters çevrildi (Ayarlar'da Mikroyapı: Sırt): bir kanal için Mikroyapı'yı Otomatik ya da Kanal yapıp yeniden analiz edin.",
   "yes": "evet",
   "no": "hayır",
 

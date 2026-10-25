@@ -502,9 +502,13 @@
           <div class="settings-title">Surface analysis</div>
           <div class="param-grid">
             <div class="param-card">
-              <div class="param-card-top"><span class="param-label">Raised feature: turn the scan over first</span>
-                <input class="param-check" type="checkbox" id="p-raised"></div>
-              <span class="param-hint">For a raised channel-forming feature, a ridge, as on a mould master. MaRQ finds a raised feature and turns it over by itself; this turns the scan over in any case, for a scan where it is not found. Off for a channel.</span>
+              <div class="param-card-top"><span class="param-label">Feature</span>
+                <select class="param-input param-select" id="p-feature">
+                  <option value="auto" selected>Automatic</option>
+                  <option value="channel">Channel</option>
+                  <option value="ridge">Ridge</option>
+                </select></div>
+              <span class="param-hint">Automatic finds whether the scan holds a channel or a ridge, as on a mould master, and turns a ridge over into the channel it moulds. Choose Channel or Ridge when it decides wrongly, as for a channel whose rims rise higher than it is deep. The choice goes back to Automatic when another file is opened. <a href="#" class="param-link" onclick="openModal('modal-feature'); return false;">How it decides</a></span>
             </div>
             <div class="param-card">
               <div class="param-card-top"><span class="param-label">Voxel size (0 = automatic)</span>
@@ -616,6 +620,28 @@
           </div>
           <div class="modal-note">Changed values are marked and remembered on this computer. The paper defaults are the values used in the paper.</div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Channel or ridge: how the Feature setting decides (opened from Settings, so after it) ── -->
+  <div class="modal" id="modal-feature" role="dialog" aria-modal="true" style="display:none">
+    <div class="modal-box">
+      <div class="modal-head"><span>Channel or ridge</span><button class="tx" onclick="closeModal('modal-feature')" title="Close"><svg class="ico"><use href="#i-x"/></svg></button></div>
+      <div class="modal-body about">
+        <p>MaRQ measures a channel, a depression in the flat surface around it. A ridge, as on a mould master, is first turned over into the channel it moulds. Automatic decides which of the two a scan holds by how far the surface reaches below and above the flat surface, and the larger reach wins.</p>
+        <div class="feat-cases">
+          <figure><svg viewBox="0 0 240 96" aria-hidden="true"><path class="fd-mat" d="M0,96 L0.0,48.0 L84.9,48.0 L85.7,50.4 L94.3,91.6 L145.7,91.6 L154.3,50.4 L155.1,48.0 L240.0,48.0 L240,96 Z"/><line class="fd-field" x1="0" x2="240" y1="48.0" y2="48.0"/><path class="fd-line" d="M0.0,48.0 L84.9,48.0 L85.7,50.4 L94.3,91.6 L145.7,91.6 L154.3,50.4 L155.1,48.0 L240.0,48.0"/></svg>
+            <figcaption><b>A channel.</b> Automatic measures it.</figcaption></figure>
+          <figure><svg viewBox="0 0 240 96" aria-hidden="true"><path class="fd-mat" d="M0,96 L0.0,48.0 L50.6,48.0 L57.4,47.5 L60.0,46.7 L62.6,45.2 L65.1,42.6 L72.0,33.4 L73.7,32.2 L75.4,32.1 L77.1,32.9 L78.9,34.7 L84.9,42.9 L94.3,91.4 L120.0,91.6 L145.7,91.4 L155.1,42.9 L161.1,34.7 L162.9,32.9 L164.6,32.1 L166.3,32.2 L168.0,33.4 L174.9,42.6 L177.4,45.2 L180.0,46.7 L182.6,47.5 L189.4,48.0 L240.0,48.0 L240,96 Z"/><line class="fd-field" x1="0" x2="240" y1="48.0" y2="48.0"/><path class="fd-line" d="M0.0,48.0 L50.6,48.0 L57.4,47.5 L60.0,46.7 L62.6,45.2 L65.1,42.6 L72.0,33.4 L73.7,32.2 L75.4,32.1 L77.1,32.9 L78.9,34.7 L84.9,42.9 L94.3,91.4 L120.0,91.6 L145.7,91.4 L155.1,42.9 L161.1,34.7 L162.9,32.9 L164.6,32.1 L166.3,32.2 L168.0,33.4 L174.9,42.6 L177.4,45.2 L180.0,46.7 L182.6,47.5 L189.4,48.0 L240.0,48.0"/></svg>
+            <figcaption><b>A channel with rims lower than its depth.</b> Automatic measures it.</figcaption></figure>
+          <figure class="fd-wrong"><svg viewBox="0 0 240 96" aria-hidden="true"><path class="fd-mat" d="M0,96 L0.0,48.0 L55.7,48.0 L60.0,47.8 L63.4,47.2 L66.9,45.1 L69.4,41.9 L72.0,36.8 L77.1,24.5 L78.9,21.6 L80.6,20.4 L82.3,21.0 L84.0,23.3 L90.9,39.2 L94.3,59.0 L96.9,61.1 L100.3,62.2 L106.3,62.5 L136.3,62.5 L140.6,62.0 L144.0,60.5 L145.7,59.0 L149.1,39.2 L155.1,24.9 L156.9,21.9 L158.6,20.5 L160.3,20.8 L162.0,22.9 L168.9,38.7 L171.4,43.2 L174.0,45.8 L176.6,47.2 L180.0,47.8 L184.3,48.0 L240.0,48.0 L240,96 Z"/><line class="fd-field" x1="0" x2="240" y1="48.0" y2="48.0"/><path class="fd-line" d="M0.0,48.0 L55.7,48.0 L60.0,47.8 L63.4,47.2 L66.9,45.1 L69.4,41.9 L72.0,36.8 L77.1,24.5 L78.9,21.6 L80.6,20.4 L82.3,21.0 L84.0,23.3 L90.9,39.2 L94.3,59.0 L96.9,61.1 L100.3,62.2 L106.3,62.5 L136.3,62.5 L140.6,62.0 L144.0,60.5 L145.7,59.0 L149.1,39.2 L155.1,24.9 L156.9,21.9 L158.6,20.5 L160.3,20.8 L162.0,22.9 L168.9,38.7 L171.4,43.2 L174.0,45.8 L176.6,47.2 L180.0,47.8 L184.3,48.0 L240.0,48.0"/></svg>
+            <figcaption><b>A channel with rims higher than its depth.</b> Automatic takes it for a ridge, so choose Channel.</figcaption></figure>
+          <figure><svg viewBox="0 0 240 96" aria-hidden="true"><path class="fd-mat" d="M0,96 L0.0,48.0 L84.9,48.0 L85.7,45.6 L94.3,4.4 L145.7,4.4 L154.3,45.6 L155.1,48.0 L240.0,48.0 L240,96 Z"/><line class="fd-field" x1="0" x2="240" y1="48.0" y2="48.0"/><path class="fd-line" d="M0.0,48.0 L84.9,48.0 L85.7,45.6 L94.3,4.4 L145.7,4.4 L154.3,45.6 L155.1,48.0 L240.0,48.0"/></svg>
+            <figcaption><b>A ridge.</b> Automatic turns it over and measures it.</figcaption></figure>
+        </div>
+        <p>The heights alone cannot tell the third surface from a ridge, because turned over it is an ordinary surface too, two grooves beside a raised strip. In the same way, grooves beside a ridge that are deeper than the ridge is high make it look like a channel, so choose Ridge for such a scan.</p>
+        <p>The choice holds for the file open now and goes back to Automatic when another file is opened. If nothing lies on the chosen side, MaRQ says so after the analysis.</p>
       </div>
     </div>
   </div>

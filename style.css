@@ -527,6 +527,18 @@ button.sb-item.changed { color: var(--accent); }
   color: var(--text); font-size: .82rem; text-align: right; padding: 0 .45rem; }
 .param-input:focus, .field select:focus, .field input:focus { outline: none; border-color: var(--accent); }
 .param-check { width: 1rem; height: 1rem; flex-shrink: 0; margin-right: .3rem; accent-color: var(--text2); cursor: pointer; }
+.param-select { width: 7.4rem; text-align: left; padding: 0 .3rem; cursor: pointer; }
+.param-select option { background: var(--pane); color: var(--text); }
+.param-link { color: var(--accent); white-space: nowrap; }
+/* the cross-sections of the Channel or ridge dialog */
+.feat-cases { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem 1.1rem; margin: .3rem 0 .9rem; }
+.feat-cases figure { margin: 0; }
+.feat-cases svg { display: block; width: 100%; height: auto; }
+.feat-cases figcaption { font-size: .78rem; line-height: 1.4; color: var(--text2); margin-top: .3rem; }
+.fd-mat { fill: var(--press); }
+.fd-line { fill: none; stroke: var(--text2); stroke-width: 1.5; stroke-linejoin: round; }
+.fd-field { stroke: var(--text3); stroke-width: .8; stroke-dasharray: 4 3; }
+.fd-wrong .fd-line { stroke: var(--warn); }
 .range-wrap { display: inline-flex; align-items: center; gap: .45rem; flex-shrink: 0; }
 .range-wrap input[type="range"] { width: 7rem; accent-color: var(--accent); }
 .range-val { font-size: .8rem; width: 2.4rem; text-align: right; }

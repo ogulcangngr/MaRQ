@@ -64,11 +64,13 @@ _PV_DEFAULTS = {
     "line_step":            0.0,      # spacing of the lines, µm; 0 = twice the cell
     "line_central":         0.80,     # central fraction of the channel length used
     "line_max_gap":         3,        # empty cells a level crossing may be interpolated across
-    # a raised feature (a ridge, as on a mould master) is turned over before the despike step,
-    # which would otherwise remove it with the spikes above the field; MaRQ turns a feature
-    # over by itself only in step 4, after the despike, so a ridge higher than despike_margin
-    # needs this (2026-10-25). Off, nothing changes.
-    "turn_over":      False,
+    # the feature of the scan (2026-10-25): "auto" finds a raised feature (a ridge, as on a mould
+    # master) and turns it over into a channel before the despike step, which would otherwise remove
+    # it with the spikes above the field; "channel" or "ridge" says which it is, for a scan where that
+    # fails (rims higher than the channel is deep make a channel look like a ridge), and the scan
+    # then stays as set through both orientation checks
+    "feature":        "auto",
+    "turn_over":      False,    # the setting before "feature": true is "ridge"
     # kept for UI back-compat (no longer used by the field-referenced method):
     "channel_pctl":   5,
     "z_search_frac":  0.50,
@@ -296,13 +298,57 @@ def _fit_field_plane(pts, n_iter=6, k=2.5):
 
 
 DEEP_FACTOR = 1.15     # deep dropouts: below this times the floor depth found before the despike
-NARROW_FRAC = 0.06     # a channel narrower at half depth than this share of the profile: floor read in a window
+NARROW_FRAC = 0.06      # a channel narrower at half depth than this share of the profile: floor read in a window
+NARROW_SPAN = 4.0       # half-widths of a narrow channel's own profile, around its centre
+SIDE_EMPTY = 0.2        # a feature set in Settings: nothing on its side when that side reaches less than this share of the other
 
 
 def _raised(rc, q):
     """Whether a surface (heights about its field plane) reaches further above the field than
     below it, by its q-th and (100-q)-th percentiles: a raised feature."""
     return bool(np.percentile(rc, 100 - q) > -np.percentile(rc, q))
+
+
+def _floor_peak(rc, step=5.0, min_n=200, min_frac=2e-4):
+    """Height below the field (rc < 0) of the fullest 5 um level more than 40 um from it, when that level
+    holds at least min_n points and min_frac of all, as a floor does (scattered spikes or dropouts do
+    not); 0 otherwise."""
+    ch = rc[rc < -40.0]
+    if len(ch) < min_n:
+        return 0.0
+    h, e = np.histogram(ch, bins=np.arange(np.floor(ch.min() / step) * step, -40.0 + step, step))
+    k = int(np.argmax(h))
+    return float(-0.5 * (e[k] + e[k + 1])) if h[k] >= max(min_n, min_frac * len(rc)) else 0.0
+
+
+def _raised_feature(rc):
+    """Whether the surface is a raised feature: it reaches further above the field than below it by the
+    1st and 99th percentiles. A feature on less than about 1 % of the scan reaches neither, and the
+    field's texture decides; when a floor lies on one side of the field only, and both percentiles stay
+    within a quarter of its distance, that side is taken (2026-10-25)."""
+    up, down = _floor_peak(-rc), _floor_peak(rc)
+    if (up > 0) != (down > 0) and max(np.percentile(rc, 99), -np.percentile(rc, 1)) < 0.25 * max(up, down):
+        return up > 0
+    return _raised(rc, 1.0)
+
+
+def _feature_setting(p):
+    """The feature of the scan as set in Settings: 'auto', 'channel' or 'ridge'. Settings of before
+    (2026-10-25) have turn_over instead, which is 'ridge' when true."""
+    f = str(p.get("feature") or "auto").strip().lower()
+    if f in ("channel", "ridge"):
+        return f
+    return "ridge" if p.get("turn_over") else "auto"
+
+
+def _side_empty(rc):
+    """For a feature set in Settings, the scan turned the right way up for it (a ridge turned over):
+    whether nothing lies below the field while something rises above it, by the 1st and 99th
+    percentiles or by a floor level found as in _raised_feature. The feature is then likely the other
+    kind. A channel whose rims rise up to five times higher than it is deep is not flagged."""
+    down = max(-np.percentile(rc, 1), _floor_peak(rc))
+    up = max(np.percentile(rc, 99), _floor_peak(-rc))
+    return bool(down < SIDE_EMPTY * up)
 
 
 def _deep_level(rc, step=5.0, frac=0.2, cap=10000.0):
@@ -320,11 +366,12 @@ def _deep_level(rc, step=5.0, frac=0.2, cap=10000.0):
     return float(-e[ok.min()]) if len(ok) else 0.0
 
 
-def _level_and_orient(ds, k, log_fn):
+def _level_and_orient(ds, k, log_fn, deep=0.0, keep=False):
     """Level on the field plane and normalize orientation to a depression.
 
     Returns (leveled_points, converted_flag, field_tilt_xz, field_tilt_yz).
-    The field is placed at z=0 with the feature below it.
+    The field is placed at z=0 with the feature below it. keep: the feature was set in Settings,
+    and the scan is not turned over here.
     """
     coef = _fit_field_plane(ds, k=k)
     A = np.column_stack([ds[:, 0], ds[:, 1], np.ones(len(ds))])
@@ -340,18 +387,36 @@ def _level_and_orient(ds, k, log_fn):
     down = -np.percentile(z0, 2)
     up   = np.percentile(z0, 98)
     converted = bool(up > down)
+    note = ""
+    if converted and keep:
+        # the feature set in Settings holds, although the surface reaches further above the field (2026-10-25)
+        converted = False
+        note = ", as set in Settings"
+    if converted and deep > 0 and max(up, down) < 0.5 * deep:
+        # a channel on less than about 2 % of the scan reaches neither percentile, and the field's
+        # texture decided; the floor found before the despike says it is a depression (2026-10-25)
+        converted = False
+        log_fn(f"  orientation: a depression too small for the percentiles (down={down:.0f} up={up:.0f}); "
+               f"its floor lies about {deep:.0f} µm deep")
     if converted:
         # Proper 180 deg rotation about the in-plane X axis: (x, -y, -z).
         # A bare z-flip would mirror the surface and reverse imperfection handedness.
         lev = np.column_stack([lev[:, 0], -lev[:, 1], -lev[:, 2]])
         log_fn(f"  orientation: PROTRUSION -> rotated to depression  (down={down:.0f} up={up:.0f})")
     else:
-        log_fn(f"  orientation: depression  (down={down:.0f} up={up:.0f})")
+        log_fn(f"  orientation: depression{note}  (down={down:.0f} up={up:.0f})")
 
-    # Re-zero the field to exactly 0 after any conversion (robust field median).
-    d = lev[:, 2] - np.median(lev[:, 2])
+    # Re-zero the field to exactly 0 after any conversion (robust field median). The median of all
+    # points lies in the field unless a channel covers about half of the scan or more; it then lies on
+    # the floor, which would be taken for the field and stop the alignment, so the points near the
+    # fitted field plane are used instead (2026-10-25)
+    z = lev[:, 2]
+    zm = float(np.median(z))
+    if zm < 0.5 * float(np.percentile(z, 2)):
+        z = z[np.abs(z) < 0.25 * abs(zm)]
+    d = z - np.median(z)
     fmask = np.abs(d) < (np.median(np.abs(d)) * 3 + 1e-9)
-    lev[:, 2] -= np.median(lev[fmask, 2])
+    lev[:, 2] -= np.median(z[fmask])
     return lev, converted, field_tilt_xz, field_tilt_yz
 
 
@@ -529,10 +594,12 @@ def _slice_depths(axis_vals, cross_vals, z_vals, n_slices, a_lo, a_hi,
         m = bi == i
         if m.sum() < min_slice_pts:
             reason[i] = "insufficient_points"; continue
+        if window is not None:              # a narrow channel: a profile of the points around it
+            m = m & (np.abs(cross_vals - window[0]) <= NARROW_SPAN * window[1])
         cc, zb = _slice_profile(cross_vals[m], z_vals[m], n_bins)
         if cc is None or len(zb) < 2:
             reason[i] = "empty_profile"; continue
-        if window is not None:              # a narrow channel: the bins around it (see run_pvisual)
+        if window is not None:              # (see run_pvisual)
             zb = zb[np.abs(cc - window[0]) <= window[1]]
             if len(zb) < 2:
                 reason[i] = "empty_profile"; continue
@@ -561,6 +628,12 @@ WALL_BAND = (0.25, 0.375, 0.50, 0.625, 0.75)   # depth fractions of the mid-wall
 WALL_ANGLE_MIN_RESOLVED = 3.0                   # deg; steeper walls span too few cells
 
 
+def _on_boundaries(w, w0, dw):
+    """1 when most coordinates lie on the cell boundaries w0 + k dw (within 1/1000 of a cell), else 0."""
+    q = (w - w0) / dw
+    return float(np.mean(np.abs(q - np.round(q)) < 1e-3) > 0.2)
+
+
 def _line_grid(u, v, w, du, dv, u_lo, u_hi):
     """Mean of w on lines along u (spacing du, from u_lo to u_hi) and cells across v
     (spacing dv). Returns (grid[n_lines, n_cells], line centres, cell centres)."""
@@ -568,8 +641,14 @@ def _line_grid(u, v, w, du, dv, u_lo, u_hi):
     u, v, w = u[m], v[m], w[m]
     if len(u) < 10:
         return np.full((0, 0), np.nan), np.zeros(0), np.zeros(0)
-    iu = np.floor((u - u_lo) / du).astype(np.intp)          # intp: np.bincount in 32-bit Pyodide
     v0 = float(v.min())
+    # points on a lattice of the cell size lined up with the grid (a surface sampled along the axes, as a
+    # CAD model or a synthetic channel) would each sit on a cell boundary, on either side by rounding
+    # error, and a width could come out a cell off; the cells are then moved by half a cell, so that
+    # the points sit at their centres (2026-10-25). A measured scan, turned by the alignment, is not.
+    u_lo = u_lo - 0.5 * du * _on_boundaries(u, u_lo, du)
+    v0 = v0 - 0.5 * dv * _on_boundaries(v, v0, dv)
+    iu = np.floor((u - u_lo) / du).astype(np.intp)          # intp: np.bincount in 32-bit Pyodide
     iv = np.floor((v - v0) / dv).astype(np.intp)
     nu, nv = int(iu.max()) + 1, int(iv.max()) + 1
     key = iu * nv + iv
@@ -786,28 +865,40 @@ def run_pvisual(file_path: str, params: dict = None, log_fn=print) -> dict:
     # the same proper rotation as step 4 (180° about the in-plane X axis: x, -y, -z)
     turn = lambda P: np.column_stack([P[:, 0], -P[:, 1], -P[:, 2]])
     turned_auto = False
-    if p.get("turn_over"):
+    feature = _feature_setting(p)
+    if feature == "ridge":
         points = turn(points)
-        log_fn("  Turned over (Settings: raised feature): the ridge is now a channel")
+        log_fn("  Turned over (Settings: Feature, Ridge): the ridge is now a channel")
+    elif feature == "channel":
+        log_fn("  Kept as it is (Settings: Feature, Channel)")
 
     # ── Step 2.5: Despike — focus-variation spikes above the field AND deep
     #    optical dropouts far below any real channel feature ──────────
     dspk = float(p.get("despike_margin") or 0.0)
     dlow = float(p.get("despike_lower") or 0.0)
     deep_est = 0.0
-    if (dspk > 0 or dlow > 0) and len(points) > 1000:
+    side_empty = None
+    if (dspk > 0 or dlow > 0 or feature != "auto") and len(points) > 1000:
         coarse = _voxel_downsample(points, 8.0)
         fc = _fit_field_plane(coarse, k=p.get("field_k", 2.5))
         rc = coarse[:, 2] - (fc[0] * coarse[:, 0] + fc[1] * coarse[:, 1] + fc[2])
         # A raised feature (a ridge, as on a mould master) is turned over here, before the spike
         # removal would cut it away: the surface reaches further above the field than below it
         # (1st and 99th percentiles, so raised rims beside a channel do not count) (2026-10-25)
-        if not p.get("turn_over") and _raised(rc, 1.0):
+        if feature == "auto" and _raised_feature(rc):
             log_fn(f"  Raised feature: it reaches {np.percentile(rc, 99):.0f} µm above the field and "
                    f"{-np.percentile(rc, 1):.0f} µm below it; turned over into a channel")
             points = turn(points)
             fc, rc = np.array([-fc[0], fc[1], -fc[2]]), -rc     # the same plane and residuals, turned over
             turned_auto = True
+        elif feature != "auto":
+            # a feature set in Settings: said when nothing lies on its side, as for a ridge set to
+            # Channel (2026-10-25)
+            side_empty = _side_empty(rc)
+            if side_empty:
+                log_fn(f"  Feature set to {feature.capitalize()} in Settings, but nothing reaches "
+                       f"{'below' if feature == 'channel' else 'above'} the field: it may be the other kind")
+    if (dspk > 0 or dlow > 0) and len(points) > 1000:
         # Deep dropouts are removed below the larger of despike_lower and DEEP_FACTOR times the
         # depth of the channel floor found here, so a channel of any depth keeps its floor (2026-10-25)
         deep_est = _deep_level(rc)
@@ -837,7 +928,8 @@ def run_pvisual(file_path: str, params: dict = None, log_fn=print) -> dict:
 
     # ── Step 4: Field-plane leveling + auto-orientation ───────────
     log_fn("\nSTEP 4 — Field-plane leveling + orientation")
-    lev, converted, field_xz, field_yz = _level_and_orient(ds, p["field_k"], log_fn)
+    lev, converted, field_xz, field_yz = _level_and_orient(ds, p["field_k"], log_fn, deep=deep_est,
+                                                           keep=feature != "auto")
     depth_est = float(-np.percentile(lev[:, 2], 1))
     if not converted and deep_est > 0 and depth_est < 0.5 * deep_est:
         # a channel on less than about 1 % of the scan: the 1st percentile lies in the field,
@@ -893,8 +985,16 @@ def run_pvisual(file_path: str, params: dict = None, log_fn=print) -> dict:
         c_half, w_half = _width_at(yc, zb, 0.5 * float(np.partition(zb, 1)[1]))
         span = float(yc.max() - yc.min())
         if np.isfinite(w_half) and span > 0 and w_half < NARROW_FRAC * span:
-            sel = np.abs(yc - c_half) <= w_half
-            fl_win = _floor_level_from_profile(zb[sel], pctl=5)
+            # the profile again from the points around the channel, whose bins resolve a channel
+            # narrower than the bins across the whole scan (2026-10-25)
+            near = in_x & (np.abs(yr - c_half) <= NARROW_SPAN * w_half)
+            yc_n, zb_n = _mean_profile(yr[near], zr[near])
+            if len(yc_n) > 1:
+                c_n, w_n = _width_at(yc_n, zb_n, 0.5 * float(np.partition(zb_n, 1)[1]))
+                if np.isfinite(w_n) and w_n > 0:
+                    c_half, w_half = c_n, w_n
+            sel = np.abs(yc_n - c_half) <= w_half
+            fl_win = _floor_level_from_profile(zb_n[sel], pctl=5)
             if np.isfinite(fl_win):
                 floor_win = (c_half, w_half)
                 log_fn(f"  narrow channel ({w_half:.0f} µm wide at half depth, {100 * w_half / span:.1f} % of the "
@@ -1063,9 +1163,13 @@ def run_pvisual(file_path: str, params: dict = None, log_fn=print) -> dict:
             "voxel_size":   float(voxel_size),
             "channel_axis": channel_axis.tolist(),
             # the scan's feature was raised (turned over by the setting, before the despike, or in step 4)
-            "converted":    bool(converted) != (bool(p.get("turn_over")) or turned_auto),
-            "turned_over":  bool(p.get("turn_over")),
+            "converted":    bool(converted) != (feature == "ridge" or turned_auto),
+            "turned_over":  feature == "ridge",
             "turned_auto":  bool(turned_auto),
+            # the Feature setting; for Channel or Ridge, whether nothing lay on that side (None for
+            # Automatic, or for a cloud of 1000 points or fewer)
+            "feature":      feature,
+            "feature_side_empty": side_empty,
             "field_tilt_xz": field_xz,
             "field_tilt_yz": field_yz,
         },

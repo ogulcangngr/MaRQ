@@ -119,12 +119,15 @@ def test_turned_and_tilted_scan():
 
 def test_raised_feature_turned_over():
     # a ridge 300 um high: the despike step would remove it with the spikes above the field, so
-    # it is turned over first when Settings say the feature is raised (turn_over)
-    r = M["run_pvisual"](channel(protrusion=True), {**UI, "turn_over": True}, quiet)
-    assert r["rotation"]["converted"] is True and r["rotation"]["turned_over"] is True
-    assert near(r["channel"]["mean_depth"], 300.0, 0.5), r["channel"]["mean_depth"]
-    assert near(r["channel"]["floor_width"], 600 + 2 * 30 * TAN10, 0.6), r["channel"]["floor_width"]
-    assert near(r["channel"]["wall_angle_deg"], 10.0, 0.2)
+    # it is turned over first when Settings say it is a ridge (Feature: Ridge; turn_over, the
+    # setting before it, gives the same)
+    for setting in ({"feature": "ridge"}, {"turn_over": True}):
+        r = M["run_pvisual"](channel(protrusion=True), {**UI, **setting}, quiet)
+        assert r["rotation"]["converted"] is True and r["rotation"]["turned_over"] is True, setting
+        assert r["rotation"]["feature"] == "ridge" and r["rotation"]["feature_side_empty"] is False, setting
+        assert near(r["channel"]["mean_depth"], 300.0, 0.5), r["channel"]["mean_depth"]
+        assert near(r["channel"]["floor_width"], 600 + 2 * 30 * TAN10, 0.6), r["channel"]["floor_width"]
+        assert near(r["channel"]["wall_angle_deg"], 10.0, 0.2)
 
 
 def test_a_tall_ridge_turned_over_by_itself():
@@ -142,6 +145,50 @@ def test_a_channel_with_raised_rims_stays_a_channel():
     P[(np.abs(np.abs(y) - (150 + 300 * TAN10 + 60)) < 60) & (x > 500) & (x < 4500), 2] += 100.0
     r = analyse(P)
     assert r["rotation"]["converted"] is False and near(r["channel"]["mean_depth"], 300.0, 0.5), r["channel"]["mean_depth"]
+
+
+def rims(P, W, D, H, gap=30.0, w=120.0):
+    """Rims H high and w wide, gap past the edges of a channel of floor W and depth D (10° walls)."""
+    x, y = P[:, 0], P[:, 1]
+    P[(np.abs(np.abs(y) - (W / 2 + D * TAN10 + gap + w / 2)) < w / 2) & (x > 500) & (x < 4500), 2] += H
+    return P
+
+
+def test_a_channel_with_rims_higher_than_it_is_deep():
+    # rims 200 um high beside a channel 100 um deep: Automatic takes it for a ridge, as any rule on the
+    # heights must (turned over, it is two grooves 200 um deep beside a raised strip); Feature set to
+    # Channel measures it (2026-10-25)
+    P = rims(channel(W=300.0, D=100.0), 300.0, 100.0, 200.0)
+    assert analyse(P.copy())["rotation"]["turned_auto"] is True
+    r = M["run_pvisual"](P, {**UI, "feature": "channel"}, quiet)
+    rot, c = r["rotation"], r["channel"]
+    assert rot["converted"] is False and rot["feature"] == "channel" and rot["feature_side_empty"] is False, rot
+    assert near(c["mean_depth"], 100.0, 0.5) and near(c["floor_width"], 300 + 2 * 10 * TAN10, 0.6), c
+    # the opening level lies 10 um below the field, within a voxel of the sharp rim corner: up to about
+    # 2 um off there (README, Limits)
+    assert near(c["opening_width"], 300 + 2 * 90 * TAN10, 2.0) and near(c["wall_angle_deg"], 10.0, 0.2), c
+
+
+def test_a_feature_set_in_settings_holds_through_both_checks():
+    # a channel 20 um deep with rims 35 um high, which stay below the spike limit (40 um): the check
+    # after the levelling would turn it over again, and so would it a ridge 20 um high between grooves
+    # 35 um deep; the feature set in Settings holds in both checks (2026-10-25)
+    P = rims(channel(W=300.0, D=20.0), 300.0, 20.0, 35.0)
+    for feature, sign in (("channel", 1.0), ("ridge", -1.0)):
+        Q = P.copy(); Q[:, 2] *= sign
+        r = M["run_pvisual"](Q, {**UI, "feature": feature}, quiet)
+        assert r["rotation"]["converted"] is (feature == "ridge"), (feature, r["rotation"])
+        c = r["channel"]
+        assert near(c["mean_depth"], 20.0, 0.5) and near(c["floor_width"], 300 + 2 * 2 * TAN10, 0.6), (feature, c)
+
+
+def test_a_feature_set_wrongly_is_reported():
+    # Channel set for a ridge, and Ridge for a channel: nothing lies on the chosen side, which the
+    # result says, for the interface to report (2026-10-25)
+    for P, feature in ((channel(protrusion=True), "channel"), (channel(), "ridge"),
+                       (channel(W=30.0, D=100.0, half=6000.0, rotate=25.0, texture=2.0, noise=1.0, protrusion=True), "channel")):
+        assert M["run_pvisual"](P, {**UI, "feature": feature}, quiet)["rotation"]["feature_side_empty"] is True, feature
+    assert analyse(channel())["rotation"]["feature_side_empty"] is None
 
 
 def test_a_deep_channel_keeps_its_floor():
@@ -166,6 +213,39 @@ def test_a_narrow_channel_in_a_wide_scan():
     for W, D, half in ((100.0, 300.0, 5000.0), (30.0, 100.0, 3000.0)):
         c = analyse(channel(W=W, D=D, half=half))["channel"]
         assert near(c["mean_depth"], D, 0.5) and near(c["floor_width"], W + 2 * 0.1 * D * TAN10, 0.6), (W, c)
+
+
+def test_a_wide_channel_in_a_turned_scan():
+    # a channel over two thirds of the scan, the scan turned as a measured one is: the field used to be
+    # re-zeroed on the floor, and the channel was left turned (widths 1/cos of the turn too wide)
+    ref = analyse(channel(W=1200.0, half=900.0))["channel"]
+    for turn in (25.0, 88.0):
+        c = analyse(channel(W=1200.0, half=900.0, rotate=turn))["channel"]
+        for k, tol in (("floor_width", 0.6), ("opening_width", 0.6), ("mean_depth", 0.5), ("wall_angle_deg", 0.2), ("mean_length", 1.5)):
+            assert near(c[k], ref[k], tol), (turn, k, c[k], ref[k])
+
+
+def test_a_lattice_along_the_axes():
+    # points on a 5 um lattice lined up with the 5 um width grid sat on its cell boundaries; a width
+    # read one cell wide for a 600 um deep channel
+    c = analyse(channel(D=600.0))["channel"]
+    assert near(c["floor_width"], 600 + 2 * 60 * TAN10, 0.3) and near(c["opening_width"], 600 + 2 * 540 * TAN10, 0.3), c
+
+
+def test_a_channel_on_a_third_of_a_percent_of_the_scan():
+    # a 30 um floor in a scan 20 mm wide: the profile bins across the whole scan were wider than the
+    # channel, and the depth read 16 um
+    c = analyse(channel(W=30.0, D=100.0, half=10000.0))["channel"]
+    assert near(c["mean_depth"], 100.0, 0.5) and near(c["floor_width"], 30 + 2 * 10 * TAN10, 0.6), c
+
+
+def test_a_small_channel_or_ridge_in_a_textured_field():
+    # a channel and a ridge on half a percent of a turned, textured scan: the percentile checks cannot
+    # see them, and the texture decided the orientation
+    for raised in (False, True):
+        r = analyse(channel(W=30.0, D=100.0, half=6000.0, rotate=25.0, texture=2.0, noise=1.0, protrusion=raised))
+        assert r["rotation"]["converted"] is raised, (raised, r["rotation"])
+        assert near(r["channel"]["mean_depth"], 100.0, 1.0), (raised, r["channel"]["mean_depth"])
 
 
 def test_low_ridge_turned_over_by_itself():

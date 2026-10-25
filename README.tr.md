@@ -198,27 +198,41 @@ gerisi varsayılan değerlerdeyken analiz edin; günlüğün ilk satırlarında 
 
 ## Sınırlar
 
-MaRQ düz bir çevre yüzey içindeki tek ve doğrusal bir kanal ya da sırt için yapılmıştır. Kanalın
-derinliği ve genişliği herhangi bir değerde olabilir; taramanın küçük bir bölümünü ya da çoğunu
-kaplayabilir, yeter ki tarama kanalın iki yanında, yüzeyin üzerinde yataylandığı düz bir çevre
-yüzey şeridi bıraksın. Üç şey sabittir:
+MaRQ, yüzeyin üzerinde yataylandığı düz bir çevre yüzey içindeki tek ve doğrusal bir kanal ya da
+sırt için yapılmıştır. Bilinen geometrili yapay kanallarla (`tests/test_cores.py`) makalenin
+ayarlarında, 5 µm'lik vokselle sınanmıştır:
 
-- Çevre yüzeyin 40 µm'den fazla üstündeki malzeme analizden önce cihazın sivri noktaları olarak
-  atılır; kanalın yanında daha yükseğe çıkan bir kenar kabarıklığı ya da çapak da onunla gider.
-  Kanal tabanının çok altındaki noktalar optik boşluk olarak atılır: 380 µm ile taban
-  derinliğinin 1,15 katından büyük olanının altındakiler (günlük her iki sınırı ve kaç noktayı
-  attıklarını verir).
-- Karşılaştırma ızgarası her uzunlukta belirtilen aralığını korur, 8 milyon hücreye kadar
-  (örneğin 5 µm'de 40 mm'ye 5 mm); daha büyük bir ızgara, daha büyük bir aralık seçmeyi ya da
-  yüzeyleri kırpmayı söyleyen bir iletiyle durur.
-- Tabanında 1,5 µm'den az doku bulunan bir yüzey idealize (CAD) yüzey sayılır: karşılaştırmalarında
-  temel sonuç RQ olur.
+- **Derinlik.** Derinlik, sınanan her değerde, 3 µm'den 5 mm'ye kadar, tabanın altındaki optik
+  boşluklarla birlikte de doğru okunur. Genişlikler ve duvar açısı, duvarın yana doğru birkaç
+  voksel boyunca uzanmasını gerektirir; düşeyden 10° eğik bir duvar bunu yaklaşık 100 µm'den
+  derin kanallarda sağlar. Daha sığ bir kanal için, tarama yeterince sık örneklenmişse daha küçük
+  bir voksel seçin: 1 µm'de 20 µm derinlikten itibaren kanallar eksiksiz ölçülür. Derinliği
+  taban pürüzlülüğünün yalnızca birkaç katı olan bir kanalda, derinliğin %90'ındaki taban
+  genişliği bu pürüzlülüğün içinde kalır ve belirli bir değeri yoktur.
+- **Genişlik.** Kanal, iki yanında kenar payından (100 µm, Ayarlar) geniş bir düz çevre yüzey
+  şeridi kaldığı sürece taramanın çoğunu kaplayabilir. Tarama genişliğinin yaklaşık %0,3'ü kadar
+  dar da olabilir (20 mm'lik bir taramada 30 µm'lik bir kanal), tabanı en az dört voksel
+  genişliğinde olduğu sürece. Keskin bir taban ya da ağız köşesinin yanında bir genişlik ya da
+  uzunluk, yarım vokselden az, yaklaşık 2 µm sapabilir.
+- **Çıkıntılar.** Bir sırt, yüksekliği ne olursa olsun bulunur ve kanala çevrilir. Kanalın
+  yanındaki kenar kabarıklıkları ya da çapaklar, çevre yüzeyin üstüne kanalın altına indiğinden
+  daha az çıktıkları sürece sorun değildir; daha yüksek kabarıklıkları olan bir kanal sırt sayılır
+  ve *Ayarlar*'da *Mikroyapı* *Kanal* yapılınca ölçülür. Aynı biçimde, bir sırtın yanında sırtın
+  yüksekliğinden derin oluklar onu kanal gibi gösterir ve *Sırt* onu ölçer.
+- **Sabit sınırlar.** Çevre yüzeyin 40 µm'den fazla üstündeki malzeme analizden önce cihazın
+  sivri noktaları olarak atılır; kanalın yanında daha yükseğe çıkan bir kenar kabarıklığı ya da
+  çapak da onunla gider. Kanal tabanının çok altındaki noktalar optik boşluk olarak atılır: 380 µm
+  ile taban derinliğinin 1,15 katından büyük olanının altındakiler (günlük her iki sınırı ve kaç
+  noktayı attıklarını verir). Karşılaştırma ızgarası her uzunlukta belirtilen aralığını korur,
+  8 milyon hücreye kadar (örneğin 5 µm'de 40 mm'ye 5 mm); daha büyük bir ızgara, daha büyük bir
+  aralık seçmeyi ya da yüzeyleri kırpmayı söyleyen bir iletiyle durur. Tabanında 1,5 µm'den az
+  doku bulunan bir yüzey idealize (CAD) yüzey sayılır: karşılaştırmalarında temel sonuç RQ olur.
 
 ## İş akışı A: tek yüzey
 
 1. Nokta bulutunu **Aç**ın (ya da pencereye bırakın).
 2. Ayarları varsayılan değerlerinde bırakın; bunlar makalede kullanılan değerlerdir.
-   *Ayarlar* (şerit) bunları listeler: Çıkıntı kapalı, Voksel boyutu 5, Çevre yüzey bandı 2,5 ortanca mutlak
+   *Ayarlar* (şerit) bunları listeler: Mikroyapı Otomatik, Voksel boyutu 5, Çevre yüzey bandı 2,5 ortanca mutlak
    sapma, Kanal boyunca kırpma payı 180, Kanal enine kırpma payı 100, derinliğin 0,10'u
    Ağız seviyesi ve 0,90'ı Taban seviyesi, ölçülen taban genişliğinin 0,5'i Taban pürüzlülük
    şeridi genişliği (makaledeki toplu analizler nominal genişliği kullandı, bu yüzden taban
@@ -266,8 +280,11 @@ yüzey şeridi bıraksın. Üç şey sabittir:
    Çıkıntı biçimli bir yapıyı, örneğin bir kalıp ana parçasındaki sırtı, MaRQ kendiliğinden
    bulur ve sivri nokta temizliğinden önce kanala çevirir (gerçek bir döndürme; el yönü
    korunur): yüzey çevre yüzeyin altına indiğinden daha yükseğe çıkar. *Ayarlar*'daki
-   *Çıkıntı*, sırtın bulunamadığı bir taramayı her durumda ters çevirir. Tarama belirgin bir
-   kanal göstermediğinde ileti bunu söyler.
+   *Mikroyapı*, varsayılanı Otomatik, bu kuralın yanıldığı bir tarama için, örneğin kenar
+   kabarıklıkları derinliğinden yüksek bir kanal için, taramada bir *Kanal* ya da bir *Sırt*
+   olduğunu söyleyebilir (ayarın altındaki *Nasıl karar verir* durumları gösterir). Seçim,
+   başka bir dosya açıldığında Otomatik'e döner. Seçilen tarafta hiçbir şey olmadığında ya
+   da tarama belirgin bir kanal göstermediğinde ileti bunu söyler.
 4. **Kırpımı kaydet**, yataylanmış, hizalanmış, voksellerle seyreltilmiş kırpımı kaydeder
    (mikrometre cinsinden x y z, çevre yüzey z = 0'da, kanal x boyunca, ortalanmış). **A olarak
    ata** ve **B olarak ata** aynı kırpımı doğrudan karşılaştırma yuvalarına yerleştirir.

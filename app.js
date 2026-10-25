@@ -52,7 +52,7 @@ const VIEWS = {
 };
 const VIEW_OF_KEY = Object.fromEntries(Object.entries(VIEWS).filter(([, v]) => v.key).map(([id, v]) => [v.key, id]));
 
-const PARAM_IDS = ["p-raised", "p-voxel", "p-fieldk", "p-cropx", "p-cropy", "p-ofrac", "p-flfrac", "p-rfloor",
+const PARAM_IDS = ["p-feature", "p-voxel", "p-fieldk", "p-cropx", "p-cropy", "p-ofrac", "p-flfrac", "p-rfloor",
                    "p-rfloorlen", "p-rfwidth", "p-rflen", "p-margin", "p-cell", "p-sigma", "p-slices",
                    "p-skiprows", "g-spacing", "g-sigma"];
 const SHARED_PARAMS = ["p-skiprows"];          // settings of both the analysis and the comparison
@@ -372,6 +372,7 @@ function stopRun() {
 
 // ── Files ──────────────────────────────────────────────────────────────────────
 
+// true: the Feature setting went back to Automatic (another point cloud to analyse)
 function setFile(slot, name, content, extra = {}) {
   files[slot] = { name, content, ...extra };
   const nameEl = document.getElementById("file" + slot + "-name");
@@ -379,9 +380,11 @@ function setFile(slot, name, content, extra = {}) {
   nameEl.title = name;
   nameEl.classList.add("has-file");
   document.getElementById("file" + slot + "-clear").style.display = "";
-  if (slot === "1") _file1Analysed = _file1Failed = false;
+  let reset = false;
+  if (slot === "1") { _file1Analysed = _file1Failed = false; reset = resetFeature(); }
   updateAnalysisNodes();
   updateButtons();
+  return reset;
 }
 
 function readFile(file, slot) {
@@ -394,7 +397,10 @@ function readFile(file, slot) {
   reader.onload = (ev) => {
     hideNotice();
     const content = new Uint8Array(ev.target.result);
-    const place = (s, extra) => { setFile(s, file.name, content, extra); _readySlot = s; showStart(); setStatus("Opened {name}", "success", { name: file.name }); };
+    const place = (s, extra) => {
+      const reset = setFile(s, file.name, content, extra); _readySlot = s; showStart();
+      setStatus(reset ? "Opened {name}. Feature is Automatic again." : "Opened {name}", "success", { name: file.name });
+    };
     // a point cloud to analyse: in micrometres, or converted to them
     const toScan = (then) => withUnits(file.name, content, (extra) => { place("1", extra); if (then) then(); });
     if (slot === "1") { toScan(); return; }
@@ -938,7 +944,7 @@ function getPvisualParams() {
     floor_eval_length: num("p-rfloorlen", 4000),
     field_eval_width: num("p-rfwidth", 400),
     field_eval_length: num("p-rflen", 4000),
-    turn_over: document.getElementById("p-raised").checked,
+    feature: document.getElementById("p-feature").value,
   };
 }
 
@@ -951,6 +957,26 @@ const _paramDefaults = {};
 // a setting's value as text (a check box: "1" or "0")
 function paramValue(el) { return el.type === "checkbox" ? (el.checked ? "1" : "0") : el.value; }
 
+// two values of a setting: numbers compared as numbers, the choices of a list (Feature) as text
+function sameParam(a, b) {
+  const x = parseFloat(a), y = parseFloat(b);
+  return isNaN(x) || isNaN(y) ? String(a) === String(b) : x === y;
+}
+
+// The Feature setting of an analysis: settings of before it have turn_over, which is Ridge when true
+const FEATURE_NAMES = { auto: "Automatic", channel: "Channel", ridge: "Ridge" };
+function featureOf(params) { return (params && params.feature) || (params && params.turn_over ? "ridge" : "auto"); }
+
+// The Feature setting describes one scan: Channel or Ridge goes back to Automatic when another point
+// cloud is opened for analysis, so that it does not turn the next scan the wrong way. true: it did.
+function resetFeature() {
+  const el = document.getElementById("p-feature");
+  if (!el || el.value === "auto") return false;
+  el.value = "auto";
+  markChangedParams(); saveParamsLocal();
+  return true;
+}
+
 function collectParamValues() {
   const o = {};
   PARAM_IDS.forEach((id) => { const el = document.getElementById(id); if (el) o[id] = paramValue(el); });
@@ -958,9 +984,14 @@ function collectParamValues() {
 }
 
 function applyParamValues(o) {
+  // settings of before the Feature setting (a file, a session, this computer): the Raised feature
+  // check box, ticked, is Ridge
+  if (o && o["p-feature"] == null && o["p-raised"] != null)
+    o = { ...o, "p-feature": o["p-raised"] === true || String(o["p-raised"]) === "1" ? "ridge" : "auto" };
   PARAM_IDS.forEach((id) => {
     const el = document.getElementById(id);
     if (!el || o[id] === undefined || o[id] === null) return;
+    if (el.tagName === "SELECT" && !Array.from(el.options).some((op) => op.value === String(o[id]))) return;
     if (el.type === "checkbox") el.checked = o[id] === true || String(o[id]) === "1";
     else el.value = String(o[id]);
     el.dispatchEvent(new Event("input"));     // updates the slider labels
@@ -995,7 +1026,7 @@ function markChangedParams() {
   PARAM_IDS.forEach((id) => {
     const el = document.getElementById(id);
     if (!el) return;
-    const changed = parseFloat(paramValue(el)) !== parseFloat(_paramDefaults[id]);
+    const changed = !sameParam(paramValue(el), _paramDefaults[id]);
     el.closest(".param-card").classList.toggle("changed", changed);
     el.closest(".param-card").classList.toggle("invalid", !!badParam(el));
     if (changed) n++;
@@ -1015,14 +1046,15 @@ function markChangedParams() {
 // A result keeps the settings it was made with; when those in the dialog differ, its node in the
 // browser is marked and Properties says which settings changed.
 
-// the display cell and the display smoothing of an analysis change its figures, not its numbers
-const DISPLAY_ONLY = ["display_cell", "smooth_sigma"];
+// the display cell and the display smoothing of an analysis change its figures, not its numbers; the
+// Feature describes the scan, and goes back to Automatic when another file is opened
+const DISPLAY_ONLY = ["display_cell", "smooth_sigma"], PER_FILE = ["feature"];
 
 function changedSince(kind, params) {
   if (!params) return [];
   const now = kind === "pvisual" ? getPvisualParams() : getGradientParams();
-  return Object.keys(now).filter((k) => !(kind === "pvisual" && DISPLAY_ONLY.includes(k))
-                                        && params[k] != null && Number(params[k]) !== Number(now[k]));
+  return Object.keys(now).filter((k) => !(kind === "pvisual" && (DISPLAY_ONLY.includes(k) || PER_FILE.includes(k)))
+                                        && params[k] != null && !sameParam(params[k], now[k]));
 }
 
 function paramLabel(kind, key) {
@@ -1155,7 +1187,8 @@ const prow = (label, val, tip, cls = "") =>
 // the session record: the report rebuilds those of results not opened yet, or made in another language)
 function analysisProps(a, ch, rot, rgh) {
   const floorPct = Math.round((ch.floor_width_frac != null ? ch.floor_width_frac : 0.90) * 100);
-  const orient = t(!rot.converted ? "depression" : rot.turned_over ? "raised, turned over (Settings)" : "protrusion, rotated");
+  const orient = t(!rot.converted ? (rot.feature === "channel" ? "depression (Feature: Channel, in Settings)" : "depression")
+    : rot.turned_over ? "raised, turned over (Feature: Ridge, in Settings)" : "protrusion, rotated");
   const wa = ch.wall_angle_deg != null ? ch.wall_angle_deg : ch.draft_angle_deg;
   // lengths to 0.1 µm and the wall angles to 0.1° everywhere (Properties, figures, report); the
   // two walls and the two field strips named by their side of the channel, -Y and +Y, which reads
@@ -1234,11 +1267,16 @@ function renderPvisual(result, retheme, msg = {}) {
     if (!_restoring) showGuide("analysed");
     if (_keepAfter && _keepAfter.aid === aid) { const s = _keepAfter.slot; _keepAfter = null; useCrop(s); }
     // a channel no deeper than the roughness of the field is noise: say so
+    // and Channel or Ridge set in Settings with nothing on that side: most likely the other kind
     const sq = Math.max(...["surf_left", "surf_right"].map((k) => (rgh && rgh[k] && rgh[k].Sq) || 0));
-    if (!(ch.mean_depth > Math.max(1, 5 * sq)))
+    if (rot.feature_side_empty)
+      showNotice("Check the Feature setting", t(rot.feature === "channel"
+        ? "Feature is set to Channel in Settings, but nothing in this scan lies below the flat surface around it, so it most likely shows a ridge and the measured geometry has no meaning. Set Feature to Ridge or Automatic and analyse it again."
+        : "Feature is set to Ridge in Settings, but nothing in this scan rises above the flat surface around it, so it most likely shows a channel and the measured geometry has no meaning. Set Feature to Channel or Automatic and analyse it again."), "warn");
+    else if (!(ch.mean_depth > Math.max(1, 5 * sq)))
       showNotice("No clear channel in this scan", t("The channel found is {d} µm deep, close to the roughness of the flat surface around it, so the measured geometry has no meaning. Check that the scan contains the channel and that the edge margin (Settings, Advanced) does not cut it away.",
-        { d: fmt(ch.mean_depth, 2) }) + " " + t(rot.turned_over ? "The scan was turned over (Raised feature, in Settings): for a channel, untick it and analyse again."
-          : "If the scan shows a raised feature, a ridge, tick Raised feature in Settings and analyse it again."), "warn");
+        { d: fmt(ch.mean_depth, 2) }) + " " + t(rot.turned_over ? "The scan was turned over (Feature: Ridge, in Settings): for a channel, set Feature to Automatic or Channel and analyse it again."
+          : "If the scan shows a raised feature, a ridge, set Feature to Ridge in Settings and analyse it again."), "warn");
   } else if (aid === _curA) {
     selectAnalysis(aid);
     const next = a.pendingView || (_view && VIEWS[_view].kind === "pvisual" ? _view : null);
@@ -2630,7 +2668,7 @@ function exportCSV() {
   const lines = [];
   const R = (r) => r || {};
   if (session.analyses.length) {
-    lines.push("# analysed surfaces (micrometres; roughness per ISO 25178 on plane-removed residuals; fieldL is the field strip at -Y, fieldR at +Y; input_scale converted a file not in micrometres; turned_over: a raised feature turned over before the analysis)");
+    lines.push("# analysed surfaces (micrometres; roughness per ISO 25178 on plane-removed residuals; fieldL is the field strip at -Y, fieldR at +Y; input_scale converted a file not in micrometres; turned_over: a raised feature turned over before the analysis; feature: the Feature setting, auto, channel or ridge)");
     lines.push(["file", "time", "floor_width", "floor_width_sd_central80", "opening_width", "opening_width_sd",
                 "depth", "depth_sd_central80", "wall_angle_deg", "wall_angle_left_deg", "wall_angle_right_deg",
                 "wall_angle_resolved", "chord_angle_deg", "floor_corner_um", "rim_corner_um", "mid_width",
@@ -2644,7 +2682,7 @@ function exportCSV() {
                 // added 2026-10-25 at the end, so that scripts reading the earlier columns keep working
                 "fieldL_Ssk", "fieldL_Sku", "fieldR_Ssk", "fieldR_Sku", "mid_width_sd", "wall_angle_line_sd",
                 "line_valid_floor", "line_valid_opening", "line_valid_wall", "input_scale", "turned_over",
-                "wall_dominance_fy"].join(","));
+                "wall_dominance_fy", "feature"].join(","));
     session.analyses.forEach((a) => {
       const c = a.channel, p = a.parameters, rg = R(a.roughness);
       const fl = R(rg.floor), l = R(rg.surf_left), r = R(rg.surf_right);
@@ -2660,7 +2698,7 @@ function exportCSV() {
                   a.rotation.voxel_size, a.rotation.phi, a.rotation.xz_tilt, a.rotation.yz_tilt, c.opening_length_conf,
                   l.Ssk, l.Sku, r.Ssk, r.Sku, c.mid_width_line_std, c.wall_angle_line_std,
                   c.line_valid_floor, c.line_valid_opening, c.line_valid_wall, p.input_scale || 1, a.rotation.turned_over ? 1 : 0,
-                  c.f_y].map(csvCell).join(","));
+                  c.f_y, featureOf(p)].map(csvCell).join(","));
     });
     lines.push("");
   }
@@ -2827,7 +2865,7 @@ const PARAM_KEYS = { "p-voxel": "voxel_size", "p-fieldk": "field_k", "p-cropx": 
   "p-ofrac": "opening_frac", "p-flfrac": "floor_width_frac", "p-rfloor": "floor_eval_frac", "p-rfloorlen": "floor_eval_length",
   "p-rfwidth": "field_eval_width", "p-rflen": "field_eval_length", "p-margin": "margin", "p-cell": "display_cell",
   "p-sigma": "smooth_sigma", "p-slices": "n_slices", "p-skiprows": "skip_rows",
-  "g-spacing": "grid_spacing", "g-sigma": "smooth_sigma", "p-raised": "turn_over" };
+  "g-spacing": "grid_spacing", "g-sigma": "smooth_sigma", "p-feature": "feature" };
 
 function figureImage(kind, key, w, h, rid, k = 1) {
   return ask("export_figure", { kind, key, aid: kind === "pvisual" ? rid : null, cid: kind === "pvisual" ? null : rid, theme: "light", lang: LANG, quality: currentQuality(),
@@ -2928,8 +2966,9 @@ function reportPage(kind, imgs, logo, aid) {
   const params = (rec && rec.parameters) || (C && C.params) || {};
   const rows = PARAM_IDS.filter((id) => id.startsWith(kind === "pvisual" ? "p-" : "g-") || SHARED_PARAMS.includes(id)).map((id) => {
     const lab = document.getElementById(id).closest(".param-card").querySelector(".param-label").textContent;
-    const val = params[PARAM_KEYS[id]], changed = val != null && Number(val) !== Number(_paramDefaults[id]);
-    const shown = val == null ? "–" : typeof val === "boolean" ? t(val ? "yes" : "no") : decimal(String(val));
+    const val = id === "p-feature" ? featureOf(params) : params[PARAM_KEYS[id]], changed = val != null && !sameParam(val, _paramDefaults[id]);
+    const shown = val == null ? "–" : id === "p-feature" ? t(FEATURE_NAMES[val] || String(val))
+      : typeof val === "boolean" ? t(val ? "yes" : "no") : decimal(String(val));
     return `<tr${changed ? ' class="chg"' : ""}><td>${esc(lab)}</td><td>${esc(shown)}</td></tr>`;
   }).join("");
   let batch = "";
@@ -3089,17 +3128,16 @@ function openModal(id) {
     document.getElementById("about-version").textContent = APP.version;
   }
   const el = document.getElementById(id);
-  if (el.style.display !== "flex") _modalReturn = document.activeElement;
+  if (el.style.display !== "flex") el._return = document.activeElement;
   el.style.display = "flex";
   const box = el.querySelector(".modal-box");
   box.setAttribute("tabindex", "-1");
   if (!box.contains(document.activeElement)) box.focus({ preventScroll: true });
 }
-let _modalReturn = null;
 function closeModal(id) {
-  document.getElementById(id).style.display = "none";
-  if (_modalReturn && document.contains(_modalReturn)) _modalReturn.focus({ preventScroll: true });
-  _modalReturn = null;
+  const el = document.getElementById(id), back = el._return;
+  el.style.display = "none"; el._return = null;
+  if (back && document.contains(back)) back.focus({ preventScroll: true });
 }
 
 // ── UI helpers ─────────────────────────────────────────────────────────────────
@@ -3459,7 +3497,9 @@ window.addEventListener("DOMContentLoaded", () => {
   });
   window.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
-      document.querySelectorAll(".modal").forEach((m) => { if (m.style.display === "flex") closeModal(m.id); });
+      // the dialog on top: the last open one in the page (one opened from Settings comes after it)
+      const open = Array.from(document.querySelectorAll(".modal")).filter((m) => m.style.display === "flex");
+      if (open.length) closeModal(open.at(-1).id);
       toggleLog(false); closeFileMenu();
       if (_viewer && _viewer.marks.length) _viewer.clearMarks();
       return;

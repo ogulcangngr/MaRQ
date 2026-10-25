@@ -9,8 +9,8 @@ goes through the views a user opens: both analyses in the tree, the height and s
 cross-section at a position, the 3D view with the one-click cross-section (when the headless
 browser has WebGL), the report, the language, a session saved and opened again in a fresh
 page, and the conveniences (one header-rows setting, results made with other settings marked,
-the side panes hidden, MaRQ's own dialogs, a file in millimetres, the example). Exit code 0 when
-everything holds.
+the side panes hidden, MaRQ's own dialogs, the Feature setting and its dialog, a file in
+millimetres, the example). Exit code 0 when everything holds.
 """
 import os, sys, json, time, zipfile, argparse, tempfile, subprocess
 from playwright.sync_api import sync_playwright
@@ -205,17 +205,44 @@ with sync_playwright() as p:
     asked = page.evaluate("() => document.getElementById('modal-ask').style.display === 'flex' && document.getElementById('ask-title').textContent")
     page.evaluate("() => closeModal('modal-ask')")
     check("removing an analysis asks in MaRQ's own dialog", asked == "Remove the analysis?", asked)
+
+    # the Feature setting: Automatic, Channel or Ridge, with the Raised feature tick of before read as
+    # Ridge; its Channel or ridge dialog opens over Settings and Escape closes it alone
+    fe = page.evaluate("""() => { const e = document.getElementById('p-feature');
+        const opts = [...e.options].map(o => o.value).join(','); applyParamValues({'p-raised': '1'}); const old = e.value;
+        e.value = 'auto'; e.dispatchEvent(new Event('change')); return [opts, old, getPvisualParams().feature]; }""")
+    check("Feature: Automatic, Channel or Ridge; a Raised feature tick of before is Ridge", fe == ["auto,channel,ridge", "ridge", "auto"], fe)
+    page.evaluate("() => { openModal('modal-settings'); document.querySelector('#modal-settings .param-link').click(); }"); time.sleep(0.3)
+    shown = "() => ['modal-settings', 'modal-feature'].map(id => document.getElementById(id).style.display === 'flex')"
+    on = page.evaluate(shown); page.keyboard.press("Escape"); time.sleep(0.2)
+    off = page.evaluate(shown); page.keyboard.press("Escape"); time.sleep(0.2)
+    check("the Channel or ridge dialog opens over Settings and closes alone", on == [True, True] and off == [True, False]
+          and page.evaluate(shown) == [False, False], f"{on} {off}")
+
     mm = os.path.join(tmp, "test_channel_600um_in_mm.txt")
     with open(INS) as fi, open(mm, "w") as fo:
         for line in fi:
             fo.write(" ".join(f"{float(v) / 1000:.5f}" for v in line.split()) + "\n")
     n = page.evaluate("() => session.analyses.length")
+    setf = "(v) => { const e = document.getElementById('p-feature'); e.value = v; e.dispatchEvent(new Event('change')); }"
+    page.evaluate(setf, "ridge")                 # set before another file is opened: back to Automatic
     page.set_input_files("#file1-input", mm); time.sleep(1)
     unit = page.evaluate("() => document.getElementById('modal-ask').style.display === 'flex' && document.getElementById('ask-title').textContent")
     page.evaluate("() => [...document.querySelectorAll('#ask-buttons button')][0].click()"); time.sleep(0.3)
+    back = page.evaluate("() => [document.getElementById('p-feature').value, document.getElementById('status-bar').textContent]")
+    check("Feature back to Automatic when another file is opened", back[0] == "auto" and back[1].endswith("Feature is Automatic again."), back)
     page.click("#run-pvisual"); wait(page, f"() => !running && session.analyses.length === {n + 1}")
     fw = page.evaluate("() => [session.analyses.find(a => a.file === 'test_channel_600um.txt').channel.floor_width, session.analyses.at(-1).channel.floor_width, session.analyses.at(-1).parameters.input_scale]")
     check("a file in millimetres found and converted", unit == "Not in micrometres?" and fw[2] == 1000 and abs(fw[0] - fw[1]) < 0.05, f"{unit}; {fw}")
+    # Ridge set for this channel: reported; and its result is not marked as made with other settings
+    # when the Feature is Automatic again (it describes the scan, not the session's settings)
+    page.evaluate(setf, "ridge")
+    page.click("#run-pvisual"); wait(page, f"() => !running && session.analyses.length === {n + 2}")
+    rep = page.evaluate("""() => [session.analyses.at(-1).rotation.feature_side_empty,
+        document.getElementById('vp-notice').style.display === 'flex' && document.getElementById('vn-title').textContent]""")
+    page.evaluate(setf, "auto")
+    rep.append(page.evaluate("() => changedSince('pvisual', session.analyses.at(-1).parameters).length"))
+    check("a Ridge set for a channel is reported, its result not marked once Automatic again", rep == [True, "Check the Feature setting", 0], rep)
     nc = page.evaluate("() => session.comparisons.length")
     page.click("#file-menu-btn"); time.sleep(0.3)
     page.click('#file-menu [data-cmd="example"]'); time.sleep(0.4)

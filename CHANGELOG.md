@@ -433,16 +433,27 @@ version.
     is not found.
   - The orientation check after the levelling measures from the field instead of the
     median, so a channel covering half of the scan width or more stays a channel. The median
-    then lay on its floor, and the channel was taken for a ridge and turned over.
+    then lay on its floor, and the channel was taken for a ridge and turned over. The field
+    is also re-zeroed on the points near it then, not on that median: the floor was taken
+    for the field, the alignment found no channel, and in a turned scan the channel was left
+    turned, its widths 1/cos of the turn too wide and its length too long.
   - Channels of any depth. Points far below the channel floor are removed below the larger
     of 380 µm and 1.15 times the floor depth found on the 8 µm copy (the deepest 5 µm level
     that holds at least a fifth of the points of the fullest level), so a deeper channel
     keeps its floor. The floor of a channel deeper than 380 µm used to be cut away.
   - Narrow channels in wide scans. When the channel at half depth spans less than 6 % of
     the cross-section profile, the floor level is read within twice that width around it,
-    for the profile and every slice. A floor under about 3 % of the scan width read its
-    depth short. A channel on less than about 1 % of the scan takes its first depth estimate
-    from the floor found on the 8 µm copy.
+    for the profile and every slice, from a profile of the points around the channel, whose
+    bins resolve it. A floor under about 3 % of the scan width read its depth short; in a
+    20 mm scan the profile bins were wider than a 30 µm channel. A channel on less than about
+    1 % of the scan takes its first depth estimate from the floor found on the 8 µm copy, and
+    when the percentile checks of the orientation cannot see it (it reaches neither the 1st nor
+    the 99th percentile, and the field's texture decided), the side on which a floor lies
+    decides: a well-filled height level more than 40 µm from the field.
+  - Points on a lattice of the cell size lined up with the width grid, as a CAD model or a
+    synthetic channel sampled along the axes, sat on the cell boundaries and fell on either side
+    by rounding error, and a width or a length could read one cell (5 µm) off. The grid is then
+    moved by half a cell. A measured scan, turned by the alignment, is binned as before.
   - The comparison grid keeps its stated spacing at any length. Beyond 2000 points along an
     axis the extent was divided evenly instead, so long crops had cells longer along the
     channel than across it. A grid of more than 8 million cells, more than a browser tab can
@@ -463,10 +474,38 @@ version.
     the whole overlap is used.
   - `tests/test_cores.py` covers each of these: a channel 1000 µm deep with dropouts down to
     3 mm, a ridge 300 µm high, rims 100 µm high beside a channel, a channel over two thirds
-    of the scan, floors of 1 % and 0.5 % of the scan width, a 15 mm comparison, the wall
-    dominance against the paper's own computation, X3P files of both layouts and points
-    without a number (28 tests). `tests/e2e_check.py` also checks the wall dominance of the
+    of the scan, also turned by 25° and 88°, floors of 1 %, 0.5 % and 0.33 % of the scan width,
+    a channel and a ridge on 0.5 % of a turned, textured scan, a 600 µm deep channel on a
+    lattice along the axes, a 15 mm comparison, the wall dominance against the paper's own
+    computation, X3P files of both layouts and points without a number (32 tests). Wider sweeps
+    found the limits in the README: 140 synthetic channels, 3 µm to 5 mm deep, down to 0.2 % of
+    the scan width, rims up to twice the depth, comparisons up to 50 mm. `tests/e2e_check.py` also checks the wall dominance of the
     sample insert and part against `expected_results.json`.
+- Channel or ridge (2026-10-25). With the default setting no result changes, and the paper's
+  numbers are unchanged.
+  - *Feature* in *Settings*, Automatic by default, Channel or Ridge, replaces *Raised feature:
+    turn the scan over first*. Automatic is the rule of the entry above. A channel whose rims
+    or burrs rise higher above the field than it goes below it is taken for a ridge by that
+    rule, as by any rule on the heights alone (turned over, it is two grooves beside a raised
+    strip), and Channel measures it. Ridge turns the scan over first, as the check box did,
+    also for a ridge between grooves deeper than it is high. A feature set to Channel or Ridge
+    holds through both orientation checks: the check after the levelling turned a channel
+    20 µm deep between rims 35 µm high over again.
+  - The choice describes one scan, so it goes back to Automatic when another point cloud is
+    opened for analysis (the status bar says so), and a result made with it is not marked as
+    made with other settings afterwards. *How it decides*, under the setting, opens a dialog
+    with four cases drawn.
+  - When nothing lies on the chosen side (that side reaches less than a fifth as far as the
+    other, by the 1st and 99th percentiles of the 8 µm copy or by a floor level), the log and
+    a message say that the scan most likely shows the other kind. The result's rotation
+    carries `feature` and `feature_side_empty`, and the CSV a last column `feature`.
+  - Settings files, sessions and the settings remembered on this computer from before read
+    the check box ticked as Ridge, and the engine still reads `turn_over` as Ridge.
+  - Escape closes only the dialog on top, and each dialog returns the focus to where it was
+    opened from.
+  - `tests/test_cores.py`: a channel 100 µm deep with rims 200 µm high, a channel and a ridge
+    20 µm deep or high with rims or grooves of 35 µm, and wrong choices reported (35 tests).
+    `tests/e2e_features.py`: the setting, its dialog, the return to Automatic and the message.
 
 ## 0.9 (2026-09-30)
 
