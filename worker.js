@@ -174,18 +174,26 @@ def session_unpack(data):
     if "marq_session.json" not in names:
         raise ValueError("not a MaRQ session file")
     have = {"pvisual": [], "rq_gradient": []}
-    _results.clear(); _held.clear(); _results2.clear(); _held2.clear()
+    # everything is read first and replaces what the engine holds only when the whole file has
+    # been read: a damaged file leaves the results of the page as they were (2026-10-25)
+    got1, got2 = {}, {}
     for n in names:
         if n.startswith("pvisual") and n.endswith(".json"):
             aid = n[8:-5] if n.startswith("pvisual_") else "a1"          # "pvisual.json": a first-version file
-            _results[aid] = _s_full("pvisual", _s_get(z, n[:-5])); _held.append(aid)
+            got1[aid] = _s_full("pvisual", _s_get(z, n[:-5]))
             have["pvisual"].append(aid)
         elif n.startswith("rq_gradient") and n.endswith(".json"):
             cid = n[12:-5] if n.startswith("rq_gradient_") else "c1"     # "rq_gradient.json": one comparison (before 2026-10-25)
-            hold2(cid, _s_full("rq_gradient", _s_get(z, n[:-5])))
+            got2[cid] = _s_full("rq_gradient", _s_get(z, n[:-5]))
             have["rq_gradient"].append(cid)
     slots = {n[5:-4]: z.read(n) for n in names if n.startswith("slot_")}
-    return z.read("marq_session.json").decode("utf-8"), have, slots
+    state = z.read("marq_session.json").decode("utf-8")
+    _results.clear(); _held.clear(); _results2.clear(); _held2.clear()
+    for aid, r in got1.items():
+        _results[aid] = r; _held.append(aid)
+    for cid, r in got2.items():
+        hold2(cid, r)
+    return state, have, slots
 `;
 
 // The surface analyses and the comparisons the engine holds, by id (the newest MAX_HELD analyses
@@ -395,21 +403,36 @@ function inputPath(name, slot) {
 // of three numbers, if any of them is text. Returns the bytes to analyse.
 const NUMBER = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$|^[+-]?(nan|inf|infinity)$/i;
 function withoutHeader(bytes, name, skipRows) {
-  if (skipRows || (name || "").toLowerCase().endsWith(".x3p")) return bytes;
+  if ((name || "").toLowerCase().endsWith(".x3p")) return bytes;
+  // a UTF-8 byte-order mark (spreadsheets write one) would make the first number unreadable
+  if (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) bytes = bytes.subarray(3);
   const lines = new TextDecoder("utf-8", { fatal: false }).decode(bytes.subarray(0, 65536)).split("\n");
   const isRow = (l) => { const p = l.trim().split(/[\s,;]+/).filter(Boolean); return p.length >= 3 && p.slice(0, 3).every((s) => NUMBER.test(s)); };
-  let text = false, n = -1;
-  for (let i = 0; i < Math.min(lines.length - 1, 500); i++) {
-    const l = lines[i].trim();
-    if (isRow(l)) { n = i; break; }
-    if (l && !l.startsWith("#")) text = true;
+  let out = bytes, first = skipRows || 0;
+  if (!skipRows) {
+    let text = false, n = -1;
+    for (let i = 0; i < Math.min(lines.length - 1, 500); i++) {
+      const l = lines[i].trim();
+      if (isRow(l)) { n = i; break; }
+      if (l && !l.startsWith("#")) text = true;
+    }
+    if (n > 0 && text) {
+      let off = 0;
+      for (let k = 0; k < n; k++) off = bytes.indexOf(10, off) + 1;
+      post({ type: "log", line: `  Skipped ${n} header line${n > 1 ? "s" : ""} at the top of ${name}` });
+      post({ type: "skipped", n });
+      out = bytes.subarray(off);
+    }
+    first = Math.max(n, 0);
   }
-  if (n <= 0 || !text) return bytes;
-  let off = 0;
-  for (let k = 0; k < n; k++) off = bytes.indexOf(10, off) + 1;
-  post({ type: "log", line: `  Skipped ${n} header line${n > 1 ? "s" : ""} at the top of ${name}` });
-  post({ type: "skipped", n });
-  return bytes.subarray(off);
+  // columns separated by semicolons with decimal commas (a spreadsheet in many languages): the
+  // commas are read as decimal points (2026-10-25)
+  const row = lines[Math.min(first, lines.length - 1)] || "";
+  if (/;/.test(row) && /\d,\d/.test(row) && !/\d\.\d/.test(row)) {
+    out = new TextEncoder().encode(new TextDecoder("utf-8").decode(out).replace(/,/g, "."));
+    post({ type: "log", line: `  Decimal commas in ${name} read as decimal points` });
+  }
+  return out;
 }
 
 // the comparison just made is held as cid; returns the ids of those no longer held

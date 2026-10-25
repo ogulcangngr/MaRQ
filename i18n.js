@@ -706,8 +706,8 @@ const I18N = { tr: {
 
   // 2026-10-25: a raised feature turned over before the analysis
   "Raised feature: turn the scan over first": "Çıkıntı: taramayı önce ters çevir",
-  "For a raised channel-forming feature, a ridge, as on a mould master. MaRQ turns a raised feature over by itself, but only after the spike removal, which cuts away anything more than 40 µm above the flat surface; this turns the scan over before it. Off for a channel.":
-    "Kanalı oluşturan çıkıntı biçimli bir yapı için, örneğin bir kalıp ana parçasındaki sırt. MaRQ çıkıntıyı kendiliğinden ters çevirir, ancak düz yüzeyin 40 µm'den fazla üstünde kalan her şeyi kesip atan sivri nokta temizliğinden sonra; bu seçenek taramayı ondan önce ters çevirir. Kanal için kapalı.",
+  "For a raised channel-forming feature, a ridge, as on a mould master. MaRQ finds a raised feature and turns it over by itself; this turns the scan over in any case, for a scan where it is not found. Off for a channel.":
+    "Kanalı oluşturan çıkıntı biçimli bir yapı için, örneğin bir kalıp ana parçasındaki sırt. MaRQ çıkıntıyı kendiliğinden bulur ve ters çevirir; bu seçenek, çıkıntının bulunamadığı bir taramayı her durumda ters çevirir. Kanal için kapalı.",
   "raised, turned over (Settings)": "çıkıntı, ters çevrildi (Ayarlar)",
   "If the scan shows a raised feature, a ridge, tick Raised feature in Settings and analyse it again.":
     "Tarama çıkıntı biçimli bir yapı, bir sırt gösteriyorsa Ayarlar'da Çıkıntı seçeneğini işaretleyip yeniden analiz edin.",
@@ -715,6 +715,15 @@ const I18N = { tr: {
     "Tarama ters çevrildi (Ayarlar'da Çıkıntı): bir kanal için işareti kaldırıp yeniden analiz edin.",
   "yes": "evet",
   "no": "hayır",
+
+  // 2026-10-25: a figure export and a report wait for each other; a damaged session file
+  "Wait until the report or the figure in progress is ready": "Hazırlanan rapor ya da şekil bitene kadar bekleyin",
+  "damaged session file": "bozuk oturum dosyası",
+  "Wall dominance": "Duvar baskınlığı",
+  "Wall dominance f_y: the share of the squared slope carried by the slope across the channel, over the channel interior (deeper than 0.20 of the depth) of the central 60 % of the crop, on a grid of the voxel size. Near 1, the slopes, and with them RQd, are governed by the sidewalls.":
+    "Duvar baskınlığı f_y: eğimin karesinde kanala dik eğimin payı; kanal içinde (derinliğin 0,20'sinden derin hücreler), kırpımın orta %60'ında, voksel boyutunda bir ızgarada. 1'e yakınsa eğimler, onlarla birlikte RQd de, yan duvarlarca belirlenir.",
+  "The session file is damaged or is not a MaRQ session. The log has the details.":
+    "Oturum dosyası bozuk ya da bir MaRQ oturumu değil. Ayrıntılar günlükte.",
 }};
 
 // Blocks with markup inside a sentence, translated whole (data-i18n="key")

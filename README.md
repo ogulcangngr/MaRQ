@@ -177,7 +177,7 @@ crop at the voxel size and the comparison grid at its full spacing).
 ## Input formats
 
 - Delimited text point clouds: `.txt`, `.xyz`, `.asc`, `.csv`, three columns x y z,
-  any common delimiter. Lines of text at the top (column names, instrument metadata) are
+  any common delimiter, also semicolons with decimal commas. Lines of text at the top (column names, instrument metadata) are
   skipped by themselves; *Header rows to skip* (Settings) sets their number by hand.
   MaRQ works in micrometres. A file whose coordinates span less than 150 units across
   (millimetres or metres) or more than 150 000 (nanometres) is taken for another unit when
@@ -192,6 +192,24 @@ margin along the channel* 100, *Crop margin across the channel* 50 and *Edge mar
 the rest at their defaults; the log's first lines read "Format: X3P (ISO 25178-72)" and
 the reported depth is 60 µm.
 
+## Limits
+
+MaRQ is built for one straight channel, or ridge, in a flat surrounding field. The channel can
+have any depth and any width, and it can be a small part of the scan or most of it, provided
+the scan keeps a strip of flat field along both sides, on which the surface is levelled.
+Three things are fixed:
+
+- Material more than 40 µm above the field is removed before the analysis as spikes of the
+  instrument, and with it any rim or burr beside the channel that rises higher. Points far
+  below the channel floor are removed as optical dropouts: below the larger of 380 µm and
+  1.15 times the depth of the floor (the log gives both limits and how many points they
+  removed).
+- The comparison grid keeps its stated spacing at any length, up to 8 million cells (for
+  example 40 mm by 5 mm at 5 µm); a larger grid stops with a message to choose a larger
+  spacing or to crop the surfaces.
+- A surface whose floor carries less than 1.5 µm of texture is taken for an idealised (CAD)
+  surface: RQ becomes the key result of its comparisons.
+
 ## Workflow A: one surface
 
 1. **Open** the point cloud (or drop it on the window).
@@ -199,7 +217,8 @@ the reported depth is 60 µm.
    *Settings* (ribbon) lists them: Raised feature off, Voxel size 5, Field band 2.5 median absolute
    deviations, Crop margin along the channel 180, Crop margin across the channel 100,
    Opening level 0.10 and Floor level 0.90 of the depth, Floor roughness strip width 0.5
-   of the channel width, Floor roughness strip length 4000, Field roughness strip width
+   of the measured floor width (the paper's batch used the nominal width, so the floor
+   roughness can differ in the second decimal), Floor roughness strip length 4000, Field roughness strip width
    400 and length 4000; under *Advanced*: Edge margin 100 and Depth profile slices 80;
    in the right column, Display cell size 0 (automatic) and Display smoothing 0, which
    change only the display, and Header rows to skip 0, which applies to the comparison
@@ -208,7 +227,8 @@ the reported depth is 60 µm.
    browser; *Paper defaults* restores them; *Save* and *Load* write
    and read a JSON settings file; the values are remembered on the computer.
 3. **Analyse**. The properties show the widths, the depth, the wall angle, the corner
-   rounding, the lengths, the roughness and the alignment; the browser lists the views:
+   rounding, the lengths, the wall dominance, the roughness and the alignment; the browser
+   lists the views:
    *Alignment*, *Channel detection*, *Profiles* (the mean cross-section with the
    floor-width and opening levels, the wall positions and the mid-wall lines, and the
    depth of every slice; the cross-section at a position; the width and length per grid
@@ -233,13 +253,17 @@ the reported depth is 60 µm.
    3°, because it then spans too few cells to be resolved. The corner rounding is how
    far the wall lies inside that line at the floor level and outside it at the opening
    level. The length is read on lines along the channel, each end from the outside in,
-   and the exported crop spans the two ends plus the crop margin.
+   and the exported crop spans the two ends plus the crop margin. The wall dominance f_y is
+   the share of the squared slope carried by the slope across the channel, over the channel
+   interior (deeper than 0.20 of the depth) of the central 60 % of the crop, on a grid of the
+   voxel size smoothed by one cell; near 1, the slopes, and with them RQd, are governed by the
+   sidewalls.
 
-   A raised feature, a ridge as on a mould master, is turned over into a channel (a proper
-   rotation, so its handedness is kept). MaRQ does it by itself, but only after the spike
-   removal, which cuts away everything more than 40 µm above the flat surface; for a ridge
-   higher than that, tick *Raised feature* in *Settings*, and the scan is turned over
-   first. When a scan shows no clear channel, the message says so.
+   A raised feature, a ridge as on a mould master, is found and turned over into a channel by
+   MaRQ itself, before the spike removal (a proper rotation, so its handedness is kept): the
+   surface reaches further above the field than below it. *Raised feature* in *Settings*
+   turns a scan over in any case, for one where the ridge is not found. When a scan shows no
+   clear channel, the message says so.
 4. **Save crop** saves the levelled, aligned, voxel-thinned crop (x y z in micrometres,
    field at z = 0, channel along x, centred). **Keep as A** and **Keep as B** place the
    same crop directly in the comparison slots. These crops are the inputs of

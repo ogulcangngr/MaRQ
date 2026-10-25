@@ -48,6 +48,7 @@ TYPES = {
     ".md": "text/plain; charset=utf-8", ".zip": "application/zip",
     ".whl": "application/octet-stream", ".tar": "application/x-tar",
     ".data": "application/octet-stream", ".x3p": "application/octet-stream",
+    "": "application/octet-stream",      # any other file; Python 3.7 and 3.8 look this key up and fail without it
 }
 
 

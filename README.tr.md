@@ -181,7 +181,7 @@ kırpımını voksel boyutunda, karşılaştırma ızgarasını tam aralığınd
 ## Girdi biçimleri
 
 - Ayraçlı metin nokta bulutları: `.txt`, `.xyz`, `.asc`, `.csv`; x y z olmak üzere üç
-  sütun, yaygın herhangi bir ayraç. Dosyanın başındaki metin satırları (sütun adları, cihaz
+  sütun, yaygın herhangi bir ayraç, ondalık virgülle birlikte noktalı virgül de. Dosyanın başındaki metin satırları (sütun adları, cihaz
   bilgileri) kendiliğinden atlanır; *Atlanacak başlık satırları* (Ayarlar) sayılarını elle
   belirler. MaRQ mikrometre ile çalışır. Koordinatları 150 birimden daha dar
   (milimetre ya da metre) ya da 150 000 birimden daha geniş (nanometre) bir alana yayılan
@@ -196,14 +196,33 @@ ve 60 µm derinliğinde parabolik bir kanalı olan 1,2 mm × 0,5 mm'lik yapay bi
 gerisi varsayılan değerlerdeyken analiz edin; günlüğün ilk satırlarında "Format: X3P
 (ISO 25178-72)" yazar ve bildirilen derinlik 60 µm'dir.
 
+## Sınırlar
+
+MaRQ düz bir çevre yüzey içindeki tek ve doğrusal bir kanal ya da sırt için yapılmıştır. Kanalın
+derinliği ve genişliği herhangi bir değerde olabilir; taramanın küçük bir bölümünü ya da çoğunu
+kaplayabilir, yeter ki tarama kanalın iki yanında, yüzeyin üzerinde yataylandığı düz bir çevre
+yüzey şeridi bıraksın. Üç şey sabittir:
+
+- Çevre yüzeyin 40 µm'den fazla üstündeki malzeme analizden önce cihazın sivri noktaları olarak
+  atılır; kanalın yanında daha yükseğe çıkan bir kenar kabarıklığı ya da çapak da onunla gider.
+  Kanal tabanının çok altındaki noktalar optik boşluk olarak atılır: 380 µm ile taban
+  derinliğinin 1,15 katından büyük olanının altındakiler (günlük her iki sınırı ve kaç noktayı
+  attıklarını verir).
+- Karşılaştırma ızgarası her uzunlukta belirtilen aralığını korur, 8 milyon hücreye kadar
+  (örneğin 5 µm'de 40 mm'ye 5 mm); daha büyük bir ızgara, daha büyük bir aralık seçmeyi ya da
+  yüzeyleri kırpmayı söyleyen bir iletiyle durur.
+- Tabanında 1,5 µm'den az doku bulunan bir yüzey idealize (CAD) yüzey sayılır: karşılaştırmalarında
+  temel sonuç RQ olur.
+
 ## İş akışı A: tek yüzey
 
 1. Nokta bulutunu **Aç**ın (ya da pencereye bırakın).
 2. Ayarları varsayılan değerlerinde bırakın; bunlar makalede kullanılan değerlerdir.
    *Ayarlar* (şerit) bunları listeler: Çıkıntı kapalı, Voksel boyutu 5, Çevre yüzey bandı 2,5 ortanca mutlak
    sapma, Kanal boyunca kırpma payı 180, Kanal enine kırpma payı 100, derinliğin 0,10'u
-   Ağız seviyesi ve 0,90'ı Taban seviyesi, kanal genişliğinin 0,5'i Taban pürüzlülük
-   şeridi genişliği, Taban pürüzlülük şeridi uzunluğu 4000, Çevre yüzey pürüzlülük şeridi
+   Ağız seviyesi ve 0,90'ı Taban seviyesi, ölçülen taban genişliğinin 0,5'i Taban pürüzlülük
+   şeridi genişliği (makaledeki toplu analizler nominal genişliği kullandı, bu yüzden taban
+   pürüzlülüğü ikinci ondalıkta farklı olabilir), Taban pürüzlülük şeridi uzunluğu 4000, Çevre yüzey pürüzlülük şeridi
    genişliği 400 ve uzunluğu 4000; *Gelişmiş* altında: Kenar payı 100 ve Derinlik profili
    dilimleri 80; sağ sütunda, yalnızca gösterimi değiştiren Gösterim hücre boyutu 0
    (otomatik) ve Gösterim yumuşatması 0, ve karşılaştırmada da geçerli olan Atlanacak
@@ -213,7 +232,7 @@ gerisi varsayılan değerlerdeyken analiz edin; günlüğün ilk satırlarında 
    bunları geri getirir; *Kaydet* ve *Yükle* bir JSON ayar dosyası yazar ve okur;
    değerler bilgisayarda hatırlanır.
 3. **Analiz et**. Özellikler genişlikleri, derinliği, yan duvar açısını, köşe yuvarlaklığını,
-   uzunlukları, pürüzlülüğü ve hizalamayı gösterir; model ağacı görünümleri listeler:
+   uzunlukları, duvar baskınlığını, pürüzlülüğü ve hizalamayı gösterir; model ağacı görünümleri listeler:
    *Hizalama*, *Kanal tespiti*, *Profiller* (taban genişliği ve ağız seviyeleri, duvar
    konumları ve orta yan duvar çizgileriyle ortalama kesit ve her dilimin derinliği; ızgara
    çizgisi başına genişlik ve uzunluk; merkez çizgileri), *3B görünüm* ve *Pürüzlülük
@@ -239,13 +258,16 @@ gerisi varsayılan değerlerdeyken analiz edin; günlüğün ilk satırlarında 
    yuvarlaklığı, duvarın taban seviyesinde bu doğrunun ne kadar içinde ve ağız
    seviyesinde ne kadar dışında kaldığıdır. Uzunluk kanal boyunca çizgiler üzerinde, her
    uç dışarıdan içeriye doğru okunur; dışa aktarılan kırpım iki ucu ve kırpma payını
-   kapsar.
+   kapsar. Duvar baskınlığı f_y, eğimin karesinde kanala dik eğimin payıdır; kanal içinde
+   (derinliğin 0,20'sinden derin hücreler), kırpımın orta %60'ında, voksel boyutunda ve bir
+   hücre yumuşatılmış bir ızgarada hesaplanır. 1'e yakınsa eğimler, onlarla birlikte RQd de,
+   yan duvarlarca belirlenir.
 
-   Çıkıntı biçimli bir yapı, örneğin bir kalıp ana parçasındaki sırt, kanala çevrilir
-   (gerçek bir döndürme; el yönü korunur). MaRQ bunu kendiliğinden yapar, ancak düz yüzeyin
-   40 µm'den fazla üstündeki her şeyi kesip atan sivri nokta temizliğinden sonra; daha
-   yüksek bir sırt için *Ayarlar*'da *Çıkıntı*'yı işaretleyin, tarama önce ters çevrilir.
-   Tarama belirgin bir kanal göstermediğinde ileti bunu söyler.
+   Çıkıntı biçimli bir yapıyı, örneğin bir kalıp ana parçasındaki sırtı, MaRQ kendiliğinden
+   bulur ve sivri nokta temizliğinden önce kanala çevirir (gerçek bir döndürme; el yönü
+   korunur): yüzey çevre yüzeyin altına indiğinden daha yükseğe çıkar. *Ayarlar*'daki
+   *Çıkıntı*, sırtın bulunamadığı bir taramayı her durumda ters çevirir. Tarama belirgin bir
+   kanal göstermediğinde ileti bunu söyler.
 4. **Kırpımı kaydet**, yataylanmış, hizalanmış, voksellerle seyreltilmiş kırpımı kaydeder
    (mikrometre cinsinden x y z, çevre yüzey z = 0'da, kanal x boyunca, ortalanmış). **A olarak
    ata** ve **B olarak ata** aynı kırpımı doğrudan karşılaştırma yuvalarına yerleştirir.

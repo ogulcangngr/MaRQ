@@ -48,13 +48,6 @@ xml = f"""<?xml version="1.0" encoding="UTF-8"?>
   <Record1>
     <Revision>ISO25178-72:2012</Revision>
     <FeatureType>SUR</FeatureType>
-  </Record1>
-  <Record3>
-    <MatrixDimension>
-      <SizeX>{NX}</SizeX>
-      <SizeY>{NY}</SizeY>
-      <SizeZ>1</SizeZ>
-    </MatrixDimension>
     <Axes>
       <CX>
         <AxisType>I</AxisType>
@@ -75,6 +68,13 @@ xml = f"""<?xml version="1.0" encoding="UTF-8"?>
         <Offset>0.0</Offset>
       </CZ>
     </Axes>
+  </Record1>
+  <Record3>
+    <MatrixDimension>
+      <SizeX>{NX}</SizeX>
+      <SizeY>{NY}</SizeY>
+      <SizeZ>1</SizeZ>
+    </MatrixDimension>
     <DataLink>
       <PointDataLink>bindata/data.bin</PointDataLink>
       <ValidPointsLink>bindata/valid.bin</ValidPointsLink>

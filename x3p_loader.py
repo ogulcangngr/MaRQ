@@ -62,7 +62,14 @@ def load_x3p(path, log_fn=print):
         log_fn(f"  X3P grid : {nx} × {ny}  ({nx*ny:,} points)")
 
         # ── Axes ───────────────────────────────────────────────────
-        axes = _find(r3, 'Axes')
+        # ISO 5436-2 / 25178-72 puts them in Record1 (instrument exports do); files that put them
+        # in Record3 are read too (2026-10-25)
+        r1 = _find(root, 'Record1')
+        axes = _find(r1, 'Axes') if r1 is not None else None
+        if axes is None:
+            axes = _find(r3, 'Axes')
+        if axes is None:
+            raise ValueError("X3P: no Axes (CX, CY, CZ) in Record1 or Record3 of main.xml.")
         cx = _parse_axis(axes, 'CX')
         cy = _parse_axis(axes, 'CY')
         cz = _parse_axis(axes, 'CZ')

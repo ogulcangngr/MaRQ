@@ -276,6 +276,9 @@ def make_rotation_fig(result):
         cx_, cy_ = float(xd.mean()), float(yd.mean())
         alen = float(min(np.ptp(xd), np.ptp(yd)) * 0.22)
 
+    # with Raised feature (Settings) the scan was turned over before anything else, so the left panel
+    # already shows it turned over
+    before_txt = "Before: raw scan, turned over first (Settings)" if rot.get("turned_over") else "Before: raw scan"
     after_txt = "After: field levelled, channel along X"
     if rot.get("converted"):
         after_txt += ", protrusion rotated to a depression"
@@ -290,7 +293,7 @@ def make_rotation_fig(result):
         "xaxis2": _axis(f"X, channel axis ({U})", domain=[0.60, 1.0], anchor="y2"),
         "yaxis2": _axis(f"Y, cross-channel ({U})", scaleanchor="x2", anchor="x2"),
         "annotations": [
-            _panel_title("Before: raw scan", "x", "y"),
+            _panel_title(before_txt, "x", "y"),
             _panel_title(after_txt, "x2", "y2"),
             {"x": cx_ + alen * ca[0], "y": cy_ + alen * ca[1], "ax": cx_, "ay": cy_,
              "xref": "x", "yref": "y", "axref": "x", "ayref": "y",
@@ -566,7 +569,8 @@ def _crop_heights(result, max_cells):
     if (max_cells != FULL_3D or grid is None or not vox > 0 or len(crop.get("x", [])) == 0
             or not float(g["cells"].get("crop") or 0) > vox * 1.01):
         return ZI
-    return grid(crop["x"], crop["y"], crop["z"], vox, g.get("display_sigma", 0), min_cell=vox)[2]
+    return grid(crop["x"], crop["y"], crop["z"], vox, g.get("display_sigma", 0), min_cell=vox,
+                u_range=(crop["x_min"], crop["x_max"]), v_range=(crop["y_min"], crop["y_max"]))[2]   # where it is drawn
 
 
 def make_3d_fig(result, max_cells=None, colorscale=None):
@@ -967,6 +971,7 @@ _TR = {
     "Slice without a valid floor": "Geçerli tabanı olmayan dilim",
     "No data": "Veri yok",
     "Before: raw scan": "Önce: ham tarama",
+    "turned over first (Settings)": "önce ters çevrildi (Ayarlar)",
     "After: field levelled": "Sonra: çevre yüzey yataylandı",
     "channel along X": "kanal X boyunca",
     "protrusion rotated to a depression": "çıkıntı çukura döndürüldü",

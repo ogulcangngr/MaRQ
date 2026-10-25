@@ -40,7 +40,7 @@ TMP = tempfile.mkdtemp(prefix="marq_cores_")
 
 
 def channel(W=600.0, D=300.0, L=4000.0, seed=7, noise=0.5, texture=0.0, rotate=0.0, tilt=(0.0, 0.0),
-            protrusion=False, round2=True, pitch=5.0, scattered=False):
+            protrusion=False, round2=True, pitch=5.0, scattered=False, half=900.0):
     """A channel as tests/make_test_channel.py makes it: floor W wide, D deep, 10° walls, L long,
     in a flat field, on a 5 µm grid with Gaussian noise; optionally a texture of lines across
     the surface (texture: its amplitude, µm), turned in the plane by `rotate` degrees, the field
@@ -48,7 +48,7 @@ def channel(W=600.0, D=300.0, L=4000.0, seed=7, noise=0.5, texture=0.0, rotate=0
     placed at random within its grid cell (`scattered`, as a CAD model sampled at random).
     Coordinates rounded to 0.01 µm, as the text file is written."""
     x = np.arange(0.0, L + 1000.0, pitch)
-    y = np.arange(-900.0, 900.0 + 1e-9, pitch)
+    y = np.arange(-half, half + 1e-9, pitch)
     X, Y = np.meshgrid(x, y)
     if scattered:
         rng = np.random.default_rng(seed + 1000)
@@ -127,6 +127,47 @@ def test_raised_feature_turned_over():
     assert near(r["channel"]["wall_angle_deg"], 10.0, 0.2)
 
 
+def test_a_tall_ridge_turned_over_by_itself():
+    # a ridge 300 um high without the setting: found before the despike and turned over (2026-10-25)
+    r = analyse(channel(protrusion=True))
+    assert r["rotation"]["converted"] is True and r["rotation"]["turned_auto"] is True
+    assert near(r["channel"]["mean_depth"], 300.0, 0.5), r["channel"]["mean_depth"]
+    assert near(r["channel"]["floor_width"], 600 + 2 * 30 * TAN10, 0.6), r["channel"]["floor_width"]
+
+
+def test_a_channel_with_raised_rims_stays_a_channel():
+    # rims 100 um high beside a channel (as on some moulded parts) do not make it a ridge
+    P = channel(W=300.0)
+    x, y = P[:, 0], P[:, 1]
+    P[(np.abs(np.abs(y) - (150 + 300 * TAN10 + 60)) < 60) & (x > 500) & (x < 4500), 2] += 100.0
+    r = analyse(P)
+    assert r["rotation"]["converted"] is False and near(r["channel"]["mean_depth"], 300.0, 0.5), r["channel"]["mean_depth"]
+
+
+def test_a_deep_channel_keeps_its_floor():
+    # 1000 um deep with 0.5 % dropouts down to 3 mm: the dropouts go, the floor stays (it was cut at
+    # 380 um below the field before 2026-10-25)
+    P = channel(D=1000.0)
+    rng = np.random.default_rng(5); k = rng.choice(len(P), len(P) // 200, replace=False)
+    P[k, 2] = -rng.uniform(1100.0, 3000.0, len(k))
+    c = analyse(P)["channel"]
+    assert near(c["mean_depth"], 1000.0, 1.0) and near(c["floor_width"], 600 + 2 * 100 * TAN10, 0.6), c
+
+
+def test_a_wide_channel_stays_a_channel():
+    # a channel over two thirds of the scan width (the median used to fall on its floor)
+    r = analyse(channel(W=1200.0, half=900.0))
+    assert r["rotation"]["converted"] is False
+    assert near(r["channel"]["mean_depth"], 300.0, 0.5) and near(r["channel"]["floor_width"], 1200 + 2 * 30 * TAN10, 0.6)
+
+
+def test_a_narrow_channel_in_a_wide_scan():
+    # floors of 1 % and 0.5 % of the scan width (the depth read short below about 3 % before)
+    for W, D, half in ((100.0, 300.0, 5000.0), (30.0, 100.0, 3000.0)):
+        c = analyse(channel(W=W, D=D, half=half))["channel"]
+        assert near(c["mean_depth"], D, 0.5) and near(c["floor_width"], W + 2 * 0.1 * D * TAN10, 0.6), (W, c)
+
+
 def test_low_ridge_turned_over_by_itself():
     # a ridge lower than the despike margin (40 um) is found and turned over without the setting
     r = analyse(channel(D=30.0, protrusion=True))
@@ -197,6 +238,34 @@ def test_a_copy_turned_half_round_is_turned_back():
     assert abs(m["r_mag"] - 1.0) < 1e-9 and abs(m["r_z"] - 1.0) < 1e-9
 
 
+def test_a_long_comparison_keeps_the_spacing():
+    # a 15 mm channel: 3074 grid points along it, still exactly 5 um apart (the extent was divided
+    # evenly beyond 2000 points before 2026-10-25)
+    a = analyse(channel(L=15000.0)); b = analyse(channel(L=15000.0, seed=8))
+    g = compare(crop_file(a, "long_a.txt"), crop_file(b, "long_b.txt"))["grids"]
+    xi, yi = g["XI"][0], g["YI"][:, 0]
+    assert len(xi) > 2000 and np.allclose(np.diff(xi), 5.0) and np.allclose(np.diff(yi), 5.0)
+
+
+def test_wall_dominance():
+    # f_y as the paper's script computed it (analysis/run_v10.py before 2026-10-25), from a crop
+    r = analyse(channel(texture=2.0))
+    c = np.loadtxt(crop_file(r, "fy.txt"))
+    x, y, z, G = c[:, 0], c[:, 1], c[:, 2], 5.0
+    x0, x1, y0, y1 = x.min(), x.max(), y.min(), y.max()
+    nx, ny = int((x1 - x0) / G) + 1, int((y1 - y0) / G) + 1
+    ix = np.clip(((x - x0) / G).round().astype(int), 0, nx - 1); iy = np.clip(((y - y0) / G).round().astype(int), 0, ny - 1)
+    zs, zc = np.zeros((ny, nx)), np.zeros((ny, nx)); np.add.at(zs, (iy, ix), z); np.add.at(zc, (iy, ix), 1)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        Zs = M["_nan_gaussian_filter"](np.where(zc > 0, zs / zc, np.nan), sigma=(1.0, 1.0))
+    gy, gx = np.gradient(Zs, G, G)
+    xi = np.linspace(x0, x1, nx); mid = np.abs(xi - 0.5 * (xi[0] + xi[-1])) < 0.30 * (xi[-1] - xi[0])
+    mask = np.isfinite(gx) & np.isfinite(gy) & (Zs < -0.2 * -np.nanpercentile(Zs, 1)) & mid[None, :]
+    ref = (gy[mask] ** 2).sum() / ((gx[mask] ** 2).sum() + (gy[mask] ** 2).sum())
+    assert near(M["_wall_dominance"](x, y, z, G), ref, 1e-12)
+    assert 0.9 < r["channel"]["f_y"] < 1.0 and near(r["channel"]["f_y"], M["_wall_dominance"](*r["cropped_cloud"].T, G), 1e-9)
+
+
 def test_grid_cell_is_the_stated_spacing():
     m = base()["cmp"]["metrics"]
     assert near(m["cell_um"][0], 5.0, 1e-9) and near(m["cell_um"][1], 5.0, 1e-9), m["cell_um"]
@@ -246,6 +315,35 @@ def test_x3p_file_in_micrometres():
     assert near(float(np.ptp(x)), 1190.0, 1e-6) and near(float(np.ptp(y)), 490.0, 1e-6)     # 120 x 50 points, 10 µm apart
     r = M["run_pvisual"](path, {**UI, "crop_pad_x": 100, "crop_pad_y": 50, "margin": 20}, quiet)   # as in README.md
     assert near(r["channel"]["mean_depth"], 60.0, 1.0), r["channel"]["mean_depth"]
+
+
+def test_x3p_file_with_the_axes_in_record3():
+    # the layout of the test file before 2026-10-25: still read
+    import subprocess, zipfile
+    std = os.path.join(TMP, "std.x3p"); old = os.path.join(TMP, "old.x3p")
+    subprocess.run([sys.executable, os.path.join(HERE, "make_test_x3p.py"), std], check=True, capture_output=True)
+    with zipfile.ZipFile(std) as zi, zipfile.ZipFile(old, "w") as zo:
+        for n in zi.namelist():
+            d = zi.read(n)
+            if n == "main.xml":
+                x = d.decode("utf-8")
+                axes = x[x.index("    <Axes>"):x.index("</Axes>") + len("</Axes>\n")]
+                x = x.replace(axes, "")
+                x = x.replace("    <DataLink>", axes + "    <DataLink>")
+                d = x.encode("utf-8")
+            zo.writestr(n, d)
+    a, b = M["load_x3p"](std, quiet), M["load_x3p"](old, quiet)
+    assert all(np.array_equal(u, v) for u, v in zip(a, b))
+
+
+def test_points_without_a_number_are_left_out():
+    # instruments write NaN for points they could not measure: those are left out, and the
+    # channel reads as without them (2 % of the points missing)
+    P = channel()
+    Q = P.copy(); Q[::50, 2] = np.nan; Q[7::97, 0] = np.inf
+    a, b = M["run_pvisual"](P, UI, quiet)["channel"], M["run_pvisual"](Q, UI, quiet)["channel"]
+    for k in ("mean_depth", "floor_width", "opening_width", "wall_angle_deg"):
+        assert near(a[k], b[k], 0.5), (k, a[k], b[k])
 
 
 # ── the figures ─────────────────────────────────────────────────────────────────

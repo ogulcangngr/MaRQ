@@ -100,7 +100,7 @@ with sync_playwright() as p:
     ids = page.evaluate("() => Object.keys(_A)")
     check("both analyses in the tree", len(ids) == 2 and page.locator("#tree-analyses .tnode.analysis").count() == 2
           and page.evaluate("() => [...document.querySelectorAll('#tree-analyses .aslot')].map(e => e.textContent)") == ["A", "B"])
-    check("results not saved yet", page.evaluate("() => resultCount() > _savedCount"))
+    check("results not saved yet", page.evaluate("() => unsaved()"))
 
     # the first analysis again, its views
     tree(page, "channel", ids[0])
@@ -174,7 +174,7 @@ with sync_playwright() as p:
     check("session file", {"marq_session.json", "slot_A.txt", "slot_B.txt"} <= names
           and sum(n.startswith("pvisual_") and n.endswith(".npz") for n in names) == 2
           and sum(n.startswith("rq_gradient_") and n.endswith(".npz") for n in names) == 1, f"{os.path.getsize(sess) / 1e6:.1f} MB")
-    check("results saved", page.evaluate("() => resultCount() === _savedCount"))
+    check("results saved", page.evaluate("() => !unsaved()"))
     phase[0] = "reload"; page.reload(); wait(page, "() => ready"); phase[0] = ""
     page.set_input_files("#session-input", sess)
     wait(page, "() => _figs.rq_gradient && _figs.pvisual && !_restoring", 300); time.sleep(1)

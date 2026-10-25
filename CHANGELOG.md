@@ -3,9 +3,11 @@
 ## 1.0 (2026-10)
 
 The version used for the Measurement paper. The geometry of the single-surface module
-is read in a new way; RQ, RQdx, RQdy, RQd and the depth are computed as in 0.9, but
-the exported crop and the roughness strips are placed from the new widths and length,
-so every downstream number was recomputed.
+is read in a new way, and the exported crop and the roughness strips are placed from the
+new widths and length. The depth is computed as in 0.9. RQ, RQdx, RQdy and RQd are
+computed as in 0.9, on a comparison grid whose cells now have exactly the stated size
+(the entry of 2026-10-25 below). Every number of the paper was computed again with this
+version.
 
 - Widths on grid lines. The aligned points are averaged on a grid (cells of one voxel
   across the channel, lines two voxels apart along it) over the central 80 % of the
@@ -345,9 +347,10 @@ so every downstream number was recomputed.
     languages) and the recorded numbers of the test channel and its copy, which must stay
     the same to 1e-6 and match the browser to 1e-4. A GitHub check runs them with the NumPy
     1.26.4 and SciPy 1.12.0 of the runtime; they pass with NumPy 2.4.6 and SciPy 1.17.1 too.
-    One test fails on purpose until it is decided how to fix what it found: a raised channel
-    (a ridge) more than 40 µm high is cut away by the despike step, which runs before the
-    turn-over, so it cannot be measured (none of the paper's 120 scans is raised).
+    One test found that a raised channel (a ridge) more than 40 µm high was cut away by the
+    despike step, which runs before the turn-over, so it could not be measured. None of the
+    paper's 120 scans is raised. The next entry adds the setting that measures it, and the
+    test passes.
 - Raised features, the comparison grid and the libraries (2026-10-25).
   - *Raised feature: turn the scan over first* (Settings, off by default): a ridge, as on a
     mould master, is turned over (the proper rotation of step 4) before the spike removal,
@@ -377,9 +380,9 @@ so every downstream number was recomputed.
     paper names its CAD references explicitly, so none of its numbers changes.
   - The automatic voxel size (Voxel size 0) used a NumPy call that NumPy 2 removed; it now
     uses one that gives the same value in both.
-  - Libraries: Pyodide 0.26.4 to 314.0.7 (Python 3.14, NumPy 2.4.6, SciPy 1.18.0, the
-    versions of the desktop Python the paper's numbers are computed with, but SciPy 1.17.1),
-    Plotly.js 2.35.2 to 4.1.2, three.js r169 to r186. The bundle is 37 MB instead of 84.
+  - Libraries: Pyodide 0.26.4 to 314.0.7 (Python 3.14, NumPy 2.4.6, SciPy 1.18.0),
+    Plotly.js 2.35.2 to 4.1.2, three.js r169 to r186. The paper's numbers are computed with
+    desktop Python 3.14, NumPy 2.4.6 and SciPy 1.17.1. The bundle is 37 MB instead of 84.
     Pyodide no longer runs in classic web workers: the engine is a module worker and
     imports pyodide.mjs. A JavaScript null reaches Python as JsNull, not None, so the
     engine passes undefined. Plotly 4 syncs an overlaying axis with the one below; the
@@ -388,6 +391,82 @@ so every downstream number was recomputed.
     the analysis modules run with NumPy 2.4.6 and SciPy 1.18.0 in the GitHub check; between
     NumPy 1.26.4 / SciPy 1.12.0 and NumPy 2.4.6 / SciPy 1.17.1 their recorded numbers differ
     by at most 2e-13.
+- Fixes from a review of the code (2026-10-25). No analysis change: the sample data give the
+  same numbers.
+  - A result removed while its figures were being drawn again (after a change of language,
+    say), or replaced by the same pair compared again, no longer comes back as a hidden
+    result, which made every later report fail.
+  - Nothing can be started or removed while a session file is being opened. An analysis
+    started in that moment took the id of one of the session's analyses and was recorded
+    under its name.
+  - A session file that cannot be read leaves the results as they were (the engine had
+    dropped its results before reading the file), and the notice says in words that the
+    file is damaged.
+  - The report has a page for every result of an opened session, also those not opened yet,
+    and every page is in the language on screen.
+  - The cross-section view of an opened session takes the range of its own channel.
+  - Enter or Space on the × of a row in the browser removes the result. It folded the row,
+    or opened the file chooser for the scan slot.
+  - Closing MaRQ or opening a session asks whenever a result is not saved. It compared the
+    number of results, so one removed and another added went unnoticed.
+  - A failed redraw no longer marks its result as dropped by the engine.
+  - The display cell size and the display smoothing no longer mark an analysis as made with
+    other settings: they change its figures, not its numbers.
+  - A figure export and a report no longer draw at the same time, and a result cannot be
+    removed while the report is made.
+  - Escape closes the report also while the focus is inside it.
+  - A rebuild that fails while a session is restored no longer leaves the tips switched off.
+  - Text point clouds with a UTF-8 byte-order mark, and with semicolons between the columns
+    and decimal commas, are read.
+  - A file in millimetres spanning less than 0.5 mm is no longer taken for one in metres.
+  - `run_marq.py` serves files of any other type on Python 3.7 and 3.8.
+  - With *Raised feature* ticked, the alignment figure says that the scan was turned over
+    first.
+- Any channel, and the wall dominance (2026-10-25). An analysis change, but every number of
+  the paper is unchanged: its 120 scans and every study were computed again and agree with
+  the earlier results.
+  - A raised feature, a ridge as on a mould master, is found before the spike removal and
+    turned over by MaRQ itself, whatever its height: the surface reaches further above the
+    field than below it, by the 99th and 1st percentiles of the 8 µm copy, so raised rims
+    beside a channel do not count. A ridge higher than 40 µm used to be cut away with the
+    spikes unless *Raised feature* was ticked; the setting stays, for a scan where the ridge
+    is not found.
+  - The orientation check after the levelling measures from the field instead of the
+    median, so a channel covering half of the scan width or more stays a channel. The median
+    then lay on its floor, and the channel was taken for a ridge and turned over.
+  - Channels of any depth. Points far below the channel floor are removed below the larger
+    of 380 µm and 1.15 times the floor depth found on the 8 µm copy (the deepest 5 µm level
+    that holds at least a fifth of the points of the fullest level), so a deeper channel
+    keeps its floor. The floor of a channel deeper than 380 µm used to be cut away.
+  - Narrow channels in wide scans. When the channel at half depth spans less than 6 % of
+    the cross-section profile, the floor level is read within twice that width around it,
+    for the profile and every slice. A floor under about 3 % of the scan width read its
+    depth short. A channel on less than about 1 % of the scan takes its first depth estimate
+    from the floor found on the 8 µm copy.
+  - The comparison grid keeps its stated spacing at any length. Beyond 2000 points along an
+    axis the extent was divided evenly instead, so long crops had cells longer along the
+    channel than across it. A grid of more than 8 million cells, more than a browser tab can
+    hold, stops with a message, and so does an overlap of fewer than 20 cells.
+  - Wall dominance f_y, the share of the squared slope carried by the slope across the
+    channel, over the channel interior (deeper than 0.20 of the depth) of the central 60 %
+    of the crop, on a grid of the voxel size with the one-cell filter of the comparison: in
+    Properties, the JSON and the report, and as the last column of the CSV
+    (`wall_dominance_fy`). It is the computation of the paper's Fig. 7a.
+  - X3P files with the axes in Record1, where ISO 5436-2 and 25178-72 put them (instrument
+    exports, Alicona's among them), are read; they stopped with an error. Points with a
+    missing coordinate (NaN) are left out at loading with a line in the log; they stopped
+    the voxel thinning. The exact voxel index is computed in 64-bit integers, which removes
+    a size limit of the browser's 32-bit engine on very large scans.
+  - The 3D view of an analysis draws the crop over the crop box. A box running past the
+    scan edge stretched the surface.
+  - When fewer than 10 cells lie in the channel interior of both surfaces, the log says that
+    the whole overlap is used.
+  - `tests/test_cores.py` covers each of these: a channel 1000 µm deep with dropouts down to
+    3 mm, a ridge 300 µm high, rims 100 µm high beside a channel, a channel over two thirds
+    of the scan, floors of 1 % and 0.5 % of the scan width, a 15 mm comparison, the wall
+    dominance against the paper's own computation, X3P files of both layouts and points
+    without a number (28 tests). `tests/e2e_check.py` also checks the wall dominance of the
+    sample insert and part against `expected_results.json`.
 
 ## 0.9 (2026-09-30)
 

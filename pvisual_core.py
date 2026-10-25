@@ -104,8 +104,11 @@ def _voxel_downsample(points, voxel_size):
     keys      = (voxel_idx[:, 0].astype(np.int64) * 1_000_003 +
                  voxel_idx[:, 1].astype(np.int64) * 1_009 +
                  voxel_idx[:, 2].astype(np.int64))
+    # the voxel's index in the voxel grid, in 64-bit integers (np.ravel_multi_index gives the same
+    # number but needs the grid to fit the platform's index type, 32 bits in the browser engine)
     idx64     = voxel_idx.astype(np.int64)
-    exact     = np.ravel_multi_index(tuple(idx64.T), tuple(int(d) + 1 for d in idx64.max(axis=0)))
+    dims      = idx64.max(axis=0) + 1
+    exact     = (idx64[:, 0] * dims[1] + idx64[:, 1]) * dims[2] + idx64[:, 2]
     order     = np.lexsort((exact, keys))
     first     = np.ones(len(order), dtype=bool)
     first[1:] = exact[order[1:]] != exact[order[:-1]]
@@ -223,6 +226,45 @@ def _roughness_region(xp, yp, zp):
 
 # ── Field-referenced leveling + orientation ───────────────────────────────────
 
+def _wall_dominance(x, y, z, cell, frac=0.20, central=0.60):
+    """Wall dominance f_y of a cropped channel (aligned: x along it, field at z = 0): the share of
+    the squared slope magnitude carried by the slope across the channel,
+        f_y = sum (dZ/dy)^2 / sum |grad Z|^2,
+    over the cells deeper than `frac` of the depth within the central `central` part of the
+    crop's length, where the rounded channel ends (slopes along x) are left out. The points are
+    averaged on a grid of `cell` (each cell centred on its point), smoothed by the NaN-aware
+    Gaussian of one cell the comparison uses, and differentiated by central differences; the
+    depth is the 1st percentile of the smoothed heights. Near 1, the slopes, and with them RQd,
+    are governed by the sidewalls. (2026-10-25; the computation of the paper's Fig. 7a.)"""
+    x, y, z = (np.asarray(a, float) for a in (x, y, z))
+    if len(z) < 20 or not cell > 0:
+        return float("nan")
+    x0, x1, y0, y1 = x.min(), x.max(), y.min(), y.max()
+    nx, ny = int((x1 - x0) / cell) + 1, int((y1 - y0) / cell) + 1
+    ix = np.clip(((x - x0) / cell).round().astype(int), 0, nx - 1)
+    iy = np.clip(((y - y0) / cell).round().astype(int), 0, ny - 1)
+    zs, zc = np.zeros((ny, nx)), np.zeros((ny, nx))
+    np.add.at(zs, (iy, ix), z); np.add.at(zc, (iy, ix), 1)
+    Z = np.where(zc > 0, zs / np.maximum(zc, 1), np.nan)
+    nan = np.isnan(Z)
+    sm_d = gaussian_filter(np.where(nan, 0.0, Z), sigma=(1.0, 1.0))
+    sm_w = gaussian_filter(np.where(nan, 0.0, 1.0), sigma=(1.0, 1.0))
+    Zs = np.where(sm_w > 1e-6, sm_d / np.where(sm_w > 1e-6, sm_w, 1.0), np.nan)
+    if min(Zs.shape) < 3:
+        return float("nan")
+    gy, gx = np.gradient(Zs, cell, cell)
+    fin = np.isfinite(gx) & np.isfinite(gy) & np.isfinite(Zs)
+    depth = -np.nanpercentile(Zs, 1)
+    xi = np.linspace(x0, x1, nx)
+    mid = np.abs(xi - 0.5 * (xi[0] + xi[-1])) < 0.5 * central * (xi[-1] - xi[0])
+    mask = fin & (Zs < -frac * depth) & mid[None, :]
+    if mask.sum() < 10:
+        mask = fin & (Zs < -frac * depth)
+    gx2, gy2 = gx[mask] ** 2, gy[mask] ** 2
+    tot = gx2.sum() + gy2.sum()
+    return float(gy2.sum() / tot) if tot > 0 else float("nan")
+
+
 def _fit_field_plane(pts, n_iter=6, k=2.5):
     """Robustly fit the dominant flat field plane z = a*x + b*y + c.
 
@@ -253,6 +295,31 @@ def _fit_field_plane(pts, n_iter=6, k=2.5):
     return coef
 
 
+DEEP_FACTOR = 1.15     # deep dropouts: below this times the floor depth found before the despike
+NARROW_FRAC = 0.06     # a channel narrower at half depth than this share of the profile: floor read in a window
+
+
+def _raised(rc, q):
+    """Whether a surface (heights about its field plane) reaches further above the field than
+    below it, by its q-th and (100-q)-th percentiles: a raised feature."""
+    return bool(np.percentile(rc, 100 - q) > -np.percentile(rc, q))
+
+
+def _deep_level(rc, step=5.0, frac=0.2, cap=10000.0):
+    """Depth of the channel floor, found before the despike: of the points more than 40 µm below
+    the field plane (rc, the 8 µm copy), the deepest `step` µm level that holds at least `frac` of
+    the points of the busiest such level. Scattered dropouts below the floor never fill a level
+    that much; a V-shaped channel, whose points spread evenly over its depth, still reaches its
+    bottom. 0 when there is no channel; levels deeper than `cap` (instrument fill values) are
+    ignored."""
+    ch = rc[(rc < -40.0) & (rc > -cap)]
+    if len(ch) < 50:
+        return 0.0
+    h, e = np.histogram(ch, bins=np.arange(np.floor(ch.min() / step) * step, -40.0 + step, step))
+    ok = np.where(h >= frac * h.max())[0]
+    return float(-e[ok.min()]) if len(ok) else 0.0
+
+
 def _level_and_orient(ds, k, log_fn):
     """Level on the field plane and normalize orientation to a depression.
 
@@ -267,9 +334,11 @@ def _level_and_orient(ds, k, log_fn):
     field_tilt_xz = float(np.degrees(np.arctan(coef[0])))
     field_tilt_yz = float(np.degrees(np.arctan(coef[1])))
 
-    med = np.median(z0)
-    down = med - np.percentile(z0, 2)
-    up   = np.percentile(z0, 98) - med
+    # how far the surface reaches below and above the FIELD (z0 = 0): measured from the median
+    # instead, a channel over about half of the scan put the median on its floor and was taken
+    # for a ridge (2026-10-25)
+    down = -np.percentile(z0, 2)
+    up   = np.percentile(z0, 98)
     converted = bool(up > down)
     if converted:
         # Proper 180 deg rotation about the in-plane X axis: (x, -y, -z).
@@ -441,7 +510,7 @@ def _profile_edges(cross_vals, z_vals, zlev, n_bins=120):
 
 
 def _slice_depths(axis_vals, cross_vals, z_vals, n_slices, a_lo, a_hi,
-                  min_slice_pts=20, n_bins=120, floor_pctl=5):
+                  min_slice_pts=20, n_bins=120, floor_pctl=5, window=None):
     """Per-slice LOCAL channel depth, using the SAME depth definition as the
     aggregate cross-section (`_floor_level_from_profile`) applied to each slice's
     120-bin transverse profile. Slices are the same 80 non-overlapping longitudinal
@@ -463,6 +532,10 @@ def _slice_depths(axis_vals, cross_vals, z_vals, n_slices, a_lo, a_hi,
         cc, zb = _slice_profile(cross_vals[m], z_vals[m], n_bins)
         if cc is None or len(zb) < 2:
             reason[i] = "empty_profile"; continue
+        if window is not None:              # a narrow channel: the bins around it (see run_pvisual)
+            zb = zb[np.abs(cc - window[0]) <= window[1]]
+            if len(zb) < 2:
+                reason[i] = "empty_profile"; continue
         fl = _floor_level_from_profile(zb, floor_pctl)
         if not np.isfinite(fl):
             reason[i] = "no_floor"; continue
@@ -696,6 +769,10 @@ def run_pvisual(file_path: str, params: dict = None, log_fn=print) -> dict:
     else:
         delimiter = p["delimiter"] if p["delimiter"] is not None else _detect_delimiter(file_path, p["skip_rows"])
         points = np.loadtxt(file_path, delimiter=delimiter, skiprows=p["skip_rows"])
+    finite = np.isfinite(points[:, :3]).all(axis=1)
+    if not finite.all():           # instruments write NaN for points they could not measure (2026-10-25)
+        log_fn(f"  Left out : {int((~finite).sum()):,} points without a number (NaN or infinite)")
+        points = points[finite]
     x, y, z = points[:, 0], points[:, 1], points[:, 2]
     log_fn(f"  Loaded   : {len(points):,} points  [{time.time()-t0:.1f}s]")
 
@@ -706,28 +783,47 @@ def run_pvisual(file_path: str, params: dict = None, log_fn=print) -> dict:
               (y >= y.min() + margin) & (y <= y.max() - margin))
     points = points[mask]
     log_fn(f"  Margin {margin} → {len(points):,} points remaining")
+    # the same proper rotation as step 4 (180° about the in-plane X axis: x, -y, -z)
+    turn = lambda P: np.column_stack([P[:, 0], -P[:, 1], -P[:, 2]])
+    turned_auto = False
     if p.get("turn_over"):
-        # the same proper rotation as step 4 (180° about the in-plane X axis: x, -y, -z)
-        points = np.column_stack([points[:, 0], -points[:, 1], -points[:, 2]])
+        points = turn(points)
         log_fn("  Turned over (Settings: raised feature): the ridge is now a channel")
 
     # ── Step 2.5: Despike — focus-variation spikes above the field AND deep
     #    optical dropouts far below any real channel feature ──────────
     dspk = float(p.get("despike_margin") or 0.0)
     dlow = float(p.get("despike_lower") or 0.0)
+    deep_est = 0.0
     if (dspk > 0 or dlow > 0) and len(points) > 1000:
         coarse = _voxel_downsample(points, 8.0)
         fc = _fit_field_plane(coarse, k=p.get("field_k", 2.5))
+        rc = coarse[:, 2] - (fc[0] * coarse[:, 0] + fc[1] * coarse[:, 1] + fc[2])
+        # A raised feature (a ridge, as on a mould master) is turned over here, before the spike
+        # removal would cut it away: the surface reaches further above the field than below it
+        # (1st and 99th percentiles, so raised rims beside a channel do not count) (2026-10-25)
+        if not p.get("turn_over") and _raised(rc, 1.0):
+            log_fn(f"  Raised feature: it reaches {np.percentile(rc, 99):.0f} µm above the field and "
+                   f"{-np.percentile(rc, 1):.0f} µm below it; turned over into a channel")
+            points = turn(points)
+            fc, rc = np.array([-fc[0], fc[1], -fc[2]]), -rc     # the same plane and residuals, turned over
+            turned_auto = True
+        # Deep dropouts are removed below the larger of despike_lower and DEEP_FACTOR times the
+        # depth of the channel floor found here, so a channel of any depth keeps its floor (2026-10-25)
+        deep_est = _deep_level(rc)
+        lower = max(dlow, DEEP_FACTOR * deep_est) if dlow > 0 else 0.0
         resid = points[:, 2] - (fc[0] * points[:, 0] + fc[1] * points[:, 1] + fc[2])
         n0 = len(points)
         keep = np.ones(len(points), dtype=bool)
         if dspk > 0:
             keep &= (resid <= dspk)
         if dlow > 0:
-            keep &= (resid >= -dlow)
+            keep &= (resid >= -lower)
         points = points[keep]
-        log_fn(f"  Despike: removed {n0-len(points):,} pts outside field+[{-dlow:.0f},{dspk:.0f}]µm "
+        log_fn(f"  Despike: removed {n0-len(points):,} pts outside field+[{-lower:.0f},{dspk:.0f}]µm "
                f"({100*(n0-len(points))/n0:.2f}%)")
+        if lower > dlow:
+            log_fn(f"  The lower limit follows the channel floor, about {deep_est:.0f} µm deep")
 
     # ── Step 3: Voxel downsample ──────────────────────────────────
     log_fn("\nSTEP 3 — Voxel downsampling")
@@ -743,6 +839,11 @@ def run_pvisual(file_path: str, params: dict = None, log_fn=print) -> dict:
     log_fn("\nSTEP 4 — Field-plane leveling + orientation")
     lev, converted, field_xz, field_yz = _level_and_orient(ds, p["field_k"], log_fn)
     depth_est = float(-np.percentile(lev[:, 2], 1))
+    if not converted and deep_est > 0 and depth_est < 0.5 * deep_est:
+        # a channel on less than about 1 % of the scan: the 1st percentile lies in the field,
+        # so the floor found before the despike is taken (2026-10-25)
+        log_fn(f"  narrow channel: depth estimate {deep_est:.0f} µm from the floor found before the despike")
+        depth_est = deep_est
     log_fn(f"  field tilt removed XZ={field_xz:.3f}° YZ={field_yz:.3f}°  depth≈{depth_est:.0f}")
 
     # ── Step 5: Channel-axis alignment ────────────────────────────
@@ -781,6 +882,24 @@ def run_pvisual(file_path: str, params: dict = None, log_fn=print) -> dict:
     yc, zb = _mean_profile(yr[in_x], zr[in_x])
     # Depth definition (shared with the per-slice depths, see _slice_depths):
     floor_level = _floor_level_from_profile(zb, pctl=5)
+    # A channel narrow against the scan has a floor that fills less of the profile than its
+    # deepest 5 % of bins, which then reach up the walls and read the depth short. When the
+    # channel at half depth spans less than NARROW_FRAC of the profile, the floor level is read
+    # within a window of twice that width around it, for the profile and every slice (2026-10-25).
+    floor_win = None
+    if np.isfinite(floor_level) and len(yc) > 1:
+        # half the depth of the deepest bins (the second deepest: one bin can be an outlier),
+        # which a floor level read too short cannot shift
+        c_half, w_half = _width_at(yc, zb, 0.5 * float(np.partition(zb, 1)[1]))
+        span = float(yc.max() - yc.min())
+        if np.isfinite(w_half) and span > 0 and w_half < NARROW_FRAC * span:
+            sel = np.abs(yc - c_half) <= w_half
+            fl_win = _floor_level_from_profile(zb[sel], pctl=5)
+            if np.isfinite(fl_win):
+                floor_win = (c_half, w_half)
+                log_fn(f"  narrow channel ({w_half:.0f} µm wide at half depth, {100 * w_half / span:.1f} % of the "
+                       f"profile): floor level read within ±{w_half:.0f} µm of it, {floor_level:.1f} -> {fl_win:.1f} µm")
+                floor_level = fl_win
     mean_depth  = float(-floor_level)
 
     # Channel center = centroid of the deep floor points. This is immune to the
@@ -832,7 +951,7 @@ def run_pvisual(file_path: str, params: dict = None, log_fn=print) -> dict:
     # Per-slice LOCAL depth: 80 non-overlapping longitudinal slices, same depth
     # definition as the aggregate cross-section.
     depth_pos, depth_x, depth_valid, depth_reason = _slice_depths(
-        xr, yr, zr, n_sl, xc_lo, xc_hi)
+        xr, yr, zr, n_sl, xc_lo, xc_hi, window=floor_win)
     # central 80% by slice POSITION (first/last 10% of valid slices excluded)
     depth_slice_std_c80 = _core_std(depth_x[depth_valid])
 
@@ -864,6 +983,9 @@ def run_pvisual(file_path: str, params: dict = None, log_fn=print) -> dict:
              (yr >= crop_y_min) & (yr <= crop_y_max))
     xc_pts, yc_pts, zc_pts = xr[cmask], yr[cmask], zr[cmask]
     log_fn(f"  Cropped {cmask.sum():,} points")
+    f_y = _wall_dominance(xc_pts, yc_pts, zc_pts, voxel_size)
+    log_fn(f"  wall dominance f_y = {f_y:.3f} (share of the squared slope across the channel, "
+           f"central 60 % of the crop, below 0.20 of the depth)")
 
     # ── Step 9: Roughness (ISO 25178) — auto-placed, fixed-size regions ───
     log_fn("\nSTEP 9 — Roughness (ISO 25178)")
@@ -920,7 +1042,11 @@ def run_pvisual(file_path: str, params: dict = None, log_fn=print) -> dict:
         v_range=(rgh_y_min, rgh_y_max), min_cell=voxel_size)
 
     if cmask.sum():
-        _, _, ZI_crop, cell_c = _pv_make_grid(xc_pts, yc_pts, zc_pts, cell, sig, min_cell=voxel_size)
+        # over the crop box, where the 3D view draws it (a box past the scan edge stretched the
+        # surface when the grid spanned only the points) (2026-10-25)
+        _, _, ZI_crop, cell_c = _pv_make_grid(xc_pts, yc_pts, zc_pts, cell, sig, min_cell=voxel_size,
+                                              u_range=(float(crop_x_min), float(crop_x_max)),
+                                              v_range=(float(crop_y_min), float(crop_y_max)))
     else:
         ZI_crop, cell_c = np.full((2, 2), np.nan), float("nan")
     log_fn(f"  display cells: crop {cell_c:.1f}, roughness view {cell_r:.1f}  "
@@ -936,8 +1062,10 @@ def run_pvisual(file_path: str, params: dict = None, log_fn=print) -> dict:
             "var_pct":      float(var_pct),
             "voxel_size":   float(voxel_size),
             "channel_axis": channel_axis.tolist(),
-            "converted":    bool(converted) != bool(p.get("turn_over")),   # the scan's feature was raised
+            # the scan's feature was raised (turned over by the setting, before the despike, or in step 4)
+            "converted":    bool(converted) != (bool(p.get("turn_over")) or turned_auto),
             "turned_over":  bool(p.get("turn_over")),
+            "turned_auto":  bool(turned_auto),
             "field_tilt_xz": field_xz,
             "field_tilt_yz": field_yz,
         },
@@ -951,6 +1079,7 @@ def run_pvisual(file_path: str, params: dict = None, log_fn=print) -> dict:
             "mean_length":        float(mean_length),
             "mean_length_conf":   float(mean_length_conf),
             "mean_depth":         float(mean_depth),
+            "f_y":                float(f_y),          # wall dominance (see _wall_dominance)
             # per-slice local-depth spread: SD of the valid per-slice depths over the
             # central 80% of the channel length (first/last 10% of valid slices
             # excluded by position). Same depth definition as mean_depth, applied to

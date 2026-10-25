@@ -31,7 +31,7 @@ _RQ_DEFAULTS = {
                             #   across comparisons by sampling every pair the same way.
     "grid_res":     0,      # if >0, legacy fixed NxN square grid (overrides spacing)
     "smooth_sigma": 0.0,    # µm gaussian blur before gradient (min 1 cell enforced)
-    "max_res":      2000,   # cap on cells per axis
+    "max_cells":    8_000_000,  # cap on the cells of the common grid (memory of a browser tab)
     "cad":          False,  # force CAD/idealized mode (reliable; set by caller)
     "cad_tex_tol":  1.5,    # µm; floor microtexture below this => idealized (auto hint,
                             #   reliable for wider channels; use `cad` for narrow CAD)
@@ -77,7 +77,12 @@ def _load_cloud(path, p, log_fn):
         return np.column_stack([xp, yp, zp])
     delim = _detect_delimiter(path, p["skip_rows"])
     log_fn(f"  Delimiter: {repr(delim) if delim else 'whitespace (auto-detected)'}")
-    return np.loadtxt(path, skiprows=p["skip_rows"], delimiter=delim)
+    pts = np.loadtxt(path, skiprows=p["skip_rows"], delimiter=delim)
+    finite = np.isfinite(pts[:, :3]).all(axis=1)
+    if not finite.all():           # points without a number are left out (2026-10-25)
+        log_fn(f"  Left out : {int((~finite).sum()):,} points without a number (NaN or infinite)")
+        pts = pts[finite]
+    return pts
 
 
 def run_rq_gradient(file1: str, file2: str,
@@ -152,17 +157,23 @@ def _gradient_metrics(c1, c2, p, log_fn) -> dict:
     # cell is centred on its point, so the end cells reach past the overlap by up to half a
     # cell. Cells running from one point to the next put their edges on the points of a surface
     # sampled on an axis-aligned 5 um lattice, where rounding then decided the cell of every
-    # point. Outside 20 to max_res points per axis the extent is divided evenly instead.
+    # point. The spacing holds at any length (2026-10-25: beyond 2000 points per axis the extent
+    # was divided evenly instead, so long crops had cells larger along the channel than across);
+    # only a grid too large for the memory of a browser tab, or an overlap under 20 cells, stops.
     sp = float(p.get("grid_spacing", 5.0)) or 5.0
 
     def _axis(lo, hi):
         if p.get("grid_res"):
             return np.linspace(lo, hi, int(p["grid_res"]))
         n = int(np.ceil((hi - lo) / sp - 0.5 - 1e-9)) + 1
-        if 20 <= n <= p["max_res"]:
-            return lo + sp * np.arange(n)
-        return np.linspace(lo, hi, int(np.clip(n, 20, p["max_res"])))
+        if n < 20:
+            raise ValueError(f"The two surfaces overlap over {hi - lo:.0f} µm, fewer than 20 grid cells of "
+                             f"{sp:g} µm: check that A and B are crops of the same channel, or use a smaller grid spacing.")
+        return lo + sp * np.arange(n)
     xi, yi = _axis(x_min, x_max), _axis(y_min, y_max)
+    if len(xi) * len(yi) > int(p.get("max_cells") or 8_000_000):
+        raise ValueError(f"The common grid would have {len(xi) * len(yi) / 1e6:.1f} million cells of {sp:g} µm, more "
+                         f"than a browser tab can hold: use a larger grid spacing (Settings, Comparison) or crop the surfaces.")
     res_x, res_y = len(xi), len(yi)
     XI, YI = np.meshgrid(xi, yi)
     ncells = res_x * res_y
@@ -266,6 +277,7 @@ def _gradient_metrics(c1, c2, p, log_fn) -> dict:
         mmask = valid & (ZI1 < thr) & (ZI2 < thr)
         if mmask.sum() < 10:                       # fallback if channel too small
             mmask = valid
+            log_fn("  QA: fewer than 10 cells lie in the channel interior of both surfaces; the whole overlap is used")
     else:
         mmask = valid
     log_fn(f"  Metric cells (channel interior, frac={cf}) : {mmask.sum():,}")

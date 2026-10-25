@@ -69,6 +69,7 @@ with sync_playwright() as p:
     check("floor width (um)", ch.get("floor_width"), e["floor_width_um"], 0.15)
     check("depth (um)", ch.get("mean_depth"), e["depth_um"], 0.15)
     check("wall angle (deg)", ch.get("wall_angle_deg"), e["wall_angle_deg"], 0.06)
+    check("wall dominance f_y", ch.get("f_y"), e["wall_dominance_fy"], 0.0006)
 
     page.click("#use-crop-a"); wait_status(page, "placed as Surface A", 120)
 
@@ -77,6 +78,7 @@ with sync_playwright() as p:
     page.click("#run-pvisual"); wait_status(page, "Surface analysis complete", a.timeout)
     ch = page.evaluate("() => session.analyses[session.analyses.length - 1].channel")
     check("part floor width (um)", ch.get("floor_width"), exp["single_surface"][f]["floor_width_um"], 0.15)
+    check("part wall dominance", ch.get("f_y"), exp["single_surface"][f]["wall_dominance_fy"], 0.0006)
     page.click("#use-crop-b"); wait_status(page, "placed as Surface B", 120)
 
     t1 = time.time(); page.click("#run-gradient"); wait_status(page, "Comparison complete", a.timeout)

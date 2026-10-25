@@ -93,6 +93,9 @@ const _serial       = { pvisual: 0, rq_gradient: 0 };   // results so far, for t
 let _restoring      = null;     // {n, view} while the results of an opened session are rebuilt
 let _sessionName    = "";
 let _reporting      = false;    // a report is being put together
+let _opening        = false;    // a session file is being read and restored
+let _exporting      = false;    // a figure is being drawn for an export (it shares the off-screen stage with the report)
+const busy = () => running || _reporting || _opening;   // nothing may start, be removed or be replaced meanwhile
 let _reportHtml     = null;
 let _section        = null;     // the section profile on screen
 let _autoSkipped    = 0;        // header lines the engine skipped by itself in the run in progress
@@ -228,7 +231,11 @@ function startWorker() {
         if (/^rt-/.test(e.data.id || "")) {                                // a rebuild the engine could not do
           const rid = String(e.data.id).slice(3), r = _A[rid] || _C[rid];
           if (r) {
-            r.rebuilding = false; r.again = false; r.held = false;
+            // only the engine's own "no longer held" means it has lost the result; after another
+            // failure (memory for a Very high mesh, say) it still holds it (2026-10-25)
+            r.rebuilding = false; r.again = false;
+            if (/no longer held/i.test(message)) r.held = false;
+            if (_restoring && --_restoring.n <= 0) _restoring = null;    // a session restore does not wait for it
             if (r.id === _curA) selectAnalysis(r.id);
             if (r.id === _curC) selectComparison(r.id);
           }
@@ -239,7 +246,11 @@ function startWorker() {
                                  || (/^rt-/.test(e.data.id || "") ? "The figures could not be drawn again" : null))
                    : _pendingKind === "pvisual" ? "The analysis stopped" : _batchRunning ? "The batch stopped" : "The comparison stopped";
         const fatal = FATAL_ERR.test(message);
-        const [short, long] = explainError(message, fatal);
+        let [short, long] = explainError(message, fatal);
+        // a session file that cannot be read: in words, not NumPy's message (which can even
+        // suggest loading the file unsafely)
+        if (prefix === "session-open" && !fatal && !/out of memory|MemoryError/i.test(message))
+          [short, long] = [t("damaged session file"), t("The session file is damaged or is not a MaRQ session. The log has the details.")];
         if (isRun && _pendingKind === "pvisual") _file1Failed = true;
         if (isRun) _example = null;
         if (isRun || fatal) setRunning(false);
@@ -411,14 +422,18 @@ function guessUnits(bytes, name) {
     let i = Math.floor(n * k / K);
     if (i > 0) { i = bytes.indexOf(10, i) + 1; if (i <= 0) break; }
     const j = bytes.indexOf(10, i);
-    const p = dec.decode(bytes.subarray(i, j < 0 ? n : j)).trim().split(/[\s,;]+/);
+    let line = dec.decode(bytes.subarray(i, j < 0 ? n : j)).trim();
+    if (/;/.test(line) && /\d,\d/.test(line) && !/\d\.\d/.test(line)) line = line.replace(/,/g, ".");   // decimal commas
+    const p = line.split(/[\s,;]+/);
     const v = p.slice(0, 3).map(Number);
     if (p.length >= 3 && v.every((x) => isFinite(x))) { xs.push(v[0]); ys.push(v[1]); }
   }
   if (xs.length < 20) return null;
   const span = (a) => a.reduce((m, x) => Math.max(m, x), -Infinity) - a.reduce((m, x) => Math.min(m, x), Infinity);
   const s = Math.max(span(xs), span(ys));
-  const unit = !(s > 0) ? null : s <= 0.5 ? "metres" : s <= 150 ? "millimetres" : s >= 150000 ? "nanometres" : null;
+  // a scan of a microchannel spans about 0.1 to 30 mm: up to 0.05 it is in metres (50 mm), above that
+  // and up to 150 in millimetres (a 0.3 mm scan in millimetres is not taken for metres)
+  const unit = !(s > 0) ? null : s <= 0.05 ? "metres" : s <= 150 ? "millimetres" : s >= 150000 ? "nanometres" : null;
   return unit ? { unit, scale: UNIT_SCALE[unit], span: s } : null;
 }
 
@@ -499,14 +514,14 @@ function updateBatchCount() {
 }
 
 function updateButtons() {
-  const idle = ready && !running && !_reporting;
+  const idle = ready && !busy();
   document.getElementById("run-pvisual").disabled  = !(idle && files["1"]);
   document.getElementById("run-gradient").disabled = !(idle && files["A"] && files["B"]);
   document.getElementById("batch-run").disabled    = !(idle && files["A"] && batchFiles.length);
   const crop = idle && _cropAvailable;
   ["download-crop", "use-crop-a", "use-crop-b"].forEach((id) => document.getElementById(id).disabled = !crop);
   document.getElementById("export-figure").disabled = !(idle && (_have.pvisual || _have.rq_gradient));
-  document.getElementById("export-report").disabled = !(idle && [...Object.values(_A), ...Object.values(_C)].some((r) => r.held && r.props));
+  document.getElementById("export-report").disabled = !(idle && !_exporting && [...Object.values(_A), ...Object.values(_C)].some((r) => r.held && r.props));
   const hasData = session.analyses.length || session.comparisons.length;
   document.getElementById("export-json").disabled = !hasData;
   document.getElementById("export-csv").disabled  = !hasData;
@@ -842,7 +857,7 @@ function viewOpts() {
 
 function runPvisual() {
   const f = files["1"];
-  if (!f || !ready || running || !checkParams("p-")) return;
+  if (!f || !ready || busy() || !checkParams("p-")) return;
   setRunning(true, "pvisual"); clearLog();
   const params = getPvisualParams();
   if (f.scale) params.input_scale = f.scale;           // a file not in micrometres, converted by the engine
@@ -855,7 +870,7 @@ function runPvisual() {
 
 function runGradient(force) {
   const a = files["A"], b = files["B"];
-  if (!a || !b || !ready || running || !checkParams("g-")) return;
+  if (!a || !b || !ready || busy() || !checkParams("g-")) return;
   if (force !== true && sameBytes(a.content, b.content)) {
     askUser(t("A and B are the same file"),
       t("Surfaces A and B hold the same points, so the comparison gives RQ = 1. Open or keep another surface as B."),
@@ -873,7 +888,7 @@ function runGradient(force) {
 
 function runBatch(force) {
   const a = files["A"];
-  if (!a || !batchFiles.length || !ready || running || !checkParams("g-")) return;
+  if (!a || !batchFiles.length || !ready || busy() || !checkParams("g-")) return;
   // the contents, not the names: files with the points of A, and second copies within the batch
   const same = batchFiles.filter((f) => sameBytes(f.content, a.content));
   const again = batchFiles.filter((f, i) => !same.includes(f) && batchFiles.findIndex((g) => sameBytes(g.content, f.content)) !== i);
@@ -1000,10 +1015,14 @@ function markChangedParams() {
 // A result keeps the settings it was made with; when those in the dialog differ, its node in the
 // browser is marked and Properties says which settings changed.
 
+// the display cell and the display smoothing of an analysis change its figures, not its numbers
+const DISPLAY_ONLY = ["display_cell", "smooth_sigma"];
+
 function changedSince(kind, params) {
   if (!params) return [];
   const now = kind === "pvisual" ? getPvisualParams() : getGradientParams();
-  return Object.keys(now).filter((k) => params[k] != null && Number(params[k]) !== Number(now[k]));
+  return Object.keys(now).filter((k) => !(kind === "pvisual" && DISPLAY_ONLY.includes(k))
+                                        && params[k] != null && Number(params[k]) !== Number(now[k]));
 }
 
 function paramLabel(kind, key) {
@@ -1122,6 +1141,7 @@ const TIPS = {
   floor_length: "Channel length along the centre line at the floor level: median of the grid lines along the channel near its centre line, each end read from the outside in, with their standard deviation.",
   opening_length: "Channel length along the centre line at the opening level.",
   orientation: "Whether the feature was a depression, or a protrusion rotated to a depression (a proper rotation, so handedness is kept).",
+  f_y: "Wall dominance f_y: the share of the squared slope carried by the slope across the channel, over the channel interior (deeper than 0.20 of the depth) of the central 60 % of the crop, on a grid of the voxel size. Near 1, the slopes, and with them RQd, are governed by the sidewalls.",
   RQ:   "Pearson correlation of the two height maps over the channel-interior mask.",
   RQdx: "Pearson correlation of the signed slopes along the channel over the mask.",
   RQdy: "Pearson correlation of the signed slopes across the channel over the mask.",
@@ -1131,23 +1151,9 @@ const TIPS = {
 const prow = (label, val, tip, cls = "") =>
   `<div class="prow ${cls}" title="${esc(tip ? t(tip) : "")}"><span class="pk">${label}</span><span class="pv">${val}</span></div>`;
 
-function renderPvisual(result, retheme, msg = {}) {
-  const aid = msg.aid || (_run && _run.aid) || ("a" + (++_aSeq));
-  let a = _A[aid];
-  if (!a) {                                   // a new analysis (the scan slot may hold another file by now)
-    const file = (_run && _run.file) || "";
-    a = _A[aid] = { id: aid, file, name: uniqueName(stem(file) || "surface"), record: null, figs: null, props: null,
-                    held: true, staleKeys: new Set(), rebuilding: false, crop: { filename: null, available: false, text: null } };
-  }
-  // a redraw of some figures replaces those; the others keep theirs, and stay stale
-  a.figs = msg.partial && a.figs ? { ...a.figs, ...result.figures } : result.figures;
-  if (!msg.partial || !a.staleKeys) a.staleKeys = new Set();
-  Object.keys(result.figures || {}).forEach((k) => a.staleKeys.delete(k));
-  a.held = true; a.rebuilding = false; a.propsLang = LANG;
-  if (a.again) { a.again = false; a.staleKeys = new Set(Object.keys(a.figs)); }   // the options changed during the redraw
-  (msg.dropped || []).forEach((id) => { if (_A[id]) _A[id].held = false; });
-  const fname = a.file;
-  const ch = result.channel_info, rot = result.rotation_info, rgh = result.roughness_info;
+// the properties of an analysis, from its results (as they come from the engine, or as kept in
+// the session record: the report rebuilds those of results not opened yet, or made in another language)
+function analysisProps(a, ch, rot, rgh) {
   const floorPct = Math.round((ch.floor_width_frac != null ? ch.floor_width_frac : 0.90) * 100);
   const orient = t(!rot.converted ? "depression" : rot.turned_over ? "raised, turned over (Settings)" : "protrusion, rotated");
   const wa = ch.wall_angle_deg != null ? ch.wall_angle_deg : ch.draft_angle_deg;
@@ -1163,7 +1169,7 @@ function renderPvisual(result, retheme, msg = {}) {
   const scale = ((a.record && a.record.parameters) || (_run && _run.params) || {}).input_scale;
   const unitOf = Object.keys(UNIT_SCALE).find((u) => UNIT_SCALE[u] === scale);
 
-  a.props = `
+  return `
     <div class="pgroup"><div class="pgroup-head">${t("Channel geometry")}</div>
       ${prow(`${t("Floor width")} <small>${t("{p} % of depth", { p: floorPct })}</small>`, fmt(ch.floor_width, 1) + UM, TIPS.floor_width, "key big")}
       ${prow(t("Channel depth"), fmt(ch.mean_depth, 1) + UM, TIPS.depth, "key big")}
@@ -1171,6 +1177,7 @@ function renderPvisual(result, retheme, msg = {}) {
       ${prow(`${t("Width variation")} <small>${t("SD, central 80 %")}</small>`, fmt(ch.floor_width_conf, 1) + UM, TIPS.width_sd)}
       ${prow(t("Opening width"), fmtPm(ch.opening_width, ch.opening_width_conf, 1) + UM, TIPS.opening_width)}
       ${prow(t("Corner rounding"), `${t("floor")} ${fmt(ch.floor_corner_um, 1)} · ${t("rim")} ${fmt(ch.rim_corner_um, 1)}` + UM, TIPS.corners)}
+      ${ch.f_y != null ? prow(`${t("Wall dominance")} <small>f<sub>y</sub></small>`, fmt(ch.f_y, 3), TIPS.f_y) : ""}
       ${prow(t("Floor length"), fmtPm(ch.mean_length, ch.mean_length_conf, 1) + UM, TIPS.floor_length)}
       ${prow(t("Opening length"), fmtPm(ch.opening_length, ch.opening_length_conf, 1) + UM, TIPS.opening_length)}
       ${prow(t("Feature"), orient, TIPS.orientation)}
@@ -1187,6 +1194,27 @@ function renderPvisual(result, retheme, msg = {}) {
       ${prow(t("Voxel size"), fmt(rot.voxel_size, 1) + UM)}
       ${unitOf ? prow(t("Point cloud units"), esc(t("{unit}, converted", { unit: t(unitOf) }))) : ""}
     </div>`;
+}
+
+function renderPvisual(result, retheme, msg = {}) {
+  if (retheme && msg.aid && !_A[msg.aid]) return;      // removed while its figures were drawn again: nothing to show
+  const aid = msg.aid || (_run && _run.aid) || ("a" + (++_aSeq));
+  let a = _A[aid];
+  if (!a) {                                   // a new analysis (the scan slot may hold another file by now)
+    const file = (_run && _run.file) || "";
+    a = _A[aid] = { id: aid, file, name: uniqueName(stem(file) || "surface"), record: null, figs: null, props: null,
+                    held: true, staleKeys: new Set(), rebuilding: false, crop: { filename: null, available: false, text: null } };
+  }
+  // a redraw of some figures replaces those; the others keep theirs, and stay stale
+  a.figs = msg.partial && a.figs ? { ...a.figs, ...result.figures } : result.figures;
+  if (!msg.partial || !a.staleKeys) a.staleKeys = new Set();
+  Object.keys(result.figures || {}).forEach((k) => a.staleKeys.delete(k));
+  a.held = true; a.rebuilding = false; a.propsLang = LANG;
+  if (a.again) { a.again = false; a.staleKeys = new Set(Object.keys(a.figs)); }   // the options changed during the redraw
+  (msg.dropped || []).forEach((id) => { if (_A[id]) _A[id].held = false; });
+  const fname = a.file;
+  const ch = result.channel_info, rot = result.rotation_info, rgh = result.roughness_info;
+  a.props = analysisProps(a, ch, rot, rgh);
 
   if (!retheme) {
     _file1Analysed = !!(files["1"] && _run && files["1"].content === _run.content);   // not a file opened meanwhile
@@ -1292,7 +1320,7 @@ function viewKeys(id) {
 
 function removeAnalysis(aid) {
   const a = _A[aid];
-  if (!a || running) return;
+  if (!a || busy()) return;
   askUser(t("Remove the analysis?"),
     t("Remove the analysis of <b>{name}</b> from this session? Its results leave the session and the exports.", { name: esc(a.name) }),
     [[t("Cancel"), null, true], [t("Remove"), () => forgetAnalysis(aid)]]);
@@ -1300,7 +1328,7 @@ function removeAnalysis(aid) {
 
 function forgetAnalysis(aid) {
   const a = _A[aid];
-  if (!a || running) return;
+  if (!a || busy()) return;
   if (ready) worker.postMessage({ type: "forget", data: { aid } });
   const i = session.analyses.indexOf(a.record);
   if (i >= 0) session.analyses.splice(i, 1);
@@ -1333,6 +1361,7 @@ function showStart() {
 const voxTag = (v) => String(Math.abs(v - Math.round(v)) < 1e-6 ? Math.round(v) : +Number(v).toFixed(2));
 
 function renderGradient(result, retheme, msg = {}) {
+  if (retheme && msg.cid && !_C[msg.cid]) return;      // removed (or replaced by the same pair compared again) during the redraw
   const cid = msg.cid || (_run && _run.cid) || ("c" + (++_cSeq)), batch = msg.batch || null;
   let c = _C[cid];
   if (!c) {                                    // a new comparison: the names of this pair (the slots may hold other files by now)
@@ -1387,8 +1416,8 @@ function renderGradient(result, retheme, msg = {}) {
 }
 
 // the properties of a comparison: its surfaces, the four correlations and notes
-function comparisonProps(c) {
-  const m = c.metrics, names = c.names;
+function comparisonProps(c, m = c.metrics) {
+  const names = c.names;
   // correlations to three decimals, as in the batch table and the report
   const metric = (name, label, r, rmse, unit, key) =>
     `<div class="prow ${key ? "key big" : "big"}" title="${esc(t(TIPS[name]))}"><span class="pk">${label}</span><span class="pv">${fmt(r, 3)}</span>
@@ -1484,11 +1513,11 @@ function rebuildComparison(cid, thenView, keys) {
 
 function removeComparison(cid) {
   const c = _C[cid];
-  if (!c || running) return;
+  if (!c || busy()) return;
   askUser(t("Remove the comparison?"),
     t("Remove the comparison of <b>{b}</b> with <b>{a}</b> from this session? Its results leave the session and the exports.",
       { a: esc(stem(c.names[0])), b: esc(c.batch ? t("{n} surfaces", { n: c.batch.rows.length }) : stem(c.names[1])) }),
-    [[t("Cancel"), null, true], [t("Remove"), () => dropComparison(cid, false)]]);
+    [[t("Cancel"), null, true], [t("Remove"), () => { if (!busy()) dropComparison(cid, false); }]]);
 }
 
 // a comparison out of the session; keepRecords: its rows stay in the exports (a newer comparison
@@ -2510,6 +2539,7 @@ async function pngWithDpi(blob, dpi) {
 }
 
 function runExport() {
+  if (_reporting || _exporting) { setStatus("Wait until the report or the figure in progress is ready", "info"); return; }
   const [kind, key] = document.getElementById("exp-figure").value.split(":");
   const format = document.getElementById("exp-format").value;
   const themeSel = document.getElementById("exp-theme").value;
@@ -2539,9 +2569,12 @@ function runExport() {
                 scale: journal ? journal.dpi / 96 : format === "png3" ? 3 : 2 };
   saveFile(`${exportName(kind, key, aid)}.${req.format}`, req.format === "png" ? "image/png" : "image/svg+xml", async () => {
     setStatus("Preparing the figure…", "info");
-    const m = await ask("export_figure", { kind, key, aid, cid: kind === "rq_gradient" ? _curC : null, theme, lang, quality: currentQuality(),
-                                           palette: currentPalette(), equal: currentEqual(), request: req }, "fig");
-    return figureBlob(JSON.parse(m.data), req);
+    _exporting = true; updateButtons();
+    try {
+      const m = await ask("export_figure", { kind, key, aid, cid: kind === "rq_gradient" ? _curC : null, theme, lang, quality: currentQuality(),
+                                             palette: currentPalette(), equal: currentEqual(), request: req }, "fig");
+      return await figureBlob(JSON.parse(m.data), req);
+    } finally { _exporting = false; updateButtons(); }
   }).then((ok) => {
     if (!ok) return;
     if (journal) setStatus("Figure exported ({fmt}, {w} × {h} mm at {dpi} dots per inch)", "success",
@@ -2610,7 +2643,8 @@ function exportCSV() {
                 "voxel_size_used", "rotation_deg", "tilt_xz_deg", "tilt_yz_deg", "opening_length_sd",
                 // added 2026-10-25 at the end, so that scripts reading the earlier columns keep working
                 "fieldL_Ssk", "fieldL_Sku", "fieldR_Ssk", "fieldR_Sku", "mid_width_sd", "wall_angle_line_sd",
-                "line_valid_floor", "line_valid_opening", "line_valid_wall", "input_scale", "turned_over"].join(","));
+                "line_valid_floor", "line_valid_opening", "line_valid_wall", "input_scale", "turned_over",
+                "wall_dominance_fy"].join(","));
     session.analyses.forEach((a) => {
       const c = a.channel, p = a.parameters, rg = R(a.roughness);
       const fl = R(rg.floor), l = R(rg.surf_left), r = R(rg.surf_right);
@@ -2625,7 +2659,8 @@ function exportCSV() {
                   p.margin, p.display_cell, p.smooth_sigma, p.n_slices, p.skip_rows,
                   a.rotation.voxel_size, a.rotation.phi, a.rotation.xz_tilt, a.rotation.yz_tilt, c.opening_length_conf,
                   l.Ssk, l.Sku, r.Ssk, r.Sku, c.mid_width_line_std, c.wall_angle_line_std,
-                  c.line_valid_floor, c.line_valid_opening, c.line_valid_wall, p.input_scale || 1, a.rotation.turned_over ? 1 : 0].map(csvCell).join(","));
+                  c.line_valid_floor, c.line_valid_opening, c.line_valid_wall, p.input_scale || 1, a.rotation.turned_over ? 1 : 0,
+                  c.f_y].map(csvCell).join(","));
     });
     lines.push("");
   }
@@ -2680,11 +2715,11 @@ function handleSessionInput(input) {
 }
 
 function openSessionFile(file) {
-  if (!ready || running || _reporting) {
+  if (!ready || busy()) {
     showNotice(null, t("Wait until the engine is ready, then open the session again."), "warn");
     return;
   }
-  if (resultCount() > _savedCount) {
+  if (unsaved()) {
     askUser(t("Replace the results?"), t("The results on screen are not saved. Open the session anyway and replace them?"),
       [[t("Cancel"), null, true], [t("Open the session"), () => readSessionFile(file)]]);
     return;
@@ -2695,14 +2730,19 @@ function openSessionFile(file) {
 function readSessionFile(file) {
   const r = new FileReader();
   r.onload = (ev) => {
+    if (busy()) return;
     _sessionName = file.name;
     setStatus("Opening the session…", "info");
     const bytes = new Uint8Array(ev.target.result);
+    // nothing may start or be removed until the session has replaced the results: a run started
+    // meanwhile would take an id of the session's (2026-10-25)
+    _opening = true; updateButtons();
     ask("open_session", { bytes }, "session-open").then((m) => {
       let st = null;
       try { st = JSON.parse(m.state); } catch {}
+      _opening = false;
       restoreSession(st, m.have || {}, m.slots || {});
-    }).catch(() => {});
+    }).catch(() => {}).finally(() => { _opening = false; updateButtons(); });
   };
   r.onerror = () => showNotice("The file could not be opened", t("{name} could not be read. If it is on a network or cloud drive, copy it to this computer first.", { name: file.name }));
   r.readAsArrayBuffer(file);
@@ -2714,6 +2754,7 @@ function restoreSession(st, have, slots) {
     return;
   }
   hideNotice(); closeSection();
+  _xs = null;                      // the session's ids repeat those of the page: no cross-section range of another channel
   session.started = st.session.started || session.started;
   session.analyses = st.session.analyses || [];
   session.comparisons = st.session.comparisons || [];
@@ -2827,10 +2868,28 @@ function reportFigure(fig, k) {
 }
 
 
+// the properties of a result in the language on screen, made again from its session record when
+// they were never made (a result of an opened session not looked at yet) or made in another
+// language; false when there is nothing to make them from
+function ensureProps(r, kind) {
+  if (r.props && r.propsLang === LANG) return true;
+  if (kind === "pvisual") {
+    const rec = r.record;
+    if (!rec || !rec.channel || !rec.rotation) return !!r.props;
+    r.props = analysisProps(r, rec.channel, rec.rotation, rec.roughness);
+  } else {
+    const m = r.metrics || (r.records.length ? r.records.at(-1).metrics : null);
+    if (!m) return !!r.props;
+    r.props = comparisonProps(r, m);
+  }
+  r.propsLang = LANG;
+  return true;
+}
+
 async function makeReport() {
-  if (!ready || running || _reporting) return;
-  const items = [...Object.values(_A).filter((a) => a.props).map((a) => ["pvisual", a.id]),
-                 ...Object.values(_C).filter((c) => c.props).map((c) => ["rq_gradient", c.id])];
+  if (!ready || busy() || _exporting) return;
+  const items = [...Object.values(_A).filter((a) => ensureProps(a, "pvisual")).map((a) => ["pvisual", a.id]),
+                 ...Object.values(_C).filter((c) => ensureProps(c, "rq_gradient")).map((c) => ["rq_gradient", c.id])];
   if (!items.length) return;
   _reporting = true; updateButtons();
   document.getElementById("spinner").style.display = "inline-block";
@@ -2845,7 +2904,10 @@ async function makeReport() {
       pages.push(reportPage(kind, imgs, logo, aid));
     }
     _reportHtml = reportDocument(pages);
-    document.getElementById("report-frame").srcdoc = _reportHtml;
+    const frame = document.getElementById("report-frame");
+    // Escape closes the dialog also while the focus is inside the report (its own document)
+    frame.onload = () => { try { frame.contentDocument.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal("modal-report"); }); } catch {} };
+    frame.srcdoc = _reportHtml;
     openModal("modal-report");
     setStatus("Report ready", "success");
   } catch (err) {
@@ -2964,7 +3026,7 @@ function setupFileMenu() {
   menu.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { closeFileMenu(); fileCommand(b.dataset.cmd); }));
 }
 function openFileMenu() {
-  const idle = ready && !running && !_reporting, data = resultCount() > 0;
+  const idle = ready && !busy(), data = resultCount() > 0;
   const any = _have.pvisual || [...Object.values(_A), ...Object.values(_C)].some((r) => r.held);
   const on = { "open-cloud": true, "open-session": idle, "save-session": idle && any, example: idle, report: idle && any, figure: idle && any, json: data, csv: data };
   const menu = document.getElementById("file-menu");
@@ -3004,9 +3066,11 @@ function heartbeat() {
 function sayGoodbye() { try { navigator.sendBeacon("__bye?id=" + PAGE_ID); } catch {} }
 
 // Results not saved yet (as a session, JSON or CSV): closing the window asks first.
-let _savedCount = 0;
+// Which records were saved, not how many: one removed and another added is still unsaved (2026-10-25).
+let _saved = new Set();
 function resultCount() { return session.analyses.length + session.comparisons.length; }
-function markSaved() { _savedCount = resultCount(); }
+function markSaved() { _saved = new Set([...session.analyses, ...session.comparisons]); }
+function unsaved() { return [...session.analyses, ...session.comparisons].some((r) => !_saved.has(r)); }
 
 function stampNow() {
   const d = new Date();
@@ -3202,6 +3266,7 @@ function setupTree() {
   const tree = document.getElementById("tree");
   tree.querySelectorAll(".trow").forEach((r) => { r.tabIndex = 0; });
   tree.addEventListener("keydown", (e) => {
+    if (e.target.closest("button")) return;      // a button in a row (×) acts by itself: Enter and Space click it
     const row = e.target.closest(".trow");
     if (row && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); row.click(); }
   });
@@ -3327,7 +3392,7 @@ window.addEventListener("DOMContentLoaded", () => {
   setInterval(heartbeat, 20000);
   window.addEventListener("pagehide", sayGoodbye);
   window.addEventListener("pageshow", (e) => { if (e.persisted) heartbeat(); });
-  window.addEventListener("beforeunload", (e) => { if (resultCount() > _savedCount) { e.preventDefault(); e.returnValue = "unsaved"; } });
+  window.addEventListener("beforeunload", (e) => { if (unsaved()) { e.preventDefault(); e.returnValue = "unsaved"; } });
   setupFileMenu();
   setupDropZone("file1-zone", "1");
   setupDropZone("fileA-zone", "A");
