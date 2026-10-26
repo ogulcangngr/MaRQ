@@ -6,7 +6,9 @@
 
 /* Every size is in rem. From 1366 pixels up the root size is 16 px and a wider window gives the
    viewport more room; below, it shrinks with the window to 13 px at 1024 pixels, so the ribbon
-   and the panes keep their proportions on small laptop screens. */
+   and the panes keep their proportions on small laptop screens. app.js (applyUiSize) sets the root
+   size itself, from the window's width and height, the size chosen under Options, and a browser
+   zoom it undoes; this rule only holds until it runs. */
 html { font-size: clamp(13px, 0.877vw + 4.02px, 16px); }
 
 :root {
@@ -127,6 +129,11 @@ sub { font-size: .72em; vertical-align: -.25em; line-height: 0; }
 .menu button span { flex: 1; }
 .menu kbd { font-family: var(--sans); font-size: .72rem; color: var(--text3); }
 .menu-sep { height: 1px; background: var(--line); margin: .3rem .2rem; }
+/* the Options menu: a heading, the choices with a tick on the chosen one, a note */
+.menu-head { font-size: .7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text3); padding: .35rem .6rem .2rem; }
+.menu button[role="menuitemradio"] .ico { visibility: hidden; color: var(--accent); }
+.menu button[aria-checked="true"] .ico { visibility: visible; }
+.menu-note { font-size: .74rem; line-height: 1.4; color: var(--text3); padding: .25rem .6rem .35rem; max-width: 17rem; white-space: normal; }
 #theme-toggle .ico-moon { display: none; }
 :root[data-theme="dark"] #theme-toggle .ico-sun { display: none; }
 :root[data-theme="dark"] #theme-toggle .ico-moon { display: block; }
@@ -335,25 +342,25 @@ sub { font-size: .72em; vertical-align: -.25em; line-height: 0; }
 .viewer-canvas.panning { cursor: move; }
 .viewer-canvas.on-cube { cursor: pointer; }
 .colorbar3d { position: absolute; right: 1.2rem; top: 9.5rem; bottom: 4.6rem; width: 4.5rem; pointer-events: none; display: none;
-  font-size: calc(.7rem + 1px); color: var(--text2); }
+  font-size: calc(.7rem + .0625rem); color: var(--text2); }
 .colorbar3d.show { display: block; }
 .colorbar3d .cb-title { position: absolute; right: 0; top: -1.4rem; white-space: nowrap; font-weight: 600; color: var(--text2); text-align: right; }
 .colorbar3d .cb-bar { position: absolute; left: 0; top: 0; bottom: 0; width: .7rem; border-radius: .15rem; border: 1px solid var(--line-2); }
-.colorbar3d .cb-tick { position: absolute; left: 1rem; transform: translateY(-50%); font-size: calc(.68rem + 1px); white-space: nowrap; }
+.colorbar3d .cb-tick { position: absolute; left: 1rem; transform: translateY(-50%); font-size: calc(.68rem + .0625rem); white-space: nowrap; }
 .colorbar3d .cb-tick::before { content: ""; position: absolute; left: -.35rem; top: 50%; width: .25rem; height: 1px; background: var(--text3); }
 .scalebar3d { position: absolute; left: 1.1rem; bottom: 1.1rem; display: none; flex-direction: column; gap: .2rem; pointer-events: none;
-  font-size: calc(.72rem + 1px); color: var(--text2); }
+  font-size: calc(.72rem + .0625rem); color: var(--text2); }
 .scalebar3d.show { display: flex; }
 .scalebar3d .sb-line { height: .4rem; border: 1.5px solid var(--text2); border-top: none; }
 .badge3d { position: absolute; left: 1.1rem; top: .9rem; display: none; padding: .15rem .45rem; border-radius: var(--r); pointer-events: none;
-  font-size: calc(.74rem + 1px); font-weight: 600; color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent-line); }
+  font-size: calc(.74rem + .0625rem); font-weight: 600; color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent-line); }
 .badge3d.show { display: block; }
 .viewer-canvas.tool { cursor: crosshair; }
 .mk-dot { position: absolute; left: 0; top: 0; width: .7rem; height: .7rem; margin: -.35rem 0 0 -.35rem; border-radius: 50%; z-index: 6;
   background: var(--accent); border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.35); pointer-events: none; }
 .mk-label { position: absolute; left: 0; top: 0; z-index: 7; margin: -2.3rem 0 0 0; translate: -50% 0; pointer-events: none; white-space: nowrap;
   padding: .25rem .5rem; border-radius: var(--r); background: var(--pane); border: 1px solid var(--accent-line); box-shadow: var(--shadow-sm);
-  font-size: calc(.76rem + 1px); color: var(--text); }
+  font-size: calc(.76rem + .0625rem); color: var(--text); }
 .mk-label .pm { color: var(--text3); }
 .tool-hint { position: absolute; left: 50%; top: .8rem; transform: translateX(-50%); display: none; padding: .25rem .7rem; border-radius: var(--r);
   background: var(--pane); border: 1px solid var(--line-2); box-shadow: var(--shadow-sm); font-size: .78rem; color: var(--text2); pointer-events: none; z-index: 8; }
@@ -364,7 +371,7 @@ sub { font-size: .72em; vertical-align: -.25em; line-height: 0; }
   background: var(--pane-head); font-size: .8rem; }
 .sp-head b { font-weight: 600; }
 #sp-detail { color: var(--text2); font-size: .78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#section-plot { flex: 1; min-height: 0; }
+#section-host { flex: 1; min-height: 0; }
 #xs-view { display: flex; flex-direction: column; }
 .xs-bar { flex-shrink: 0; display: flex; align-items: center; flex-wrap: wrap; gap: .5rem 1rem; padding: .6rem 1rem .4rem; }
 .xs-lab { font-size: .8rem; color: var(--text2); font-weight: 600; }
@@ -374,7 +381,16 @@ sub { font-size: .72em; vertical-align: -.25em; line-height: 0; }
   font-size: .82rem; text-align: right; padding: 0 .4rem; }
 .xs-num input:focus { outline: none; border-color: var(--accent); }
 .xs-info { flex-shrink: 0; padding: 0 1rem .2rem; font-size: .78rem; color: var(--text2); }
-#xs-plot { flex: 1; min-height: 0; margin-bottom: 3.6rem; }
+#xs-host { flex: 1; min-height: 0; margin-bottom: 3.6rem; }
+/* a plot in a pane of its own size (the cross-section view, the section panel of the 3D views) */
+.plot-host { position: relative; overflow: hidden; }
+.plot-host > div { position: absolute; inset: 0; }
+/* a figure drawn at the size it has at 100 % and scaled with the interface as a whole (applyUiSize
+   in app.js): Plotly's legends, lines and markers, in page pixels, keep their proportions, and
+   Plotly undoes the scale for the pointer */
+html.ui-scaled .vp-layer.plot-container, html.ui-scaled .plot-host > div { right: auto; bottom: auto; transform-origin: 0 0;
+  transform: scale(var(--ui-k)); width: calc(100% / var(--ui-k)); height: calc(100% / var(--ui-k)); }
+html.ui-scaled .vp-layer.plot-container { height: calc((100% - 3.6rem) / var(--ui-k)); }
 #viewer3d.with-section .colorbar3d { bottom: calc(36% + 5rem); }
 
 /* navigation bar */
@@ -556,24 +572,41 @@ details.fold[open] > summary .tw { transform: rotate(90deg); }
 /* Plotly: no tool bar (the navigation bar replaces it); hover labels in the page font */
 .js-plotly-plot .plotly .modebar { display: none !important; }
 
-::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar { width: .625rem; height: .625rem; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 6px; border: 2px solid var(--pane); }
+::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: .375rem; border: .125rem solid var(--pane); }
+/* what the browser would draw at its own pixel size, which keeps a browser zoom that MaRQ undoes
+   (applyUiSize in app.js): the arrow of every select, sized with its text, and native check boxes */
+select { -webkit-appearance: none; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238a8a93' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important; background-position: right .45em center !important; background-size: .7em auto !important;
+  padding-right: 1.5em !important; }
+:where(input[type="checkbox"]) { width: .85rem; height: .85rem; }
+/* the sliders: a track and a handle in rem, as the browser's own keep their pixel size */
+input[type="range"] { -webkit-appearance: none; appearance: none; height: 1.1rem; background: transparent; cursor: pointer; }
+input[type="range"]::-webkit-slider-runnable-track { height: .25rem; border-radius: .125rem; background: var(--line-2); }
+input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: .85rem; height: .85rem; margin-top: -.3rem;
+  border: none; border-radius: 50%; background: var(--accent); }
+input[type="range"]::-moz-range-track { height: .25rem; border-radius: .125rem; background: var(--line-2); }
+input[type="range"]::-moz-range-thumb { width: .85rem; height: .85rem; border: none; border-radius: 50%; background: var(--accent); }
+input[type="range"]:focus-visible { outline: .125rem solid var(--accent); outline-offset: .125rem; }
+/* the spin arrows of a number field, at the browser's pixel size, leave the number no room in an
+   interface reduced to about half or less; the keys and the wheel still change it */
+html.ui-small input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+html.ui-small input[type="number"]::-webkit-inner-spin-button, html.ui-small input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text3); }
 * { scrollbar-color: var(--line-2) transparent; }
 
-@media (max-width: 1440px) {
-  .rpair { flex-direction: column; justify-content: center; gap: .05rem; padding: 0 .1rem; }
-  .rpair .rtool { width: auto; min-height: 0; height: 1.32rem; flex-direction: row; justify-content: flex-start; gap: .4rem;
-    padding: 0 .45rem; font-size: .78rem; white-space: nowrap; }
-  .rpair .rtool .ico { width: 1rem; height: 1rem; stroke-width: 1.6; }
-  .rpair .rtool .dot { top: .15rem; right: auto; left: 1.15rem; width: .4rem; height: .4rem; }
-}
-@media (max-width: 1100px) {
-  :root { --left: 16.5rem; --right: 16.5rem; }
-  #doc-title { display: none; }
-  .rtool { width: 3.8rem; }
-  .rgroup { padding: 0 .28rem; }
-  .rselect { gap: .4rem; }
-  .rselect select { min-width: 5.4rem; }
-}
+/* a window up to 1440 and up to 1100 screen pixels across, as the layout sees it (applyUiSize in
+   app.js sets the classes: media queries would read page pixels, which a browser zoom changes) */
+html.ui-mid .rpair { flex-direction: column; justify-content: center; gap: .05rem; padding: 0 .1rem; }
+html.ui-mid .rpair .rtool { width: auto; min-height: 0; height: 1.32rem; flex-direction: row; justify-content: flex-start; gap: .4rem;
+  padding: 0 .45rem; font-size: .78rem; white-space: nowrap; }
+html.ui-mid .rpair .rtool .ico { width: 1rem; height: 1rem; stroke-width: 1.6; }
+html.ui-mid .rpair .rtool .dot { top: .15rem; right: auto; left: 1.15rem; width: .4rem; height: .4rem; }
+html.ui-narrow { --left: 16.5rem; --right: 16.5rem; }
+html.ui-narrow #doc-title { display: none; }
+html.ui-narrow .rtool { width: 3.8rem; }
+html.ui-narrow .rgroup { padding: 0 .28rem; }
+html.ui-narrow .rselect { gap: .4rem; }
+html.ui-narrow .rselect select { min-width: 5.4rem; }

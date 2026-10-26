@@ -131,8 +131,14 @@ paketi geri getirir.
   kart adımlarını listeler, bitenleri ve sürmekte olanı işaretler, saniyeleri sayar ve *İptal*
   düğmesini taşır; toplu karşılaştırmada çifti ve bir ilerleme çubuğunu gösterir.
 - **Başlık çubuğu**: *Dosya* menüsü (nokta bulutu ya da oturum açma, oturumu kaydetme,
-  örnekle deneme, rapor ve dışa aktarmalar), dil (English, Türkçe), açık ya da koyu tema, yardım ve Hakkında.
-  Seçim yapılmamışsa MaRQ sistemin dilini ve temasını izler.
+  örnekle deneme, rapor ve dışa aktarmalar), *Seçenekler* menüsü, dil (English, Türkçe), açık ya da
+  koyu tema, yardım ve Hakkında. Seçim yapılmamışsa MaRQ İngilizce açılır ve sistemin temasını izler.
+- **Arayüz boyutu** (*Seçenekler*): *Otomatik* pencereye sığdırır, küçük ya da kısa bir pencerede
+  daha küçük; ya da %80 ile %150 arasında tek bir boyut. MaRQ seçilen boyutta kalır ve tarayıcının
+  yakınlaştırmasını (Chrome ve Edge'in MaRQ'nun adresi için hatırladığı Ctrl ile artı ya da eksi) geri
+  alır; böylece her zaman kendi boyutunda açılır. Şekiller de %100'deki gibi çizilip bütün olarak
+  boyuta göre ölçeklenir. Bir yakınlaştırma bulunduğunda bir bildirim bunu ve tarayıcıyı %100'e
+  döndüren tuşları (Ctrl ile 0, Mac'te Command ile 0) söyler.
 
 Bölmeler kenarları sürüklenerek boyutlandırılabilir. Model ağacının ve Özellikler'in
 başlığındaki düğme, daha geniş bir görünüm için o bölmeyi gizler; görünüm başlığının o

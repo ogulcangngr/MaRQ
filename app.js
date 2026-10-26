@@ -57,8 +57,80 @@ const PARAM_IDS = ["p-feature", "p-voxel", "p-fieldk", "p-cropx", "p-cropy", "p-
                    "p-skiprows", "g-spacing", "g-sigma"];
 const SHARED_PARAMS = ["p-skiprows"];          // settings of both the analysis and the comparison
 const LS = { params: "marq.params.v1", theme: "marq.theme", layout: "marq.layout2", equal: "marq.equal",
-             linkMaps: "marq.linkMaps", linkCams: "marq.linkCameras", lang: "marq.lang", tips: "marq.tips",
-             panes: "marq.panes", outline: "marq.outline" };
+             linkMaps: "marq.linkMaps", linkCams: "marq.linkCameras", lang: "marq.language", tips: "marq.tips",
+             panes: "marq.panes", outline: "marq.outline", uisize: "marq.uisize" };
+
+// ── Interface size ─────────────────────────────────────────────────────────────
+// Every size of the interface is in rem, and MaRQ sets the root size itself. Automatic fits the
+// window: 16 px from 1366 by 700 screen pixels up, smaller below (13 px at 1024 across, and with
+// the height too), down to 60 %; the sizes under Options hold one size. Either way a browser zoom
+// is undone, so MaRQ opens at its own size whatever zoom the browser remembers for its address:
+// Chrome and Edge, which the launcher opens, give the zoom as the window's outer width, in screen
+// pixels, over its inner width, in page pixels (other browsers give 1, and keep their zoom). The
+// figures are drawn at the size they have at 100 % and scaled by the same factor (_uiK) as a whole
+// (style.css, html.ui-scaled), so Plotly's legends, lines and markers, in page pixels, keep their
+// proportions; Plotly undoes the scale for the pointer.
+const UI_SIZES = ["auto", "0.8", "0.9", "1", "1.1", "1.25", "1.5"];
+const ZOOM_STEPS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5];
+let _uiK = 1, _uiZoom = 1, _uiSmallSaid = false, _uiZoomSaid = 1;
+
+function browserZoom() {
+  const r = window.outerWidth / window.innerWidth;
+  if (!(r > 0) || !isFinite(r)) return 1;
+  const z = ZOOM_STEPS.reduce((a, b) => (Math.abs(b - r) < Math.abs(a - r) ? b : a));
+  return Math.abs(z - r) / z < 0.06 ? z : 1;       // between the steps: the borders of a small window
+}
+function uiSizeSetting() {
+  let v = null;
+  try { v = localStorage.getItem(LS.uisize); } catch {}
+  return UI_SIZES.includes(v) ? v : "auto";
+}
+// the root size, _uiK, and the classes and the factor style.css uses (the narrow-window rules, the
+// scaled figures, whose new sizes their size observers pass on to Plotly)
+function applyUiSize() {
+  const z = browserZoom(), w = innerWidth * z, h = innerHeight * z, set = uiSizeSetting();
+  const s = set === "auto" ? Math.max(0.6, Math.min(1, (0.877 * w / 100 + 4.02) / 16, h / 700)) : parseFloat(set);
+  const k = Math.abs(s / z - 1) < 1e-3 ? 1 : s / z, changed = Math.abs(k - _uiK) > 1e-4;
+  _uiZoom = z; _uiK = k;
+  const root = document.documentElement;
+  root.style.fontSize = (16 * k).toFixed(3) + "px";
+  root.style.setProperty("--ui-k", String(k));
+  root.classList.toggle("ui-scaled", k !== 1);
+  root.classList.toggle("ui-small", k < 0.55);     // the spin arrows of the number fields would fill them
+  const across = set === "auto" ? w : w / s;       // the window's width as the layout sees it
+  root.classList.toggle("ui-mid", across <= 1440);
+  root.classList.toggle("ui-narrow", across <= 1100);
+  if (document.getElementById("options-menu")) updateOptionsMenu();
+  return changed;
+}
+// the keys that set the browser's zoom back to 100 %
+function zoomResetKeys() { return /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? "Command (⌘)" : "Ctrl"; }
+function noticeShown(title) {
+  return document.getElementById("vp-notice").style.display === "flex" && document.getElementById("vn-title").textContent === t(title);
+}
+// a browser zoom, which MaRQ undoes: said once for each zoom, with the keys that set the browser
+// back to 100 %; the notice goes when the zoom is back at 100 %
+function checkZoom() {
+  const z = browserZoom();
+  if (z === 1) {
+    _uiZoomSaid = 1;
+    if (noticeShown("Browser zoom detected")) hideNotice();
+    return;
+  }
+  if (z === _uiZoomSaid) return;
+  _uiZoomSaid = z;
+  showNotice("Browser zoom detected", () => t("The browser is zoomed to {z} %, which MaRQ undoes to keep its own size. To set the browser back to 100 %, press {key} and 0.",
+    { z: Math.round(z * 100), key: zoomResetKeys() }), "warn", false);
+}
+// a window too small for the interface even at the smallest automatic size: said once (after the
+// zoom notice, which it would hide)
+function checkSmallWindow() {
+  const z = browserZoom();
+  if (_uiSmallSaid || !(innerWidth * z < 900 || innerHeight * z < 520) || noticeShown("Browser zoom detected")) return;
+  _uiSmallSaid = true;
+  showNotice("The window is small", () => t("The MaRQ window leaves its views little room. Maximize the window for more room."), "warn", false);
+}
+applyUiSize();
 // Figures whose panels share one coordinate system: zoom and pan move all panels together.
 const LINKED_2D = { gradheight: true, gradslope: true };
 
@@ -202,7 +274,7 @@ function startWorker() {
         catch (err) {              // the interface must not stay "running" when a result cannot be shown
           appendLog("ERROR while showing the result: " + ((err && err.stack) || err));
           setStatus("Error: {msg}", "error", { msg: t("the result could not be shown") });
-          showNotice(null, t("The result could not be shown ({m}). The log has the details.", { m: (err && err.message) || String(err) }));
+          showNotice(null, () => t("The result could not be shown ({m}). The log has the details.", { m: (err && err.message) || String(err) }));
         } finally { if (!e.data.retheme) setRunning(false); }
         if (_rethemeQueued && !running) { _rethemeQueued = false; retheme(); }
         break;
@@ -327,12 +399,19 @@ function fileLine(row) {
 function skipRowsUsed() { return _autoSkipped || Math.round(num("p-skiprows", 0)); }
 
 // a message over the viewport, for errors
-function showNotice(title, body, level = "error") {
+// a number and its per cent sign on one line ("100 %" with a space that does not break)
+function keepPercent(s) { return String(s).replace(/(\d) %/g, "$1\u00a0%"); }
+// body: the text, or a function that writes it (in the language of the moment, so that a notice on
+// screen follows a change of language)
+let _noticeArgs = null;
+function showNotice(title, body, level = "error", log = true) {
+  _noticeArgs = [title, body, level, log];
   const el = document.getElementById("vp-notice");
   el.classList.toggle("warn", level === "warn");
+  el.querySelector(".btn-mini").style.display = log ? "" : "none";     // Show the log
   document.getElementById("vn-title").textContent = title ? t(title) : "";
   document.getElementById("vn-title").style.display = title ? "" : "none";
-  document.getElementById("vn-body").textContent = body;
+  document.getElementById("vn-body").textContent = keepPercent(typeof body === "function" ? body() : body);
   el.style.display = "flex";
 }
 function hideNotice() { document.getElementById("vp-notice").style.display = "none"; }
@@ -390,7 +469,7 @@ function setFile(slot, name, content, extra = {}) {
 function readFile(file, slot) {
   if (/\.marq$/i.test(file.name)) { openSessionFile(file); return; }
   if (!file.size) {
-    showNotice("The file could not be opened", t("{name} is empty, or is a folder. Open a point cloud file.", { name: file.name }));
+    showNotice("The file could not be opened", () => t("{name} is empty, or is a folder. Open a point cloud file.", { name: file.name }));
     return;
   }
   const reader = new FileReader();
@@ -412,7 +491,7 @@ function readFile(file, slot) {
        [t("Cancel"), null]]);
   };
   reader.onerror = () => showNotice("The file could not be opened",
-    t("{name} could not be read. If it is on a network or cloud drive, copy it to this computer first.", { name: file.name }));
+    () => t("{name} could not be read. If it is on a network or cloud drive, copy it to this computer first.", { name: file.name }));
   reader.readAsArrayBuffer(file);
 }
 
@@ -709,7 +788,7 @@ function setupWindowDrop() {
     if (!f) return;
     if (/\.json$/i.test(f.name)) { loadParamsFile({ files: [f] }); return; }      // a settings file
     readFile(f, "1");
-    if (list.length > 1) showNotice(null, t("Only the first file, {name}, was opened. To compare several surfaces with A, drop them on Batch files… in the ribbon.", { name: f.name }), "warn");
+    if (list.length > 1) showNotice(null, () => t("Only the first file, {name}, was opened. To compare several surfaces with A, drop them on Batch files… in the ribbon.", { name: f.name }), "warn");
   });
 }
 
@@ -1010,8 +1089,8 @@ function checkParams(prefix) {
   markChangedParams();
   openModal("modal-settings");
   bad[0].focus();
-  const names = bad.map((el) => { const l = el.closest(".param-card").querySelector(".param-label"); return l ? l.textContent : el.id; });
-  showNotice("Check the settings", t("These settings are empty or out of range: {list}.", { list: names.join("; ") }), "warn");
+  const names = () => bad.map((el) => { const l = el.closest(".param-card").querySelector(".param-label"); return l ? l.textContent : el.id; });
+  showNotice("Check the settings", () => t("These settings are empty or out of range: {list}.", { list: names().join("; ") }), "warn");
   return false;
 }
 
@@ -1270,11 +1349,11 @@ function renderPvisual(result, retheme, msg = {}) {
     // and Channel or Ridge set in Settings with nothing on that side: most likely the other kind
     const sq = Math.max(...["surf_left", "surf_right"].map((k) => (rgh && rgh[k] && rgh[k].Sq) || 0));
     if (rot.feature_side_empty)
-      showNotice("Check the Feature setting", t(rot.feature === "channel"
+      showNotice("Check the Feature setting", () => t(rot.feature === "channel"
         ? "Feature is set to Channel in Settings, but nothing in this scan lies below the flat surface around it, so it most likely shows a ridge and the measured geometry has no meaning. Set Feature to Ridge or Automatic and analyse it again."
         : "Feature is set to Ridge in Settings, but nothing in this scan rises above the flat surface around it, so it most likely shows a channel and the measured geometry has no meaning. Set Feature to Channel or Automatic and analyse it again."), "warn");
     else if (!(ch.mean_depth > Math.max(1, 5 * sq)))
-      showNotice("No clear channel in this scan", t("The channel found is {d} µm deep, close to the roughness of the flat surface around it, so the measured geometry has no meaning. Check that the scan contains the channel and that the edge margin (Settings, Advanced) does not cut it away.",
+      showNotice("No clear channel in this scan", () => t("The channel found is {d} µm deep, close to the roughness of the flat surface around it, so the measured geometry has no meaning. Check that the scan contains the channel and that the edge margin (Settings, Advanced) does not cut it away.",
         { d: fmt(ch.mean_depth, 2) }) + " " + t(rot.turned_over ? "The scan was turned over (Feature: Ridge, in Settings): for a channel, set Feature to Automatic or Channel and analyse it again."
           : "If the scan shows a raised feature, a ridge, set Feature to Ridge in Settings and analyse it again."), "warn");
   } else if (aid === _curA) {
@@ -1980,7 +2059,7 @@ function getViewer() {
     _viewer.on("lost", (lost) => {
       clearTimeout(_lostTimer);
       if (!lost) { hideNotice(); return; }
-      showNotice(null, t("The 3D view is paused: the graphics card reset it. It comes back by itself in a moment."), "warn");
+      showNotice(null, () => t("The 3D view is paused: the graphics card reset it. It comes back by itself in a moment."), "warn");
       _lostTimer = setTimeout(() => {          // not back: a new viewport
         if (!_viewer || !_viewer.lost) return;
         try { _viewer.dispose(); } catch {}
@@ -2224,9 +2303,10 @@ function drawProfile(el, series, xTitle, opts = {}) {
   const ax = (title) => ({ title: { text: title, font }, tickfont: font, gridcolor: cssVar("--line"), zerolinecolor: cssVar("--line-2"),
                           linecolor: cssVar("--line-2"), automargin: true });
   const layout = { paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font, dragmode: opts.dragmode || "pan", hovermode: "x unified",
-    margin: { l: 60, r: second ? 64 : 18, t: series.length > 1 ? 26 : 8, b: 40 }, showlegend: series.length > 1,
+    margin: { l: 60, r: second ? 64 : 18, t: series.length > 1 ? 26 : 8, b: 40 },
+    showlegend: series.length > 1,
     legend: { orientation: "h", x: 0, y: 1.02, yanchor: "bottom", font, bgcolor: "rgba(0,0,0,0)" },
-    hoverlabel: { bgcolor: cssVar("--pane"), bordercolor: cssVar("--line-2"), font: { color: cssVar("--text") } },
+    hoverlabel: { bgcolor: cssVar("--pane"), bordercolor: cssVar("--line-2"), font: { color: cssVar("--text"), size: 13 } },
     xaxis: ax(t(xTitle)), yaxis: ax(t("Height (µm)")), separators: LANG === "tr" ? ",." : ".,", uirevision: opts.uirev };
   // its own ticks (Plotly 4 syncs an overlaying axis with the one below by default)
   if (second) layout.yaxis2 = { ...ax(t(series.find((c) => c.y2).y2)), overlaying: "y", side: "right", showgrid: false, tickmode: "auto" };
@@ -2754,7 +2834,7 @@ function handleSessionInput(input) {
 
 function openSessionFile(file) {
   if (!ready || busy()) {
-    showNotice(null, t("Wait until the engine is ready, then open the session again."), "warn");
+    showNotice(null, () => t("Wait until the engine is ready, then open the session again."), "warn");
     return;
   }
   if (unsaved()) {
@@ -2782,13 +2862,13 @@ function readSessionFile(file) {
       restoreSession(st, m.have || {}, m.slots || {});
     }).catch(() => {}).finally(() => { _opening = false; updateButtons(); });
   };
-  r.onerror = () => showNotice("The file could not be opened", t("{name} could not be read. If it is on a network or cloud drive, copy it to this computer first.", { name: file.name }));
+  r.onerror = () => showNotice("The file could not be opened", () => t("{name} could not be read. If it is on a network or cloud drive, copy it to this computer first.", { name: file.name }));
   r.readAsArrayBuffer(file);
 }
 
 function restoreSession(st, have, slots) {
   if (!st || st.format !== "marq-session" || !st.session) {
-    showNotice("The session could not be opened", t("This file is not a MaRQ session."));
+    showNotice("The session could not be opened", () => t("This file is not a MaRQ session."));
     return;
   }
   hideNotice(); closeSection();
@@ -3054,8 +3134,8 @@ function setupFileMenu() {
   if (/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || ""))
     menu.querySelectorAll("kbd").forEach((k) => { k.textContent = k.textContent.replace("Ctrl+", "⌘"); });
   const items = () => Array.from(menu.querySelectorAll("button:not(:disabled)"));
-  btn.addEventListener("click", (e) => { e.stopPropagation(); menu.style.display === "flex" ? closeFileMenu() : openFileMenu(); });
-  document.addEventListener("pointerdown", (e) => { if (!e.target.closest(".tb-menu")) closeFileMenu(); });
+  btn.addEventListener("click", (e) => { e.stopPropagation(); closeOptionsMenu(); menu.style.display === "flex" ? closeFileMenu() : openFileMenu(); });
+  document.addEventListener("pointerdown", (e) => { if (!e.target.closest(".tb-menu")) { closeFileMenu(); closeOptionsMenu(); } });
   menu.addEventListener("keydown", (e) => {
     const it = items(), i = it.indexOf(document.activeElement);
     if (e.key === "ArrowDown") { e.preventDefault(); (it[i + 1] || it[0]).focus(); }
@@ -3079,6 +3159,54 @@ function closeFileMenu() {
   document.getElementById("file-menu").style.display = "none";
   document.getElementById("file-menu-btn").setAttribute("aria-expanded", "false");
 }
+// ── Options menu ───────────────────────────────────────────────────────────────
+// The interface size: Automatic, or one size; remembered on this computer.
+
+function setupOptionsMenu() {
+  const btn = document.getElementById("options-menu-btn"), menu = document.getElementById("options-menu");
+  const items = () => Array.from(menu.querySelectorAll("button"));
+  btn.addEventListener("click", (e) => { e.stopPropagation(); closeFileMenu(); menu.style.display === "flex" ? closeOptionsMenu() : openOptionsMenu(); });
+  menu.addEventListener("keydown", (e) => {
+    const it = items(), i = it.indexOf(document.activeElement);
+    if (e.key === "ArrowDown") { e.preventDefault(); (it[i + 1] || it[0]).focus(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); (it[i - 1] || it[it.length - 1]).focus(); }
+    else if (e.key === "Escape") { e.stopPropagation(); closeOptionsMenu(); btn.focus(); }
+  });
+  menu.querySelectorAll("button[data-size]").forEach((b) => b.addEventListener("click", () => {
+    closeOptionsMenu();
+    try { localStorage.setItem(LS.uisize, b.dataset.size); } catch {}
+    applyUiSize();
+    setStatus(b.dataset.size === "auto" ? "Interface size: automatic" : "Interface size: {p} %", "success", { p: Math.round(parseFloat(b.dataset.size) * 100) });
+  }));
+  updateOptionsMenu();
+}
+function openOptionsMenu() {
+  const menu = document.getElementById("options-menu");
+  updateOptionsMenu();
+  menu.style.display = "flex";
+  document.getElementById("options-menu-btn").setAttribute("aria-expanded", "true");
+  (menu.querySelector('button[aria-checked="true"]') || menu.querySelector("button")).focus();
+}
+function closeOptionsMenu() {
+  const menu = document.getElementById("options-menu");
+  if (!menu) return;
+  menu.style.display = "none";
+  document.getElementById("options-menu-btn").setAttribute("aria-expanded", "false");
+}
+// the size chosen, ticked; and the browser zoom undone, when there is one
+function updateOptionsMenu() {
+  const set = uiSizeSetting();
+  document.querySelectorAll("#options-menu button[data-size]").forEach((b) => {
+    b.setAttribute("aria-checked", String(b.dataset.size === set));
+    // the percentages in the language's form (the page's translation skips text without letters)
+    if (b.dataset.size !== "auto") b.querySelector("span").textContent = t("{p} %", { p: Math.round(parseFloat(b.dataset.size) * 100) });
+  });
+  const note = document.getElementById("options-zoom");
+  note.textContent = _uiZoom !== 1 ? keepPercent(t("The browser zoom of {z} % is undone. To set the browser back to 100 %, press {key} and 0.",
+    { z: Math.round(_uiZoom * 100), key: zoomResetKeys() })) : "";
+  note.style.display = _uiZoom !== 1 ? "" : "none";
+}
+
 function fileCommand(cmd) {
   const f = { "open-cloud": () => document.getElementById("file1-input").click(), "open-session": () => document.getElementById("session-input").click(),
               "save-session": saveSession, example: runExample, report: makeReport, figure: () => openExportDialog(), json: exportJSON, csv: exportCSV }[cmd];
@@ -3251,9 +3379,12 @@ function setupSplitters() {
   const root = document.documentElement, body = document.getElementById("body");
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(LS.layout) || "{}"); } catch {}
-  // a width saved on a large screen is kept below 30 % of a smaller one, for each side pane
+  // a width saved on a large screen is kept below 30 % of a smaller one, for each side pane; in rem,
+  // so that it follows the interface size (saved in pixels before 2026-10-27, at a root of 16 px)
+  const px = () => parseFloat(getComputedStyle(root).fontSize);
   ["left", "right"].forEach((k) => {
-    if (saved[k]) root.style.setProperty("--" + k, Math.min(saved[k], Math.max(220, innerWidth * 0.3)) + "px");
+    const r = saved[k + "Rem"] || (saved[k] ? saved[k] / 16 : 0);
+    if (r) root.style.setProperty("--" + k, Math.min(r, Math.max(14, innerWidth * 0.3 / px())).toFixed(2) + "rem");
   });
   const save = () => { try { localStorage.setItem(LS.layout, JSON.stringify(saved)); } catch {} };
   const drag = (handle, onMove) => handle.addEventListener("pointerdown", (e) => {
@@ -3270,12 +3401,14 @@ function setupSplitters() {
   drag(document.getElementById("split-left"), (ev) => {
     const rem = parseFloat(getComputedStyle(root).fontSize);
     const w = Math.max(14 * rem, Math.min(34 * rem, ev.clientX));
-    root.style.setProperty("--left", w + "px"); saved.left = Math.round(w);
+    saved.leftRem = +(w / rem).toFixed(2); delete saved.left;
+    root.style.setProperty("--left", saved.leftRem + "rem");
   });
   drag(document.getElementById("split-right"), (ev) => {
     const rem = parseFloat(getComputedStyle(root).fontSize);
     const w = Math.max(14 * rem, Math.min(34 * rem, body.getBoundingClientRect().right - ev.clientX));
-    root.style.setProperty("--right", w + "px"); saved.right = Math.round(w);
+    saved.rightRem = +(w / rem).toFixed(2); delete saved.right;
+    root.style.setProperty("--right", saved.rightRem + "rem");
   });
 }
 
@@ -3367,7 +3500,6 @@ function cubeLabels() {
 // result the engine holds (rebuilt in the new language, no new analysis).
 function setLanguage(lang, rebuild = true) {
   applyLanguage(lang);
-  try { localStorage.setItem(LS.lang, LANG); } catch {}
   document.getElementById("lang-select").value = LANG;
   document.querySelectorAll(".file-name").forEach((el) => { if (!el.classList.contains("has-file")) el.textContent = t(el.dataset.placeholder || ""); });
   ["1", "A", "B"].forEach((slot) => { const f = files[slot]; if (f && f.isCrop) document.getElementById("file" + slot + "-name").textContent = t("crop of {name}", { name: f.from }); });
@@ -3381,6 +3513,8 @@ function setLanguage(lang, rebuild = true) {
   applyPageTheme(_theme);
   if (_section) drawSection();
   if (_xs && _view && VIEWS[_view].type === "xs") drawXs();
+  updateOptionsMenu();
+  if (_noticeArgs && document.getElementById("vp-notice").style.display === "flex") showNotice(..._noticeArgs);
   toolHint(document.getElementById("tool-hint").dataset.msg || null);
   if (_lastStatus) setStatus(..._lastStatus);
   document.getElementById("status-bar").title = t("Click to show the analysis log");
@@ -3406,13 +3540,18 @@ function toggleTheme() {
 window.addEventListener("DOMContentLoaded", () => {
   _theme = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
   document.querySelectorAll(".file-name").forEach((el) => { el.dataset.placeholder = el.textContent; });
-  // the language: the one chosen last time, otherwise the language of the browser
+  // the language: the one chosen in the menu last time, otherwise English. It is saved only when
+  // chosen, under a key of its own (the key of before, marq.lang, was written at every start with
+  // the browser's language, and so tells no choice)
   let lang = null;
   try { lang = localStorage.getItem(LS.lang); } catch {}
-  if (!LANGS[lang]) lang = /^tr\b/i.test(navigator.language || "") ? "tr" : "en";
+  if (!LANGS[lang]) lang = "en";
   setLanguage(lang, false);
   setStatus("Loading the Python runtime…", "info");
-  document.getElementById("lang-select").addEventListener("change", (e) => setLanguage(e.target.value));
+  document.getElementById("lang-select").addEventListener("change", (e) => {
+    try { localStorage.setItem(LS.lang, e.target.value); } catch {}
+    setLanguage(e.target.value);
+  });
   const problem = startupProblem();
   if (problem) {
     showStartupBanner(problem);
@@ -3432,6 +3571,14 @@ window.addEventListener("DOMContentLoaded", () => {
   window.addEventListener("pageshow", (e) => { if (e.persisted) heartbeat(); });
   window.addEventListener("beforeunload", (e) => { if (unsaved()) { e.preventDefault(); e.returnValue = "unsaved"; } });
   setupFileMenu();
+  setupOptionsMenu();
+  // the window resized, or zoomed (Ctrl and plus or minus): the interface keeps its size
+  let _sizeTimer = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(_sizeTimer);
+    _sizeTimer = setTimeout(() => { applyUiSize(); checkZoom(); checkSmallWindow(); }, 120);
+  });
+  setTimeout(() => { checkZoom(); checkSmallWindow(); }, 1500);
   setupDropZone("file1-zone", "1");
   setupDropZone("fileA-zone", "A");
   setupDropZone("fileB-zone", "B");
@@ -3500,7 +3647,7 @@ window.addEventListener("DOMContentLoaded", () => {
       // the dialog on top: the last open one in the page (one opened from Settings comes after it)
       const open = Array.from(document.querySelectorAll(".modal")).filter((m) => m.style.display === "flex");
       if (open.length) closeModal(open.at(-1).id);
-      toggleLog(false); closeFileMenu();
+      toggleLog(false); closeFileMenu(); closeOptionsMenu();
       if (_viewer && _viewer.marks.length) _viewer.clearMarks();
       return;
     }

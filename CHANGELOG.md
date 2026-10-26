@@ -506,6 +506,34 @@ version.
   - `tests/test_cores.py`: a channel 100 µm deep with rims 200 µm high, a channel and a ridge
     20 µm deep or high with rims or grooves of 35 µm, and wrong choices reported (35 tests).
     `tests/e2e_features.py`: the setting, its dialog, the return to Automatic and the message.
+- Interface size (2026-10-27). No analysis change.
+  - A browser zoom is undone, so MaRQ opens at its own size. Chrome and Edge remember a zoom
+    (Ctrl and plus or minus) for MaRQ's address and gave it back at every start, and the MaRQ
+    window has no zoom control to undo it: at 300 % the views had about 500 by 290 page pixels and
+    the figures were squeezed into a strip. MaRQ reads the zoom from the window (its outer width,
+    in screen pixels, over its inner width, in page pixels) and sets its root size against it.
+  - *Options*, next to *File*: the interface size, *Automatic* or one size from 80 to 150 %,
+    remembered on this computer, with a note of the browser zoom undone. Automatic follows the
+    window's height as well as its width (it followed the width only, down to 13 px), down to
+    60 %; a window too small even for that is said once.
+  - A zoom found is said in a notice, once for each zoom, with the keys that set the browser back
+    to 100 % (Ctrl and 0, Command and 0 on a Mac); the notice goes once the zoom is back at 100 %.
+    The notices about the window leave out the button to the log.
+  - MaRQ starts in English unless another language was chosen in the menu (it followed the
+    language of the browser, so a Turkish system started it in Turkish). The language is saved only
+    when chosen, under a new key: the key of before was written at every start with the browser's
+    language, so it told no choice, and a language chosen before is chosen once again. A notice on
+    screen is written again when the language changes (it stayed in the language it was shown in).
+  - The figures are drawn at the size they have at 100 % and scaled as a whole with the interface
+    (a CSS transform, which Plotly undoes for the pointer), so their legends, lines and markers,
+    which Plotly draws in page pixels, keep their proportions. The view cube of the 3D views
+    follows the size too. The narrow-window rules of the ribbon and panes are classes set from the
+    window's size (media queries read page pixels, which a zoom changes). The arrows of the selects,
+    the sliders, a native check box, the scrollbars and the pane widths a drag saves are in rem, and
+    the spin arrows of the number fields, which the browser draws at its own pixel size, are left
+    out when the interface is reduced to about half or less.
+  - `tests/e2e_features.py`: the menu, a size and Automatic again, the figure scaled as a whole with
+    the pointer on its point, and a zoom of 300 % undone.
 
 ## 0.9 (2026-09-30)
 

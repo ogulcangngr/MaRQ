@@ -739,6 +739,27 @@ const I18N = { tr: {
     "Tarama ters çevrildi (Ayarlar'da Mikroyapı: Sırt): bir kanal için Mikroyapı'yı Otomatik ya da Kanal yapıp yeniden analiz edin.",
   "yes": "evet",
   "no": "hayır",
+  // 2026-10-27: the Options menu, the interface size, a browser zoom undone
+  "Options": "Seçenekler",
+  "Interface size": "Arayüz boyutu",
+  "Automatic, to fit the window": "Otomatik, pencereye sığacak biçimde",
+  "{p} %": "%{p}",
+  "MaRQ keeps this size, and undoes a zoom of the browser (Ctrl and plus or minus).":
+    "MaRQ bu boyutta kalır ve tarayıcının yakınlaştırmasını (Ctrl ile artı ya da eksi) geri alır.",
+  "The browser zoom of {z} % is undone. To set the browser back to 100 %, press {key} and 0.":
+    "Tarayıcının %{z} yakınlaştırması geri alındı. Tarayıcıyı %100'e döndürmek için {key} ile 0'a basın.",
+  "Browser zoom detected": "Tarayıcı yakınlaştırması algılandı",
+  "The browser is zoomed to {z} %, which MaRQ undoes to keep its own size. To set the browser back to 100 %, press {key} and 0.":
+    "Tarayıcı %{z} yakınlaştırılmış. MaRQ kendi boyutunda kalmak için bunu geri alır. Tarayıcıyı %100'e döndürmek için {key} ile 0'a basın.",
+  "Interface size: automatic": "Arayüz boyutu: otomatik",
+  "Interface size: {p} %": "Arayüz boyutu: %{p}",
+  "The window is small": "Pencere küçük",
+  "The MaRQ window leaves its views little room. Maximize the window for more room.":
+    "MaRQ penceresi görünümlere az yer bırakıyor. Daha fazla yer için pencereyi ekranı kaplayacak biçimde büyütün.",
+  "Interface": "Arayüz",
+  "Size": "Boyut",
+  "Options, Interface size: Automatic fits the window; a zoom of the browser is undone, so MaRQ opens at its own size":
+    "Seçenekler, Arayüz boyutu: Otomatik pencereye sığdırır; tarayıcının yakınlaştırması geri alınır, böylece MaRQ kendi boyutunda açılır",
 
   // 2026-10-25: a figure export and a report wait for each other; a damaged session file
   "Wait until the report or the figure in progress is ready": "Hazırlanan rapor ya da şekil bitene kadar bekleyin",

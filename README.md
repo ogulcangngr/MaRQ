@@ -126,8 +126,15 @@ internet for the first start; `python tools/fetch_vendor.py` restores the bundle
   steps, marks those done and the one under way, counts the seconds and has *Cancel*; for
   a batch it shows the pair and a progress bar.
 - **Title bar**: the *File* menu (open a point cloud or a session, save the session, try
-  the example, the report and the exports), the language (English, Türkçe), the light or dark theme, help
-  and About. Without a choice MaRQ follows the language and the theme of the system.
+  the example, the report and the exports), the *Options* menu, the language (English, Türkçe), the
+  light or dark theme, help and About. Without a choice MaRQ starts in English and follows the
+  theme of the system.
+- **Interface size** (*Options*): *Automatic* fits the window, smaller in a small or short
+  window; or one size from 80 to 150 %. MaRQ keeps the size chosen and undoes a zoom of the browser
+  (Ctrl and plus or minus, which Chrome and Edge remember for MaRQ's address), so it always opens at
+  its own size; the figures follow, drawn as at 100 % and scaled as a whole. A notice says when a
+  zoom is found, with the keys that set the browser back to 100 % (Ctrl and 0, Command and 0 on a
+  Mac).
 
 The panes can be resized by dragging their borders. The button in the title of the
 Browser and of Properties hides that pane, for a wider view; the button at that end of the

@@ -9,8 +9,8 @@ goes through the views a user opens: both analyses in the tree, the height and s
 cross-section at a position, the 3D view with the one-click cross-section (when the headless
 browser has WebGL), the report, the language, a session saved and opened again in a fresh
 page, and the conveniences (one header-rows setting, results made with other settings marked,
-the side panes hidden, MaRQ's own dialogs, the Feature setting and its dialog, a file in
-millimetres, the example). Exit code 0 when everything holds.
+the side panes hidden, MaRQ's own dialogs, the Feature setting and its dialog, the Options menu and
+the interface size, a file in millimetres, the example). Exit code 0 when everything holds.
 """
 import os, sys, json, time, zipfile, argparse, tempfile, subprocess
 from playwright.sync_api import sync_playwright
@@ -54,6 +54,13 @@ def tree(page, view, aid=None):
 with sync_playwright() as p:
     opts = {"args": ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"]} if a.browser == "chromium" else {}
     b = getattr(p, a.browser).launch(**opts)
+    # without a choice, MaRQ starts in English, in a Turkish browser too
+    ctx0 = b.new_context(locale="tr-TR")
+    host0 = a.url.split("/")[2]
+    ctx0.route("**/*", lambda r: r.continue_() if r.request.url.split("/")[2] == host0 else r.abort())
+    p0 = ctx0.new_page(); p0.goto(a.url); p0.wait_for_function("() => _lastStatus !== null", timeout=60000)      # set after the language
+    first = p0.evaluate("() => [navigator.language, LANG, document.documentElement.lang, document.getElementById('lang-select').value, localStorage.getItem('marq.language')]")
+    ctx0.close()
     ctx = b.new_context(viewport={"width": 1366, "height": 768}, accept_downloads=True)
     ctx.add_init_script("window.showSaveFilePicker = undefined;")    # saves go to downloads here
     host = a.url.split("/")[2]
@@ -64,7 +71,7 @@ with sync_playwright() as p:
     page.on("dialog", lambda d: d.accept())
     t0 = time.time()
     page.goto(a.url)
-    page.evaluate("() => { localStorage.clear(); localStorage.setItem('marq.lang', 'en'); }")
+    page.evaluate("() => { localStorage.clear(); localStorage.setItem('marq.language', 'en'); }")
     phase[0] = "reload"; page.reload(); wait(page, "() => ready"); phase[0] = ""
     print(f"[{a.browser}] ready in {time.time() - t0:.0f} s")
 
@@ -218,6 +225,53 @@ with sync_playwright() as p:
     off = page.evaluate(shown); page.keyboard.press("Escape"); time.sleep(0.2)
     check("the Channel or ridge dialog opens over Settings and closes alone", on == [True, True] and off == [True, False]
           and page.evaluate(shown) == [False, False], f"{on} {off}")
+
+    # the Options menu: an interface size (remembered), Automatic again; the figures are drawn as at
+    # 100 % and scaled as a whole, and the pointer still finds the point under it; a browser zoom of
+    # 300 % (as Chrome and Edge report it, the outer width three times the inner) is undone, and
+    # nothing is undone once it is gone
+    tree(page, "channel", ids[0])          # its figures built first (the analysis comes from the session opened)
+    wait(page, "() => _view === 'channel' && !!document.querySelector('.vp-layer.active.plot-container')", 120); time.sleep(0.5)
+    fig = """() => { const el = document.querySelector('.vp-layer.active.plot-container'), st = document.getElementById('vp-stage').getBoundingClientRect();
+        const tf = getComputedStyle(el).transform, s = tf === 'none' ? 1 : new DOMMatrix(tf).a;
+        return [+s.toFixed(4), el._fullLayout.font.size, Math.round(el.getBoundingClientRect().width - st.width), Math.round(el._fullLayout.width * s - st.width)]; }"""
+    f0 = page.evaluate(fig)
+    page.click("#options-menu-btn"); time.sleep(0.2)
+    opt = page.evaluate("""() => [document.getElementById('options-menu').style.display,
+        [...document.querySelectorAll('#options-menu button[data-size]')].map(b => b.dataset.size).join(','),
+        document.querySelector('#options-menu button[aria-checked="true"]').dataset.size]""")
+    page.click('#options-menu button[data-size="1.25"]'); time.sleep(1.5)
+    big = page.evaluate("() => [parseFloat(getComputedStyle(document.documentElement).fontSize), _uiK, localStorage.getItem('marq.uisize')]")
+    f1 = page.evaluate(fig)
+    # the data point under a position of the page, from the axes, against the one Plotly reports there
+    pt = page.evaluate("""() => { const el = document.querySelector('.vp-layer.active.plot-container'), fl = el._fullLayout, r = el.getBoundingClientRect();
+        const k = r.width / el.offsetWidth, px = r.left + k * (fl.xaxis._offset + 0.4 * fl.xaxis._length), py = r.top + k * (fl.yaxis._offset + 0.55 * fl.yaxis._length);
+        window._hv = null; el.on('plotly_hover', (e) => { window._hv = e.points[0].x; });
+        return [px, py, fl.xaxis.p2l(0.4 * fl.xaxis._length), 4 * Math.abs(fl.xaxis.range[1] - fl.xaxis.range[0]) / fl.xaxis._length]; }""")
+    page.mouse.move(pt[0] - 4, pt[1] - 4); page.mouse.move(pt[0], pt[1], steps=3); time.sleep(0.5)
+    hv = page.evaluate("() => window._hv")
+    page.mouse.move(2, 2)
+    page.click("#options-menu-btn"); time.sleep(0.2); page.click('#options-menu button[data-size="auto"]'); time.sleep(1.5)
+    back = page.evaluate("() => [parseFloat(getComputedStyle(document.documentElement).fontSize), _uiK]")
+    check("Options: interface size 125 %, then Automatic again", opt == ["flex", "auto,0.8,0.9,1,1.1,1.25,1.5", "auto"]
+          and big == [20, 1.25, "1.25"] and back == [16, 1], f"{opt} {big} {back}")
+    check("the figure drawn as at 100 % and scaled with the interface, the pointer on its point",
+          f0[0] == 1 and f1[0] == 1.25 and f1[1] == f0[1] and max(abs(v) for v in f0[2:] + f1[2:]) <= 2
+          and hv is not None and abs(hv - pt[2]) <= pt[3], f"{f0} {f1}; hover {hv} for {pt[2:]}")
+    zoomed = page.evaluate("""() => {
+        const own = Object.getOwnPropertyDescriptor(window, 'outerWidth');
+        Object.defineProperty(window, 'outerWidth', { configurable: true, get: () => innerWidth * 3 });
+        applyUiSize(); checkZoom(); const r = [browserZoom(), +parseFloat(getComputedStyle(document.documentElement).fontSize).toFixed(2)];
+        const said = noticeShown('Browser zoom detected') && /300\\u00a0%.*and 0\\./.test(document.getElementById('vn-body').textContent);
+        setLanguage('tr', false); const tr = [document.getElementById('vn-title').textContent, /^Tarayıcı %300 /.test(document.getElementById('vn-body').textContent)];
+        setLanguage('en', false);
+        if (own) Object.defineProperty(window, 'outerWidth', own); else delete window.outerWidth;
+        applyUiSize(); checkZoom();
+        return r.concat([browserZoom(), parseFloat(getComputedStyle(document.documentElement).fontSize), said, document.getElementById('vp-notice').style.display, tr]); }""")
+    # 16 / 3 px as the browser keeps it (Firefox in sixtieths of a pixel: 5.34)
+    check("a browser zoom of 300 % undone and said, with the keys back to 100 %, in a new language too; nothing undone without one, the notice gone",
+          zoomed[0] == 3 and abs(zoomed[1] - 16 / 3) < 0.02 and zoomed[2:] == [1, 16, True, "none", ["Tarayıcı yakınlaştırması algılandı", True]], zoomed)
+    check("English without a choice, in a Turkish browser too", first[0].startswith("tr") and first[1:] == ["en", "en", "en", None], first)
 
     mm = os.path.join(tmp, "test_channel_600um_in_mm.txt")
     with open(INS) as fi, open(mm, "w") as fo:

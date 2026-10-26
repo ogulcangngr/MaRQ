@@ -17,6 +17,9 @@ const FOV = 30;                                   // vertical field of view, per
 const TAN = Math.tan(FOV / 2 * DEG);
 const EL_MAX = 89.9 * DEG;
 const AXIS_COL = { x: "#e5484d", y: "#3fae5a", z: "#3d8bfd" };
+// the interface size (app.js sets the root size, 16 px at 100 %): what is drawn in page pixels
+// here, the view cube, follows it as the rest of the interface does
+const uiScale = () => (parseFloat(getComputedStyle(document.documentElement).fontSize) || 16) / 16;
 
 // named views: azimuth (about +Z, from +X) and elevation, in degrees
 const VIEWS = {
@@ -760,7 +763,10 @@ class Viewer {
     this._cubeHoverFace = -1;
   }
 
-  _cubeRect() { const s = Math.round(Math.min(118, Math.max(84, this.w * 0.09))); return { x: this.w - s - 10, y: 10, s }; }
+  _cubeRect() {
+    const u = uiScale(), s = Math.round(Math.min(118, Math.max(84, this.w / u * 0.09)) * u), m = Math.round(10 * u);
+    return { x: this.w - s - m, y: m, s };
+  }
 
   _renderCube() {
     const r = this.renderer, R = this._cubeRect();

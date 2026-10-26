@@ -132,6 +132,22 @@
           <button role="menuitem" data-cmd="csv"><svg class="ico"><use href="#i-table"/></svg><span>Results as CSV</span></button>
         </div>
       </div>
+      <div class="tb-menu">
+        <button id="options-menu-btn" class="tb-menu-btn" aria-haspopup="true" aria-expanded="false">Options</button>
+        <div id="options-menu" class="menu" role="menu" style="display:none">
+          <div class="menu-head">Interface size</div>
+          <button role="menuitemradio" data-size="auto" aria-checked="false"><svg class="ico"><use href="#i-check"/></svg><span>Automatic, to fit the window</span></button>
+          <button role="menuitemradio" data-size="0.8" aria-checked="false"><svg class="ico"><use href="#i-check"/></svg><span data-i18n-skip>80 %</span></button>
+          <button role="menuitemradio" data-size="0.9" aria-checked="false"><svg class="ico"><use href="#i-check"/></svg><span data-i18n-skip>90 %</span></button>
+          <button role="menuitemradio" data-size="1" aria-checked="false"><svg class="ico"><use href="#i-check"/></svg><span data-i18n-skip>100 %</span></button>
+          <button role="menuitemradio" data-size="1.1" aria-checked="false"><svg class="ico"><use href="#i-check"/></svg><span data-i18n-skip>110 %</span></button>
+          <button role="menuitemradio" data-size="1.25" aria-checked="false"><svg class="ico"><use href="#i-check"/></svg><span data-i18n-skip>125 %</span></button>
+          <button role="menuitemradio" data-size="1.5" aria-checked="false"><svg class="ico"><use href="#i-check"/></svg><span data-i18n-skip>150 %</span></button>
+          <div class="menu-sep"></div>
+          <div class="menu-note">MaRQ keeps this size, and undoes a zoom of the browser (Ctrl and plus or minus).</div>
+          <div class="menu-note" id="options-zoom" data-i18n-skip style="display:none"></div>
+        </div>
+      </div>
       <span class="tb-sep"></span>
       <span id="doc-title" data-i18n-skip>Microchannel and Replication Quality Analyzer</span>
     </div>
@@ -366,7 +382,7 @@
             <button class="btn btn-mini" onclick="exportXs()" title="The cross-section as a CSV file">CSV</button>
           </div>
           <div id="xs-info" class="xs-info" data-i18n-skip></div>
-          <div id="xs-plot"></div>
+          <div class="plot-host" id="xs-host"><div id="xs-plot"></div></div>
         </div>
         <div class="vp-layer html-view" id="batch-view" data-i18n-skip></div>
         <div class="vp-layer html-view" id="summary-view" data-i18n-skip></div>
@@ -382,7 +398,7 @@
               <button class="btn btn-mini" id="sp-open" style="display:none" onclick="openXsFromPanel()" title="Open this position in the cross-section view, with a slider along the channel">Cross-section view</button>
               <button class="btn btn-mini" onclick="exportSection()" title="The profile as a CSV file">CSV</button>
               <button class="tx" onclick="closeSection()" title="Close"><svg class="ico"><use href="#i-x"/></svg></button></div>
-            <div id="section-plot"></div>
+            <div class="plot-host" id="section-host"><div id="section-plot"></div></div>
           </div>
         </div>
 
@@ -743,6 +759,8 @@
           <tr><th colspan="2">Panes</th></tr>
           <tr><td>Hide</td><td>the button at the right of the Browser or Properties title; the button at the edge of the view title brings the pane back</td></tr>
           <tr><td>Copy</td><td>the copy button of Properties copies its numbers as a table, to paste into a spreadsheet</td></tr>
+          <tr><th colspan="2">Interface</th></tr>
+          <tr><td>Size</td><td>Options, Interface size: Automatic fits the window; a zoom of the browser is undone, so MaRQ opens at its own size</td></tr>
         </table>
       </div>
     </div>
