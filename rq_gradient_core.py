@@ -271,12 +271,13 @@ def _gradient_metrics(c1, c2, p, log_fn) -> dict:
     # such as graphite build-up), so r_mag reflects the channel that actually
     # replicates rather than measurement noise at the mouth.
     cf = float(p.get("channel_frac") or 0.0)
+    fallback = False                               # the whole overlap used: said in the metrics (2026-10-28)
     if cf > 0:
         d = -0.5 * (np.nanpercentile(ZI1, 1) + np.nanpercentile(ZI2, 1))   # ~depth
         thr = -cf * d
         mmask = valid & (ZI1 < thr) & (ZI2 < thr)
         if mmask.sum() < 10:                       # fallback if channel too small
-            mmask = valid
+            mmask, fallback = valid, True
             log_fn("  QA: fewer than 10 cells lie in the channel interior of both surfaces; the whole overlap is used")
     else:
         mmask = valid
@@ -327,6 +328,7 @@ def _gradient_metrics(c1, c2, p, log_fn) -> dict:
             "texture_um": [tex1, tex2],
             "primary":    "r_z" if cad_mode else "r_mag",
             "n_mask":     int(mmask.sum()),
+            "mask_fallback": fallback,
             "n_valid":    int(valid.sum()),
             "n_cells":    int(ncells),
             "cell_um":    [float(dx), float(dy)],

@@ -12,7 +12,8 @@ Files (versions pinned; change the constants to upgrade, then re-run):
                  pyodide.asm.wasm, python_stdlib.zip, pyodide-lock.json
   vendor/pyodide/<wheels>                         numpy, scipy and their   listed in pyodide-lock.json,
                                                   dependencies (BSD)       sha256 verified against it
-The application loads these local copies first and falls back to the CDNs only if
+The application loads these local copies first and falls back to the CDNs (Plotly and
+Pyodide; without three.js the 3D views are drawn with Plotly) only if
 they are missing, so a source checkout without vendor/ still works online.
 """
 import hashlib

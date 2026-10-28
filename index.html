@@ -55,6 +55,7 @@
       <div class="trow leaf" data-view="gradheight"><svg class="ico"><use href="#i-map"/></svg><span class="tlabel">Height maps</span></div>
       <div class="trow leaf" data-view="gradslope"><svg class="ico"><use href="#i-map"/></svg><span class="tlabel">Slope maps</span></div>
       <div class="trow leaf" data-view="gradxs"><svg class="ico"><use href="#i-xsect"/></svg><span class="tlabel">Cross-sections of A and B</span></div>
+      <div class="trow leaf cinterp" data-view="interpret" style="display:none"><svg class="ico"><use href="#i-interpret"/></svg><span class="tlabel">Interpretation</span></div>
       <div class="trow leaf cbatch" data-view="batch" style="display:none"><svg class="ico"><use href="#i-table"/></svg><span class="tlabel">Batch results</span></div>
     </div>
   </div>
@@ -102,6 +103,7 @@
     <symbol id="i-ruler" viewBox="0 0 24 24"><path d="M3.5 15.5l12-12 5 5-12 12z"/><path d="M7 12l2 2M9.5 9.5l1.5 1.5M12 7l2 2M14.5 4.5l1.5 1.5"/></symbol>
     <symbol id="i-section" viewBox="0 0 24 24"><path d="M3 17c3 0 3-6 6-6s3 4 6 4 3-8 6-8"/><path d="M3 20.5h18" stroke-dasharray="2 2"/></symbol>
     <symbol id="i-report" viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 12h7M9 15.5h7M9 9h3"/></symbol>
+    <symbol id="i-interpret" viewBox="0 0 24 24"><path d="M9.5 18h5"/><path d="M10.5 21h3"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.7.6 1.1 1.4 1.1 2.2h5c0-.8.4-1.6 1.1-2.2A6 6 0 0 0 12 3z"/></symbol>
     <symbol id="i-xsect" viewBox="0 0 24 24"><path d="M3 7h5l1.5 8h5L16 7h5"/><path d="M12 3v18" stroke-dasharray="2 2"/></symbol>
     <symbol id="i-x" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M8 12.3l2.8 2.8L16.2 9.5"/></symbol>
@@ -144,7 +146,7 @@
           <button role="menuitemradio" data-size="1.25" aria-checked="false"><svg class="ico"><use href="#i-check"/></svg><span data-i18n-skip>125 %</span></button>
           <button role="menuitemradio" data-size="1.5" aria-checked="false"><svg class="ico"><use href="#i-check"/></svg><span data-i18n-skip>150 %</span></button>
           <div class="menu-sep"></div>
-          <div class="menu-note">MaRQ keeps this size, and undoes a zoom of the browser (Ctrl and plus or minus).</div>
+          <div class="menu-note">MaRQ keeps this size, and in Chrome and Edge undoes a zoom of the browser (Ctrl and plus or minus).</div>
           <div class="menu-note" id="options-zoom" data-i18n-skip style="display:none"></div>
         </div>
       </div>
@@ -192,6 +194,8 @@
         </div>
         <button class="rtool primary" id="run-gradient" disabled onclick="runGradient()" title="Compare surface B with surface A: RQ, RQdx, RQdy and RQd">
           <svg class="ico"><use href="#i-compare"/></svg><span>Compare</span></button>
+        <button class="rtool" id="interpret-open" disabled onclick="openInterpret()" title="Choose what A and B are, and see the values to read for that pair">
+          <svg class="ico"><use href="#i-interpret"/></svg><span>Interpret</span></button>
         <div class="rstack" id="batch-zone">
           <button class="rsmall" id="batch-choose" onclick="document.getElementById('batch-input').click()" title="Choose several surfaces to compare with surface A, one after the other">
             <svg class="ico"><use href="#i-batch"/></svg><span id="batch-count" data-i18n-skip>Batch files…</span></button>
@@ -207,7 +211,7 @@
     <div class="rgroup">
       <div class="rtools">
         <div class="rpair">
-          <button class="rtool" id="export-figure" disabled onclick="openExportDialog()" title="Any figure as SVG or PNG, in the current or the light theme, at a chosen size">
+          <button class="rtool" id="export-figure" disabled onclick="openExportDialog()" title="Any figure as SVG or PNG, in the light, current or dark theme, at a chosen size">
             <svg class="ico"><use href="#i-figure"/></svg><span>Figure</span></button>
           <button class="rtool" id="export-report" disabled onclick="makeReport()" title="A printable page per result: the numbers, the settings and the main figures (PDF or HTML)">
             <svg class="ico"><use href="#i-report"/></svg><span>Report</span></button>
@@ -307,7 +311,7 @@
           <div id="tree-analyses"></div>
           <div id="tree-comparisons"></div>
 
-          <div class="trow leaf summary" data-view="summary" id="tree-summary" style="display:none" title="Every analysis and every comparison of this session in one table">
+          <div class="trow leaf summary" data-view="summary" id="tree-summary" style="display:none" title="Every analysis and every comparison of this session in two tables">
             <svg class="ico"><use href="#i-table"/></svg><span class="tlabel">Summary of the session</span></div>
 
         </div>
@@ -385,6 +389,7 @@
           <div class="plot-host" id="xs-host"><div id="xs-plot"></div></div>
         </div>
         <div class="vp-layer html-view" id="batch-view" data-i18n-skip></div>
+        <div class="vp-layer html-view" id="interpret-view" data-i18n-skip></div>
         <div class="vp-layer html-view" id="summary-view" data-i18n-skip></div>
 
         <!-- 3D views: one viewport for all of them -->
@@ -529,7 +534,7 @@
             <div class="param-card">
               <div class="param-card-top"><span class="param-label">Voxel size (0 = automatic)</span>
                 <input class="param-input" type="number" min="0" id="p-voxel" value="5"></div>
-              <span class="param-hint">Grid cell size for downsampling; 0 picks it from the point density.</span>
+              <span class="param-hint">Grid cell size for downsampling; 0 uses the larger side of the scan divided by 1000.</span>
             </div>
             <div class="param-card">
               <div class="param-card-top"><span class="param-label">Field band (× median absolute deviation)</span>
@@ -539,12 +544,12 @@
             <div class="param-card">
               <div class="param-card-top"><span class="param-label">Crop margin along the channel</span>
                 <input class="param-input" type="number" min="0" id="p-cropx" value="180"></div>
-              <span class="param-hint">Extra distance beyond the detected channel length at each end of the crop box, in point cloud units.</span>
+              <span class="param-hint">Extra distance beyond the detected channel length at each end of the crop box, in micrometres.</span>
             </div>
             <div class="param-card">
               <div class="param-card-top"><span class="param-label">Crop margin across the channel</span>
                 <input class="param-input" type="number" min="0" id="p-cropy" value="100"></div>
-              <span class="param-hint">Extra distance beyond the detected channel width on each side of the crop box, in point cloud units.</span>
+              <span class="param-hint">Extra distance beyond the detected channel width on each side of the crop box, in micrometres.</span>
             </div>
             <div class="param-card">
               <div class="param-card-top"><span class="param-label">Opening level (fraction of depth)</span>
@@ -618,7 +623,7 @@
             <div class="param-card">
               <div class="param-card-top"><span class="param-label">Display cell size (0 = automatic)</span>
                 <input class="param-input" type="number" min="0" id="p-cell" value="0" step="1"></div>
-              <span class="param-hint">Side of the square cells of the height maps and the 3D view, in point cloud units. Display only: the geometry and the roughness are computed from the points. 0 chooses the finest cell (never below the voxel size) that keeps each map within 160&thinsp;000 cells.</span>
+              <span class="param-hint">Side of the square cells of the height maps and the 3D view, in micrometres. Display only: the geometry and the roughness are computed from the points. 0 chooses the finest cell (never below the voxel size) that keeps each map within 160&thinsp;000 cells.</span>
             </div>
             <div class="param-card">
               <div class="param-card-top"><span class="param-label">Display smoothing (cells)</span>
@@ -658,6 +663,37 @@
         </div>
         <p>The heights alone cannot tell the third surface from a ridge, because turned over it is an ordinary surface too, two grooves beside a raised strip. In the same way, grooves beside a ridge that are deeper than the ridge is high make it look like a channel, so choose Ridge for such a scan.</p>
         <p>The choice holds for the file open now and goes back to Automatic when another file is opened. If nothing lies on the chosen side, MaRQ says so after the analysis.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Interpret: the roles of A and B, and the task they make ───────────────── -->
+  <div class="modal" id="modal-interpret" role="dialog" aria-modal="true" style="display:none">
+    <div class="modal-box wide">
+      <div class="modal-head"><span>Interpret the comparison</span><button class="tx" onclick="closeModal('modal-interpret')" title="Close"><svg class="ico"><use href="#i-x"/></svg></button></div>
+      <div class="modal-body about">
+        <p>Choose what the two surfaces are. MaRQ then shows the values to read for that pair, as the paper does, and how each compares with a reference.</p>
+        <div class="int-roles">
+          <div class="int-role"><label class="field">A, the reference<select id="int-a" data-i18n-skip></select></label>
+            <label class="field int-n" id="int-a-nbox"><span id="int-a-nlab" data-i18n-skip></span><input type="number" id="int-a-n" min="0" step="1"></label></div>
+          <div class="int-role"><label class="field">B, the compared surface<select id="int-b" data-i18n-skip></select></label>
+            <label class="field int-n" id="int-b-nbox"><span id="int-b-nlab" data-i18n-skip></span><input type="number" id="int-b-n" min="0" step="1"></label></div>
+        </div>
+        <p id="int-task" class="int-task" data-i18n-skip></p>
+        <div id="int-table" data-i18n-skip></div>
+      </div>
+      <div class="modal-foot btn-row"><button class="btn" onclick="closeModal('modal-interpret')">Cancel</button><button class="btn btn-primary" id="int-go" onclick="applyInterpretDialog()">Interpret</button></div>
+    </div>
+  </div>
+
+  <!-- ── The paper's assessment tasks: which surfaces, which values ─────────────── -->
+  <div class="modal" id="modal-tasks" role="dialog" aria-modal="true" style="display:none">
+    <div class="modal-box wide">
+      <div class="modal-head"><span>Which values to read</span><button class="tx" onclick="closeModal('modal-tasks')" title="Close"><svg class="ico"><use href="#i-x"/></svg></button></div>
+      <div class="modal-body about">
+        <p>Which surfaces are compared, and which values are read, depends on the question, as in the paper's figure of the assessment tasks. The tool is the mould, master or stamp.</p>
+        <div id="tasks-table" data-i18n-skip></div>
+        <p>MaRQ sets no acceptance thresholds: tolerances depend on the device and its function. After a comparison, Interpret shows the values of a pair.</p>
       </div>
     </div>
   </div>
@@ -753,6 +789,8 @@
           <tr><td>Pan</td><td>drag</td></tr>
           <tr><td>Zoom</td><td>mouse wheel; the + and − buttons; or the box tool below the plot</td></tr>
           <tr><td>Reset</td><td>double-click</td></tr>
+          <tr><th colspan="2">Comparisons</th></tr>
+          <tr><td>Interpret</td><td>after a comparison: choose what A and B are (the design, the tool as made or after use, a part, or a second scan of the same surface), and MaRQ shows the values to read for that pair, A and B side by side, and how each compares with a reference</td></tr>
           <tr><th colspan="2">Sessions</th></tr>
           <tr><td>Save</td><td>File, Save the session (Ctrl+S): every result, its settings and surfaces A and B in one .marq file</td></tr>
           <tr><td>Open</td><td>File, Open a session, or drop the .marq file on the window: the results return without a new analysis</td></tr>
@@ -760,7 +798,7 @@
           <tr><td>Hide</td><td>the button at the right of the Browser or Properties title; the button at the edge of the view title brings the pane back</td></tr>
           <tr><td>Copy</td><td>the copy button of Properties copies its numbers as a table, to paste into a spreadsheet</td></tr>
           <tr><th colspan="2">Interface</th></tr>
-          <tr><td>Size</td><td>Options, Interface size: Automatic fits the window; a zoom of the browser is undone, so MaRQ opens at its own size</td></tr>
+          <tr><td>Size</td><td>Options, Interface size: Automatic fits the window; in Chrome and Edge a zoom of the browser is undone, so MaRQ opens at its own size</td></tr>
         </table>
       </div>
     </div>

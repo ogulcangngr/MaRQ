@@ -48,6 +48,7 @@ const VIEWS = {
   gradslope:   { kind: "rq_gradient", key: "gradslope", type: "2d" },
   gradxs:      { kind: "rq_gradient", key: "gradxs", type: "xs" },
   batch:       { kind: "rq_gradient", key: null, type: "html" },
+  interpret:   { kind: "rq_gradient", key: null, type: "html" },
   summary:     { kind: "session", key: null, type: "html" },
 };
 const VIEW_OF_KEY = Object.fromEntries(Object.entries(VIEWS).filter(([, v]) => v.key).map(([id, v]) => [v.key, id]));
@@ -295,7 +296,13 @@ function startWorker() {
       case "error": {
         if (e.data.log && e.data.log.length) e.data.log.forEach(appendLog);
         appendLog("ERROR: " + message);
-        if (!ready) { startupFailed(message); break; }
+        if (!ready) {
+          // a request that reached the engine while it restarts fails by itself, without the
+          // start-up message (2026-10-28)
+          if (_asks[e.data.id]) { _asks[e.data.id].reject(new Error(message)); delete _asks[e.data.id]; }
+          else startupFailed(message);
+          break;
+        }
         // a failed figure or crop request does not end a run that may be waiting behind it
         const isRun = ["pv1", "rq1", "batch"].includes(e.data.id);
         const prefix = String(e.data.id || "").split(":")[0];
@@ -323,7 +330,7 @@ function startWorker() {
         // suggest loading the file unsafely)
         if (prefix === "session-open" && !fatal && !/out of memory|MemoryError/i.test(message))
           [short, long] = [t("damaged session file"), t("The session file is damaged or is not a MaRQ session. The log has the details.")];
-        if (isRun && _pendingKind === "pvisual") _file1Failed = true;
+        if (isRun && _pendingKind === "pvisual" && files["1"] && _run && files["1"].content === _run.content) _file1Failed = true;   // not a file opened meanwhile
         if (isRun) _example = null;
         if (isRun || fatal) setRunning(false);
         setStatus("Error: {msg}", "error", { msg: short });
@@ -373,6 +380,9 @@ function explainError(message, fatal) {
   if ((m = msg.match(/could not convert string '([^']*)' to float\d* at row (\d+)/)))
     return [t("text where numbers are expected"), t("Line {row} of the file holds text (“{s}”) where numbers are expected. MaRQ reads x y z numbers, one point per line; header lines at the top can be skipped with Header rows to skip in Settings.",
       { row: fileLine(Number(m[2])), s: m[1].slice(0, 40) })];
+  if ((m = msg.match(/number of columns changed from \d+ to \d+ at row (\d+)/)))       // NumPy counts these rows from 1
+    return [t("a line with a different number of values"), t("Line {row} of the file has a different number of values than the lines before it. The file may be cut off or damaged.",
+      { row: fileLine(Number(m[1]) - 1) })];
   if (/array is 1-dimensional, but 2 were indexed|input contained no data/.test(msg))
     return [t("no points in the file"), t("The file holds no points: it is empty or has a single line.")];
   if (/index 2 is out of bounds for axis 1/.test(msg))
@@ -466,7 +476,7 @@ function setFile(slot, name, content, extra = {}) {
   return reset;
 }
 
-function readFile(file, slot) {
+function readFile(file, slot, note) {
   if (/\.marq$/i.test(file.name)) { openSessionFile(file); return; }
   if (!file.size) {
     showNotice("The file could not be opened", () => t("{name} is empty, or is a folder. Open a point cloud file.", { name: file.name }));
@@ -475,6 +485,7 @@ function readFile(file, slot) {
   const reader = new FileReader();
   reader.onload = (ev) => {
     hideNotice();
+    if (note) note();
     const content = new Uint8Array(ev.target.result);
     const place = (s, extra) => {
       const reset = setFile(s, file.name, content, extra); _readySlot = s; showStart();
@@ -609,6 +620,8 @@ function updateButtons() {
   document.getElementById("export-report").disabled = !(idle && !_exporting && [...Object.values(_A), ...Object.values(_C)].some((r) => r.held && r.props));
   const hasData = session.analyses.length || session.comparisons.length;
   document.getElementById("export-json").disabled = !hasData;
+  const cc = _C[_curC];
+  document.getElementById("interpret-open").disabled = !(idle && cc && !cc.batch && metricsOf(cc));
   document.getElementById("export-csv").disabled  = !hasData;
   document.getElementById("cancel-run").style.visibility = running ? "visible" : "hidden";
   updateNext();
@@ -717,8 +730,8 @@ function renderGuide() {
       acts = [["Open a point cloud…", () => document.getElementById("file1-input").click()]];
     }
   } else if (kind === "compared") {
-    text = "<b>Comparison finished.</b> RQ<sub>d</sub> is under Properties.";
-    acts = [REPORT, ["Figure", () => openExportDialog()], ["Save the session…", saveSession]];
+    text = "<b>Comparison finished.</b> <b>Interpret</b> shows the values to read.";
+    acts = [["Interpret…", () => openInterpret()], REPORT, ["Save the session…", saveSession]];
   } else {
     text = "<b>Batch finished.</b> Every comparison is in <b>Batch results</b>.";
     acts = [["Results CSV", exportCSV], REPORT];
@@ -732,7 +745,7 @@ function renderGuide() {
     const b = document.createElement("button");
     b.className = "btn btn-mini" + (i === 0 ? " btn-primary" : "");
     b.textContent = t(label);
-    b.addEventListener("click", () => { if (!running && !_reporting) fn(); });
+    b.addEventListener("click", () => { if (!busy()) fn(); });
     box.appendChild(b);
   });
   document.getElementById("gb-off").textContent = t("Hide tips");
@@ -787,8 +800,7 @@ function setupWindowDrop() {
     const f = list[0];
     if (!f) return;
     if (/\.json$/i.test(f.name)) { loadParamsFile({ files: [f] }); return; }      // a settings file
-    readFile(f, "1");
-    if (list.length > 1) showNotice(null, () => t("Only the first file, {name}, was opened. To compare several surfaces with A, drop them on Batch files… in the ribbon.", { name: f.name }), "warn");
+    readFile(f, "1", list.length > 1 ? () => showNotice(null, () => t("Only the first file, {name}, was opened. To compare several surfaces with A, drop them on Batch files… in the ribbon.", { name: f.name }), "warn") : null);
   });
 }
 
@@ -963,7 +975,8 @@ function runGradient(force) {
     return;
   }
   setRunning(true, "rq_gradient"); clearLog();
-  _batchRows = []; _run = { kind: "rq_gradient", names: [a.name, b.name], params: getGradientParams(), cid: "c" + (++_cSeq) };
+  _batchRows = []; _run = { kind: "rq_gradient", names: [a.name, b.name], params: getGradientParams(), cid: "c" + (++_cSeq),
+                            aids: [a.aid || null, b.aid || null] };
   setStatus("Comparing the two surfaces…", "info");
   showRunCard("rq_gradient", "Comparing {b} with {a}", { a: shortName(a.name), b: shortName(b.name) });
   worker.postMessage({ type: "run_rq_gradient", id: "rq1",
@@ -1152,6 +1165,12 @@ function staleNote(kind, a) {
 }
 
 function updateStale() {
+  markStale();
+  if (_view && VIEWS[_view]) showProps(VIEWS[_view].kind);
+}
+// the dot and the tooltip of each result made with other settings (also after a new node's
+// translation, which sets the tooltips of the tree back to their first texts)
+function markStale() {
   const title = t("Made with other settings than those in Settings now");
   document.querySelectorAll("#tree-analyses .tnode.analysis").forEach((n) => {
     const a = _A[n.dataset.aid], stale = !!(a && changedSince("pvisual", a.record && a.record.parameters).length);
@@ -1163,7 +1182,6 @@ function updateStale() {
     n.classList.toggle("stale", stale);
     n.querySelector(".cnode").title = stale ? title : (c ? c.title : "");
   });
-  if (_view && VIEWS[_view]) showProps(VIEWS[_view].kind);
 }
 
 function resetParams() {
@@ -1228,7 +1246,7 @@ function onResult(kind, jsonStr, msg) {
   if (msg.retheme && _restoring && --_restoring.n <= 0) {
     const v = _restoring.view, V = v && VIEWS[v];
     _restoring = null;
-    const can = V && (V.kind === "session" || (V.type === "html" ? _lastBatch : _figs[V.kind]));
+    const can = V && (V.kind === "session" || (V.type === "html" ? (v === "interpret" ? !!(_C[_curC] && _C[_curC].interp) : _lastBatch) : _figs[V.kind]));
     showView(can ? v : (_figs.rq_gradient ? "gradA" : "channel"), { aid: _curA, cid: _curC });
   }
   updateButtons();
@@ -1388,6 +1406,7 @@ function addAnalysisNode(a) {
   box.querySelectorAll(".tnode.analysis").forEach((n) => n.classList.remove("open"));      // the older ones fold
   box.appendChild(node);
   applyLanguage(LANG);                                                                    // the new rows in the interface language
+  markStale();
 }
 
 function updateAnalysisNodes() {
@@ -1455,6 +1474,10 @@ function forgetAnalysis(aid) {
   Object.keys(_cams).forEach((k) => { if (k.endsWith("@" + aid)) delete _cams[k]; });
   if (_viewerKey && _viewerKey.endsWith("@" + aid)) _viewerKey = null;
   if (_view === "summary") renderSummaryView();
+  if (Object.values(_C).some((o) => o.interp)) {                    // the dimensions of a surface may be gone
+    noteInterpChange(null);
+    if (_view === "interpret") renderInterpretView();
+  }
   if (_curA === aid) {
     const ids = Object.keys(_A);
     if (ids.length) selectAnalysis(ids[ids.length - 1]);
@@ -1484,7 +1507,8 @@ function renderGradient(result, retheme, msg = {}) {
   if (!c) {                                    // a new comparison: the names of this pair (the slots may hold other files by now)
     const names = _run && _run.names ? [_run.names[0], msg.lastName || _run.names[1]] : ["A", "B"], B = _run && _run.batch;
     c = _C[cid] = { id: cid, names, params: (_run && _run.params) || getGradientParams(), figs: null, props: null, metrics: null,
-                    held: true, staleKeys: new Set(), rebuilding: false, records: [],
+                    held: true, staleKeys: new Set(), rebuilding: false, records: [], interp: null,
+                    aids: (_run && !_run.batch && _run.aids) || null,
                     batch: batch && batch.length ? { names, rows: batch, a: B ? B.a : null, items: B ? B.items : [] } : null };
   }
   // a redraw of some figures replaces those; the others keep theirs, and stay stale
@@ -1511,7 +1535,11 @@ function renderGradient(result, retheme, msg = {}) {
       session.comparisons.push(rec);
       c.records.push(rec);
     });
-    if (!c.batch) Object.values(_C).forEach((o) => { if (o !== c && !o.batch && o.records[0] === c.records[0]) dropComparison(o.id, true); });
+    // the comparison it replaces hands on its interpretation
+    if (!c.batch) Object.values(_C).forEach((o) => {
+      if (o !== c && !o.batch && o.records[0] === c.records[0]) { if (o.interp && !c.interp) c.interp = o.interp; dropComparison(o.id, true); }
+    });
+    if (c.interp) { noteInterpChange(c); refreshComparisonProps(); }
     addComparisonNode(c);
     selectComparison(cid);
     if (_readySlot === "A" || _readySlot === "B") _readySlot = null;       // the pair is compared: no pending step
@@ -1521,6 +1549,12 @@ function renderGradient(result, retheme, msg = {}) {
     if (failed) setStatus("Batch complete: {n} comparisons, {f} failed", "error", { n: batch.length - failed, f: failed });
     else if (batch) setStatus("Batch complete: {n} comparisons", "success", { n: batch.length });
     else setStatus("Comparison complete", "success");
+    // A and B swapped by Interpret and compared again: the roles follow
+    if (_pendingInterp && !c.batch && c.names[0] === _pendingInterp.names[0] && c.names[1] === _pendingInterp.names[1]) {
+      const ip = _pendingInterp.interp;
+      _pendingInterp = null;
+      setInterp(c, ip);
+    }
     if (!_restoring) showGuide(batch ? "batch" : "compared");
   } else if (cid === _curC) {
     selectComparison(cid);
@@ -1542,27 +1576,52 @@ function comparisonProps(c, m = c.metrics) {
   // against an idealised surface (a CAD design, found by its floor without texture) the height
   // correlation and the dimensions are the primary measures, as the engine reports in metrics.primary
   const ideal = m.primary === "r_z";
+  // with roles, a design among them decides (2026-10-28); the engine's own finding is said when
+  // the roles hold none
+  const ip = !c.batch && c.interp, task = ip && interpTask(ip);
+  const cad = ip ? ip.a === "design" || ip.b === "design" : ideal;
   const notes = [];
   if (ideal) {
-    const tx = (m.texture_um || []).map((v) => (v == null || !isFinite(v) ? "–" : fmt(v, 2)));
-    notes.push(t("One surface has no measured texture on its floor (A {a} µm, B {b} µm), as a CAD design: against an idealised surface RQ and the channel dimensions are the primary measures, and RQ<sub>d</sub> is given as well.",
-                 { a: tx[0] || "–", b: tx[1] || "–" }));
+    const tx = (m.texture_um || []).map((v) => (v == null || !isFinite(v) ? "–" : fmt(v, 2))), v = { a: tx[0] || "–", b: tx[1] || "–" };
+    notes.push(cad ? t("One surface has no measured texture on its floor (A {a} µm, B {b} µm), as a CAD design: against an idealised surface RQ and the channel dimensions are the primary measures, and RQ<sub>d</sub> is given as well.", v)
+      : t("One surface has no measured texture on its floor (A {a} µm, B {b} µm), as a CAD design, so MaRQ chose the orientation of B by RQ. The roles set here hold no design, so the values are read as for a replica.", v));
   }
   if (m.z_flip != null) notes.push(t(m.z_flip ? "Surface B was rotated 180° about Z to match A." : "Surface B was used as it is."));
   if (m.cell_um)        notes.push(t("Grid {g} µm.", { g: fmt(m.cell_um[0], 2) }));
-  if (m.n_mask != null && m.n_valid) notes.push(t("{n} channel-interior cells ({p} % of the valid common grid).",
-                                                  { n: intl(m.n_mask), p: Math.round(100 * m.n_mask / m.n_valid) }));
+  if (m.n_mask != null && m.n_valid) notes.push(m.mask_fallback
+    ? t("Fewer than 10 cells lie in the channel interior of both surfaces, so the correlations are taken over the whole common grid ({n} cells).", { n: intl(m.n_valid) })
+    : t("{n} channel-interior cells ({p} % of the valid common grid).", { n: intl(m.n_mask), p: Math.round(100 * m.n_mask / m.n_valid) }));
+  // where the values stand on their 0 to 1 scale and how to read them (the paper's interpretation);
+  // the rescan level is that of the earlier surface, and none against a design
+  const lev = cad || task === "reference" ? null : rescanLevel(c, ip ? interpEarlier(ip) : 0);
+  const legend = cad ? t("Against a design the paper's study gives no reference band.")
+    : t("Shaded: an unchanged surface scanned again in the paper's study ({r1} to {r2}). Line below: its tool-to-part pairs ({p1} to {p2}).", studyVars())
+      + (lev ? " " + t("Mark: the rescan level of this surface ({r}).", { r: fmt(lev.r, 3) }) : "");
+  const where = `
+    <div class="pgroup"><div class="pgroup-head">${t("Where the values stand")}</div>
+      <div class="rbrow"><span>RQ<sub>d</sub></span>${refBar(m.r_mag, { study: !cad, own: lev && lev.r })}<span class="rbv">${fmt(m.r_mag, 3)}</span></div>
+      <div class="rbrow"><span>RQ</span>${refBar(m.r_z)}<span class="rbv">${fmt(m.r_z, 3)}</span></div>
+      <div class="rbscale"><span>0</span><span>1</span></div>
+      <div class="pnote">${legend}</div>
+    </div>
+    <div class="pgroup"><div class="pgroup-head">${t("How to read these")}</div>
+      <div class="pnote">${t("Each value is the correlation of A and B over the channel interior, from 0 (no shared structure) to 1 (the same pattern). It is not a percentage, and it does not include size, which the dimensions give.")}${cad ? ""
+        : " " + t("For a replica, RQ<sub>d</sub> and RQ<sub>dy</sub> grade the shape: read RQ<sub>d</sub> against the value the same surface reaches against its own rescan. Differences below about {b} were within the scatter of the paper's study.", { b: fmt(STUDY.bound, 2) })}</div>
+      ${ip ? `<div class="pnote ponly">${t("Interpreted as {task}: see Interpretation in the Browser.", { task: `<b>${t(TASKS[task].title)}</b>` })}</div>` : ""}
+      <div class="pnote ponly int-links"><a href="#" onclick="openTasks(${ip ? `'${task}'` : "null"}); return false;">${t("Which values to read")}</a>${c.batch ? ""
+        : `<button class="btn btn-mini" data-cid="${esc(c.id)}" onclick="openInterpret(this.dataset.cid)">${t("Interpret…")}</button>`}</div>
+    </div>`;
   return `
     <div class="pgroup"><div class="pgroup-head">${t("Surfaces")}</div>
       <div class="prow stack" title="${esc(names[0])}"><span class="pk">${t("A, the reference")}</span><span class="pv">${esc(stem(names[0]))}</span></div>
       <div class="prow stack" title="${esc(names[1])}"><span class="pk">${t("B, the compared surface")}</span><span class="pv">${esc(stem(names[1]))}</span></div>
     </div>
     <div class="pgroup"><div class="pgroup-head">${t("Correlations")}</div>
-      ${metric("RQd",  `RQ<sub>d</sub> <small>${t("slope magnitude")}</small>`, m.r_mag, fmt(m.rmse_mag, 3), "", !ideal)}
-      ${metric("RQ",   `RQ <small>${t("height")}</small>`,                      m.r_z,   fmt(m.rmse_z, 1), UM, ideal)}
+      ${metric("RQd",  `RQ<sub>d</sub> <small>${t("slope magnitude")}</small>`, m.r_mag, fmt(m.rmse_mag, 3), "", !cad)}
+      ${metric("RQ",   `RQ <small>${t("height")}</small>`,                      m.r_z,   fmt(m.rmse_z, 1), UM, cad)}
       ${metric("RQdx", `RQ<sub>dx</sub> <small>${t("slope along")}</small>`,    m.r_gx,  fmt(m.rmse_gx, 3), "")}
       ${metric("RQdy", `RQ<sub>dy</sub> <small>${t("slope across")}</small>`,   m.r_gy,  fmt(m.rmse_gy, 3), "")}
-    </div>
+    </div>${where}
     <div class="pnote">${notes.join(" ")}</div>`;
 }
 
@@ -1580,6 +1639,7 @@ function addComparisonNode(c) {
   box.appendChild(node);
   applyLanguage(LANG);
   labelComparison(c);
+  markStale();
 }
 
 // B by its name (or the size of the batch), and A beside it; both names in full on hover
@@ -1598,6 +1658,8 @@ function updateComparisonNodes() {
     if (!c) return;
     n.classList.toggle("current", c.id === _curC);
     n.classList.toggle("unheld", !c.held);
+    const ir = n.querySelector(".cinterp");
+    if (ir) ir.style.display = c.interp && !c.batch ? "" : "none";
   });
   document.getElementById("tree-summary").style.display = resultCount() ? "" : "none";
 }
@@ -1656,9 +1718,14 @@ function dropComparison(cid, keepRecords) {
     const ids = Object.keys(_C);
     if (ids.length) selectComparison(ids[ids.length - 1]);
     else { _curC = null; _figs.rq_gradient = null; _props.rq_gradient = null; _have.rq_gradient = false; _lastPairNames = null; _cmpParams = null; _lastBatch = null; }
-    if (_view && VIEWS[_view].kind === "rq_gradient") { if (_curC) showView(_view === "batch" && !_lastBatch ? "gradA" : _view, { cid: _curC }); else showStart(); }
+    const keep = _view === "batch" ? !!_lastBatch : _view === "interpret" ? !!(_C[_curC] && _C[_curC].interp) : true;
+    if (_view && VIEWS[_view].kind === "rq_gradient") { if (_curC) showView(keep ? _view : "gradA", { cid: _curC }); else showStart(); }
   }
   if (_view === "summary") renderSummaryView();
+  if (Object.values(_C).some((o) => o.interp)) {                    // a rescan level may be gone
+    noteInterpChange(null); refreshComparisonProps();
+    if (_view === "interpret") renderInterpretView();
+  }
   updateComparisonNodes();
   updateButtons();
 }
@@ -1681,6 +1748,413 @@ function renderBatchView() {
       <tbody>${b.rows.map(row).join("")}</tbody>
     </table>
     <div class="pnote" style="padding-left:0">${t("The 3D views and maps show the last pair. Show runs one pair alone.")}</div>`;
+}
+
+// ── Interpret ──────────────────────────────────────────────────────────────────
+// What the two surfaces of a comparison are, their roles, decides which assessment task of the
+// paper the comparison serves (its figure of the tasks: which surfaces are compared, which outputs
+// are read), and so which values to read. The Interpretation view shows those values, the
+// dimensions of A and B side by side, and reads each one against a reference: a second scan of the
+// same surface compared in this session, or the paper's study. It never grades: MaRQ sets no
+// acceptance thresholds. Batches are not interpreted.
+
+const ROLE_NAMES = { design: "Design (CAD)", tool: "Tool, as made", used: "Tool after use", part: "Part",
+                     rescan: "The same surface, scanned again" };
+const ROLE_RANK = { design: 0, tool: 1, used: 2, part: 3 };      // an earlier stage is the reference of a later one
+// the paper's study: an unchanged surface scanned again (its HT insert after 1 to 20 shots), its
+// fifteen insert-to-part pairs, and the RQd differences it does not interpret
+const STUDY = { rescan: [0.92, 0.95], parts: [0.17, 0.91], bound: 0.02 };
+const PAPER_TASKS = ["characterisation", "fabrication", "replication", "degradation", "chain"];
+const DIMS_ALL = ["floor_width", "opening_width", "depth", "wall_angle", "floor_corner", "rim_corner"];
+const CAD_READ = { shape: ["r_z", "rmse_z"], dims: DIMS_ALL, maps: ["gradheight"] };
+const TASKS = {
+  characterisation: { title: "Channel characterisation", purpose: "Geometry and surface of a single channel", edge: "#3f9a5c",
+                      outputs: ["Width, depth", "Wall angle", "Roughness", "Cross-section"] },
+  fabrication: { title: "Tool fabrication quality", purpose: "How faithfully the tool reproduces the design", pair: ["design", "tool"], edge: "#3d7fc1",
+                 outputs: ["Width, depth", "Wall angle", "Deviation from the design", "RQ"], ...CAD_READ },
+  replication: { title: "Replication quality", purpose: "How faithfully the process copies the tool into the part", pair: ["tool", "part"], edge: "#d9822b",
+                 outputs: ["RQ<sub>d</sub>, RQ<sub>dy</sub>", "Width, depth", "Wall angle", "Height and slope error maps"],
+                 shape: ["r_mag", "r_gy"], dims: [...DIMS_ALL, "f_y"], maps: ["gradheight", "gradslope", "gradxs"] },
+  degradation: { title: "Tool degradation", purpose: "How the tool changes with repeated use", pair: ["tool", "used"], edge: "#8a62c4",
+                 outputs: ["RQ<sub>d</sub>, RQ<sub>dy</sub> trend", "Width, depth", "Wall angle", "Roughness"],
+                 shape: ["r_mag", "r_gy"], dims: [...DIMS_ALL, "floor_sa"], maps: ["gradslope", "gradxs"] },
+  chain: { title: "Overall chain quality", purpose: "The net deviation from the design to the final part", pair: ["design", "part"], edge: "#c9a227",
+           outputs: ["Width, depth", "Wall angle", "Deviation from the design", "RQ"], ...CAD_READ },
+  design_used: { title: "Tool after use against its design", purpose: "The deviation of the tool from the design after use: its fabrication and its wear together",
+                 extra: true, ...CAD_READ },
+  reference: { title: "Measurement reference", purpose: "Two scans of the same unchanged surface: the level a perfect replica reaches under this measurement. Its RQ<sub>d</sub> becomes the reference of this surface",
+               extra: true, shape: ["r_mag", "r_gy"], dims: [...DIMS_ALL, "floor_sa"], maps: [] },
+  general: { title: "A general reading", purpose: "This pair is not one of the paper's assessment tasks",
+             extra: true, shape: ["r_mag", "r_z"], dims: DIMS_ALL, maps: ["gradheight", "gradslope"] },
+};
+const MAP_VIEWS = { gradheight: "Height maps", gradslope: "Slope maps", gradxs: "Cross-sections of A and B" };
+// the dimensions read from the analyses of A and B: the value, its spread along the channel, the
+// decimals, the unit, and the words for a larger and a smaller value of the later surface
+const DIMS = {
+  floor_width:   { label: () => t("Floor width"), get: (r) => r.channel.floor_width, sd: (r) => r.channel.floor_width_conf,
+                   d: 1, unit: UM, more: "{x} µm wider", less: "{x} µm narrower" },
+  opening_width: { label: () => t("Opening width"), get: (r) => r.channel.opening_width, sd: (r) => r.channel.opening_width_conf,
+                   d: 1, unit: UM, more: "{x} µm wider", less: "{x} µm narrower" },
+  depth:         { label: () => t("Channel depth"), get: (r) => r.channel.mean_depth, d: 1, unit: UM, more: "{x} µm deeper", less: "{x} µm shallower" },
+  wall_angle:    { label: () => t("Wall angle"), d: 1, unit: "°", more: "{x}° further from vertical", less: "{x}° closer to vertical",
+                   get: (r) => r.channel.wall_angle_resolved === false ? null : r.channel.wall_angle_deg != null ? r.channel.wall_angle_deg : r.channel.draft_angle_deg },
+  floor_corner:  { label: () => `${t("Corner rounding")}, ${t("floor")}`, get: (r) => r.channel.floor_corner_um, d: 1, unit: UM, more: "{x} µm rounder", less: "{x} µm sharper" },
+  rim_corner:    { label: () => `${t("Corner rounding")}, ${t("rim")}`, get: (r) => r.channel.rim_corner_um, d: 1, unit: UM, more: "{x} µm rounder", less: "{x} µm sharper" },
+  floor_sa:      { label: () => `Sa, ${t("floor")}`, get: (r) => ((r.roughness && r.roughness.floor) || {}).Sa, d: 2, unit: UM, more: "{x} µm rougher", less: "{x} µm smoother" },
+  f_y:           { label: () => `${t("Wall dominance")} <small>f<sub>y</sub></small>`, get: (r) => r.channel.f_y, d: 3, unit: "" },
+};
+
+function metricsOf(c) { return c.metrics || (c.records && c.records.length ? c.records.at(-1).metrics : null); }
+function roleLabel(ip, side) {
+  const r = ip[side], n = ip[side + "N"];
+  if (r === "used" && n != null) return t(n === 1 ? "Tool after 1 use" : "Tool after {n} uses", { n });
+  if (r === "part" && n != null) return t("Part, use {n}", { n });
+  return t(ROLE_NAMES[r] || r);
+}
+// the surface of the earlier stage, the reference of the later one: 0 for A, 1 for B. The stage
+// decides, and of two surfaces of one stage the number of uses (2026-10-28: any number of uses)
+function interpEarlier(ip) {
+  if (ip.a === "rescan" || ip.b === "rescan") {           // a second scan follows its surface; beside a design or itself, no order
+    const o = ip.a === "rescan" ? ip.b : ip.a;
+    return o === "rescan" || o === "design" ? 0 : ip.a === "rescan" ? 1 : 0;
+  }
+  const ra = ROLE_RANK[ip.a], rb = ROLE_RANK[ip.b];
+  if (ra !== rb) return ra < rb ? 0 : 1;
+  return (ip.aN || 0) <= (ip.bN || 0) ? 0 : 1;
+}
+function interpTask(ip) {
+  if (!ip) return null;
+  if (ip.a === "rescan" || ip.b === "rescan") {
+    const o = ip.a === "rescan" ? ip.b : ip.a;
+    return o === "rescan" || o === "design" ? "general" : "reference";
+  }
+  const e = interpEarlier(ip), er = e ? ip.b : ip.a, lr = e ? ip.a : ip.b;
+  if (er === "design") return { tool: "fabrication", used: "design_used", part: "chain" }[lr] || "general";
+  if (lr === "part") return er === "part" ? "general" : "replication";
+  return lr === "used" ? "degradation" : "general";       // two tools as made, two parts: no task of the paper
+}
+// the analysis record of surface i (0 for A, 1 for B): the analysis it was kept from, or one whose
+// crop it is; null for a surface opened from a file
+function surfaceRecord(c, i) {
+  const id = c.aids && c.aids[i];
+  if (id && _A[id] && _A[id].record) return _A[id].record;
+  const a = Object.values(_A).find((x) => x.crop && x.crop.filename === c.names[i] && x.record);
+  return a ? a.record : null;
+}
+// the rescan level of surface i of c: the RQd of the latest comparison of the session, made with the
+// same settings, of that surface with a second scan of itself, found by its analysis or by its file
+// name. Read from the records (2026-10-28), so a comparison the engine no longer holds, or one a
+// saved session left out, still counts
+function rescanLevel(c, i) {
+  const id = c.aids && c.aids[i], name = c.names[i], par = JSON.stringify(c.params);
+  const byAid = new Set(Object.values(_C).filter((o) => id && o.aids && o.aids.includes(id)).map((o) => o.records[0]));
+  let lev = null;
+  session.comparisons.forEach((rec) => {
+    const ip = rec.interpretation, r = rec.metrics && rec.metrics.r_mag;
+    if (rec === c.records[0] || !ip || ip.task !== "reference" || JSON.stringify(rec.parameters) !== par || r == null || !isFinite(r)) return;
+    if (rec.file_a === name || rec.file_b === name || byAid.has(rec)) lev = { r };
+  });
+  return lev;
+}
+
+// a 0 to 1 scale with the value marked. For a pair of scans the RQd scale shades the paper's study,
+// an unchanged surface scanned again, and lines its tool-to-part pairs below; a mark gives this
+// surface's own rescan level.
+function refBar(v, opts = {}) {
+  const pc = (x) => (Math.max(0, Math.min(1, x)) * 100).toFixed(1) + "%";
+  let h = `<div class="rbar">`;
+  if (opts.study) h += `<span class="rb-band" style="left:${pc(STUDY.rescan[0])};width:${pc(STUDY.rescan[1] - STUDY.rescan[0])}"></span>`
+                     + `<span class="rb-range" style="left:${pc(STUDY.parts[0])};width:${pc(STUDY.parts[1] - STUDY.parts[0])}"></span>`;
+  if (opts.own != null && isFinite(opts.own)) h += `<span class="rb-own" style="left:${pc(opts.own)}"></span>`;
+  if (v != null && isFinite(v)) h += `<span class="rb-val" style="left:${pc(v)}"></span>`;
+  return h + `</div>`;
+}
+function studyVars() { return { r1: fmt(STUDY.rescan[0], 2), r2: fmt(STUDY.rescan[1], 2), p1: fmt(STUDY.parts[0], 2), p2: fmt(STUDY.parts[1], 2) }; }
+
+// RQd read against this surface's rescan level, or against the paper's study when there is none
+function readRQd(v, lev, task) {
+  const b = STUDY.bound, f = (x) => fmt(x, 3);
+  let s;
+  if (lev) {
+    const d = v - lev.r;
+    s = Math.abs(d) < b ? t("Within {b} of this surface's rescan level ({r}): the paper does not interpret differences this small.", { b: fmt(b, 2), r: f(lev.r) })
+      : d < 0 ? t("{d} below this surface's rescan level ({r}): the shape is reproduced less faithfully than in a second scan of the same surface.", { d: f(-d), r: f(lev.r) })
+      : t("{d} above this surface's rescan level ({r}).", { d: f(d), r: f(lev.r) });
+  } else {
+    s = t("In the paper's study an unchanged surface scanned again gave {r1} to {r2}, and its tool-to-part pairs {p1} to {p2}. For the level of this surface, compare it with a second scan of itself (The same surface, scanned again).", studyVars());
+  }
+  if (task === "degradation") s += " " + t("Over the uses of a tool, read the trend of RQ<sub>d</sub> rather than one value.");
+  return s;
+}
+
+function interpContext(c) {
+  const ip = c.interp, task = interpTask(ip), ei = interpEarlier(ip), li = 1 - ei, ideal = ip.a === "design" || ip.b === "design";
+  return { ip, task, T: TASKS[task], m: metricsOf(c) || {}, ei, li, recs: [surfaceRecord(c, 0), surfaceRecord(c, 1)],
+           lev: task === "reference" || ideal ? null : rescanLevel(c, ei),
+           earlier: roleLabel(ip, ei ? "b" : "a"), later: roleLabel(ip, li ? "b" : "a"), ideal };
+}
+// the correlations of the task: [label, value, scale, reading]
+function shapeRows(x) {
+  const { T, m, task } = x;
+  return T.shape.map((k) => {
+    if (k === "rmse_z") return [t("Height difference, RMS"), fmt(m.rmse_z, 1) + UM, "",
+      t("The root mean square of the height difference over the channel interior. The Height maps show where it lies.")];
+    const lab = { r_mag: `RQ<sub>d</sub> <small>${t("slope magnitude")}</small>`, r_gy: `RQ<sub>dy</sub> <small>${t("slope across")}</small>`,
+                  r_z: `RQ <small>${t("height")}</small>` }[k];
+    let read, bar;
+    if (k === "r_mag") {
+      bar = refBar(m.r_mag, { study: !x.ideal, own: x.lev && x.lev.r });
+      read = task === "reference" ? t("This becomes the rescan level of {s}: its comparisons with other surfaces are read against it.", { s: esc(x.earlier) })
+           : x.ideal ? t("Against an idealised surface RQ<sub>d</sub> is given as well: RQ and the dimensions are the measures.")
+           : readRQd(m.r_mag, x.lev, task);
+    } else if (k === "r_gy") {
+      bar = refBar(m.r_gy);
+      const fy = x.recs[x.li] && x.recs[x.li].channel.f_y;
+      read = fy != null && isFinite(fy)
+        ? t("The slope across the channel. The wall dominance f<sub>y</sub> of {s} is {fy}: the slope across the channel carries {p} % of its squared slope, so RQ<sub>d</sub> mostly grades the walls.", { s: esc(x.later), fy: fmt(fy, 3), p: Math.round(fy * 100) })
+        : t("The slope across the channel. In a channel it carries most of RQ<sub>d</sub>.");
+    } else {
+      bar = refBar(m.r_z);
+      read = task === "general" && !x.ideal ? t("The height correlation saturates near 1 once a channel has formed. RQ<sub>d</sub> grades the shape where it cannot.")
+                                : t("Against the design RQ does not saturate, and the dimensions measure directly the wall offsets that lower it.");
+    }
+    return [lab, fmt(m[k], 3), bar, read];
+  });
+}
+// the dimensions of the task: [label, earlier, later, later − earlier, reading]; null without both analyses
+function sizeRows(x) {
+  const re = x.recs[x.ei], rl = x.recs[x.li];
+  if (!re || !rl) return null;
+  return x.T.dims.map((k) => {
+    const D = DIMS[k], ve = D.get(re), vl = D.get(rl), ok = (v) => v != null && isFinite(v);
+    const cell = (r, v) => !ok(v) ? (k === "wall_angle" && r.channel.wall_angle_resolved === false ? "< 3°" : "–")
+      : fix(v, D.d) + D.unit + (D.sd && ok(D.sd(r)) ? ` <span class="pm">± ${fix(D.sd(r), D.d)}</span>` : "");
+    const diff = ok(ve) && ok(vl) ? vl - ve : null, tiny = diff != null && Math.abs(diff) < 0.5 * Math.pow(10, -D.d);
+    const read = diff != null && D.more ? (tiny ? t("the same") : t(diff > 0 ? D.more : D.less, { x: fix(Math.abs(diff), D.d) })) : "";
+    const sd = diff == null ? "–" : tiny ? fix(0, D.d) + D.unit : (diff > 0 ? "+" : "−") + fix(Math.abs(diff), D.d) + D.unit;
+    return [D.label(), cell(re, ve), cell(rl, vl), sd, read];
+  });
+}
+
+// the interpretation as it goes into the exports (JSON): the roles, the task, the later minus the
+// earlier dimension, and the rescan level read against
+function interpretationRecord(c) {
+  const x = interpContext(c), diffs = {};
+  if (x.recs[x.ei] && x.recs[x.li]) x.T.dims.forEach((k) => {
+    const a = DIMS[k].get(x.recs[x.ei]), b = DIMS[k].get(x.recs[x.li]);
+    diffs[k] = a == null || b == null || !isFinite(a) || !isFinite(b) ? null : +(b - a).toFixed(6);
+  });
+  return { role_a: x.ip.a, uses_a: x.ip.aN, role_b: x.ip.b, uses_b: x.ip.bN, task: x.task, earlier_surface: x.ei ? "B" : "A",
+           differences_later_minus_earlier: diffs, rescan_level_RQd: x.lev ? x.lev.r : null };
+}
+
+// the Interpretation of comparison c, for its view or (report) its page of the report
+function interpretHtml(c, report) {
+  const x = interpContext(c), { ip, task, T } = x;
+  const surf = (i) => `<div class="int-surf"><b>${i ? "B" : "A"}</b><span class="int-glyph">${roleGlyph(ip, i ? "b" : "a")}</span>${esc(roleLabel(ip, i ? "b" : "a"))}<span class="fname" title="${esc(c.names[i])}">${esc(stem(c.names[i]))}</span></div>`;
+  const notes = [];
+  if (x.ei === 1 && task !== "reference")
+    notes.push(t("A is the later surface here, so the reference is the later one. The differences are written as {later} − {earlier}, and the maps and cross-sections show A − B.", { later: esc(x.later), earlier: esc(x.earlier) }));
+  if (task === "general" && ip.a === "tool" && ip.b === "tool") notes.push(t("If B is a second scan of A, choose The same surface, scanned again."));
+  if (task === "reference") notes.push(t("For two scans of one surface, the differences show how closely the dimensions repeat."));
+  const shape = shapeRows(x), size = sizeRows(x);
+  const missing = [0, 1].filter((i) => !x.recs[i]).map((i) => (i ? "B" : "A"));
+  return `<div class="int-wrap">
+    <div class="int-head">
+      <div><span class="int-title">${t(T.title)}</span>${T.extra && task !== "general" ? `<span class="int-tag">${esc(t("not in the paper's figure of the tasks"))}</span>` : ""}</div>
+      <div class="int-purpose">${t(T.purpose)}.</div>
+      ${surf(0)}${surf(1)}
+      ${report ? "" : `<div class="int-acts"><button class="btn btn-mini" data-roles>${esc(t("Change the roles…"))}</button><button class="btn btn-mini" data-tasks>${esc(t("Which values to read"))}</button></div>`}
+    </div>
+    ${notes.map((n) => `<div class="int-note">${n}</div>`).join("")}
+    <div class="int-sec">${esc(t("Shape"))}</div>
+    <table class="int-table shape"><tbody>${shape.map(([l, v, bar, read]) =>
+      `<tr><td class="il">${l}</td><td class="num">${v}</td><td class="ib">${bar}</td><td class="ir">${read}</td></tr>`).join("")}</tbody></table>
+    ${!x.ideal && T.shape.includes("r_mag") ? `<div class="pnote int-legend">${t("Scale 0 to 1. Shaded: an unchanged surface scanned again in the paper's study ({r1} to {r2}). Line below: its tool-to-part pairs ({p1} to {p2}).", studyVars())}${x.lev ? " " + t("Mark: the rescan level of this surface ({r}).", { r: fmt(x.lev.r, 3) }) : ""}</div>` : ""}
+    <div class="int-sec">${esc(t("Size"))}</div>
+    ${size ? `<table class="int-table size"><thead><tr><th></th><th>${esc(x.earlier)}</th><th>${esc(x.later)}</th><th>${esc(t("Difference"))}</th><th>${esc(t("Reading, {later} against {earlier}", { later: x.later, earlier: x.earlier }))}</th></tr></thead>
+      <tbody>${size.map(([l, a, b, d, read]) => `<tr><td class="il">${l}</td><td class="num">${a}</td><td class="num">${b}</td><td class="num">${d}</td><td class="ir">${read}</td></tr>`).join("")}</tbody></table>
+      <div class="pnote int-legend">${esc(t("± the spread of each width along its channel (standard deviation over its central 80 %), not an uncertainty."))}</div>`
+      : `<div class="int-note">${esc(missing.length > 1 ? t("The analyses of A and B are not in this session, so their dimensions are not known. Keep both surfaces from analyses of this session to compare their dimensions.")
+        : t("The analysis of {s} is not in this session, so its dimensions are not known. Keep both surfaces from analyses of this session to compare their dimensions.", { s: missing[0] }))}</div>`}
+    ${!report && T.maps.length ? `<div class="int-sec">${esc(t("Where the differences lie"))}</div>
+      <div class="int-acts">${T.maps.map((v) => `<button class="btn btn-mini" data-open-view="${v}">${esc(t(MAP_VIEWS[v]))}</button>`).join("")}</div>` : ""}
+  </div>`;
+}
+
+function renderInterpretView() {
+  const el = document.getElementById("interpret-view"), c = _C[_curC];
+  if (!c || !c.interp) { el.innerHTML = ""; return; }
+  el.innerHTML = interpretHtml(c, false);
+  el.querySelector("[data-roles]").addEventListener("click", () => openInterpret(c.id));
+  el.querySelector("[data-tasks]").addEventListener("click", () => openTasks(interpTask(c.interp)));
+  el.querySelectorAll("[data-open-view]").forEach((b) => b.addEventListener("click", () => showView(b.dataset.openView, { cid: c.id })));
+}
+
+// a surface as the paper's figure of the tasks draws it: a tool, and the design of it, as a ridge
+// (a mould positive), a tool after use with rounded edges, a part and a single channel as a
+// channel; the design dashed and without texture, the measured surfaces with a little
+const GLYPH_COL = { design: "#7d8595", tool: "#c46a1a", used: "#8a4b14", part: "#3e7fbf", channel: "#3e7fbf" };
+function glyphSmooth(a, s) {
+  const r = Math.ceil(3 * s), k = Array.from({ length: 2 * r + 1 }, (_, j) => Math.exp(-((j - r) ** 2) / (2 * s * s)));
+  return a.map((_, i) => {
+    let sum = 0, ws = 0;
+    for (let j = -r; j <= r; j++) { const q = Math.min(a.length - 1, Math.max(0, i + j)); sum += a[q] * k[j + r]; ws += k[j + r]; }
+    return sum / ws;
+  });
+}
+function glyphSvg(kind, w = 96, h = 40) {
+  const n = 72, xs = Array.from({ length: n }, (_, i) => -1 + 2 * i / (n - 1));
+  let p = xs.map((x) => Math.min(1, Math.max(0, (0.5 - Math.abs(x)) / 0.13)));
+  if (kind === "used") p = glyphSmooth(p, 4);
+  if (kind === "part" || kind === "channel") p = p.map((v) => 1 - v);
+  if (kind !== "design") {                       // the same texture every time: a fixed sequence
+    let seed = 11 + kind.length * 7;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647 - 0.5) * 0.11;
+    const noise = glyphSmooth(xs.map(rnd), 0.8);
+    p = p.map((v, i) => v + noise[i]);
+  }
+  const X = (x) => ((x + 1) / 2 * (w - 4) + 2).toFixed(1), Y = (v) => (h - 7 - v * (h - 15)).toFixed(1);
+  const line = p.map((v, i) => `${i ? "L" : "M"}${X(xs[i])},${Y(v)}`).join("");
+  const col = GLYPH_COL[kind] || GLYPH_COL.tool;
+  return `<svg class="glyph" viewBox="0 0 ${w} ${h}" aria-hidden="true"><path d="${line}L${X(1)},${h - 1}L${X(-1)},${h - 1}Z" fill="${col}" fill-opacity="${kind === "design" ? 0.3 : 0.5}"/>`
+       + `<path d="${line}" fill="none" stroke="${col}" stroke-width="1.5" stroke-linejoin="round"${kind === "design" ? ' stroke-dasharray="3.2 1.6"' : ""}/></svg>`;
+}
+// the drawing of the surface on `side` of ip: a second scan of a surface is drawn as that surface
+function roleGlyph(ip, side) {
+  const r = ip[side], o = ip[side === "a" ? "b" : "a"];
+  return glyphSvg(r !== "rescan" ? r : o !== "rescan" ? o : "tool");
+}
+
+// the table of the paper's assessment tasks, with the column of `active` marked
+function tasksTableHtml(active) {
+  const fig = (kind, label) => `<figure class="tglyph">${glyphSvg(kind)}<figcaption>${esc(label)}</figcaption></figure>`;
+  const on = (k) => (k === active ? ' class="on"' : "");
+  const cells = (f) => PAPER_TASKS.map((k) => `<td${on(k)}>${f(TASKS[k])}</td>`).join("");
+  return `<table class="task-table">
+    <tr><th></th>${PAPER_TASKS.map((k) => `<th${on(k)} style="border-top-color:${TASKS[k].edge}">${esc(t(TASKS[k].title))}</th>`).join("")}</tr>
+    <tr><th>${esc(t("Purpose"))}</th>${cells((T) => t(T.purpose))}</tr>
+    <tr><th>${esc(t("Surfaces compared"))}</th>${cells((T) => `<div class="tpair">${T.pair
+      ? T.pair.map((r) => fig(r, t(ROLE_NAMES[r]))).join("") : fig("channel", t("One channel"))}</div>`)}</tr>
+    <tr><th>${esc(t("Main outputs to read"))}</th>${cells((T) => `<ul>${T.outputs.map((o) => `<li>${t(o)}</li>`).join("")}</ul>`)}</tr>
+  </table>`;
+}
+let _tasksActive = null;          // the column marked, kept for a change of language
+function openTasks(active) {
+  _tasksActive = active || null;
+  document.getElementById("tasks-table").innerHTML = tasksTableHtml(_tasksActive);
+  openModal("modal-tasks");
+}
+
+// the dialog: the roles of A and B, and the task they make, shown as they are chosen
+let _interpCid = null, _pendingInterp = null;
+function openInterpret(cid) {
+  const c = _C[cid || _curC];
+  if (!c || c.batch || !metricsOf(c) || !ready || busy()) return;
+  _interpCid = c.id;
+  fillInterpretDialog(c.interp || defaultRoles(c));
+  openModal("modal-interpret");
+}
+// the role menus in the language of the moment, set to ip (also after a change of language)
+function fillInterpretDialog(ip) {
+  ["a", "b"].forEach((side) => {
+    const s = document.getElementById("int-" + side);
+    s.innerHTML = Object.keys(ROLE_NAMES).map((k) => `<option value="${k}">${esc(t(ROLE_NAMES[k]))}</option>`).join("");
+    s.value = ip[side];
+    s.onchange = updateInterpretDialog;
+    const n = document.getElementById(`int-${side}-n`);
+    n.value = ip[side + "N"] != null ? ip[side + "N"] : "";
+    n.oninput = updateInterpretDialog;
+  });
+  updateInterpretDialog();
+}
+// the design when exactly one surface is idealised (no texture on its floor: below the engine's
+// 1.5 µm); otherwise a tool and its part (2026-10-28: two smooth surfaces are not a design pair)
+function defaultRoles(c) {
+  const tx = (metricsOf(c) || {}).texture_um || [], low = (v) => v != null && isFinite(v) && v < 1.5;
+  if (low(tx[0]) !== low(tx[1])) return low(tx[0]) ? { a: "design", b: "tool" } : { a: "tool", b: "design" };
+  return { a: "tool", b: "part" };
+}
+// roles as kept: known roles and whole numbers of uses (also those read from a session file), or none
+function cleanInterp(ip) {
+  if (!ip || typeof ip !== "object" || !Object.hasOwn(ROLE_NAMES, ip.a) || !Object.hasOwn(ROLE_NAMES, ip.b)) return null;
+  const n = (v) => (Number.isInteger(v) && v >= 1 ? v : null);
+  return { a: ip.a, b: ip.b, aN: n(ip.aN), bN: n(ip.bN) };
+}
+function dialogRoles() {
+  const val = (id) => document.getElementById(id).value;
+  const n = (id) => { const s = val(id).trim(), v = Number(s); return s && Number.isInteger(v) && v >= 1 ? v : null; };   // whole uses, from 1
+  const a = val("int-a"), b = val("int-b"), counts = (r) => r === "used" || r === "part";
+  return { a, b, aN: counts(a) ? n("int-a-n") : null, bN: counts(b) ? n("int-b-n") : null };
+}
+function updateInterpretDialog() {
+  const ip = dialogRoles(), task = interpTask(ip), T = TASKS[task];
+  ["a", "b"].forEach((side) => {
+    const r = ip[side];
+    document.getElementById(`int-${side}-nbox`).style.visibility = r === "used" || r === "part" ? "visible" : "hidden";
+    document.getElementById(`int-${side}-nlab`).textContent = t(r === "used" ? "Number of uses" : "Made in use no. (optional)");
+  });
+  let s = `${esc(t("This pair"))}: <b>${t(T.title)}</b>. ${t(T.purpose)}.`;
+  if (T.extra && task !== "general") s += " " + esc(t("It is not in the paper's figure of the tasks."));
+  if (interpEarlier(ip) === 1 && task !== "reference") s += " " + esc(t("A is the later surface here."));
+  document.getElementById("int-task").innerHTML = s;
+  document.getElementById("int-table").innerHTML = tasksTableHtml(task);
+}
+function applyInterpretDialog() {
+  const c = _C[_interpCid];
+  const ip = dialogRoles(), task = interpTask(ip);
+  closeModal("modal-interpret");
+  if (!c) return;
+  if (interpEarlier(ip) === 1 && task !== "reference") {
+    // the correlations barely depend on the order (by about 0.001 when B is turned 180°); only the
+    // signs of the maps and cross-sections do, so the reading is written from the roles either way
+    const swapped = { a: ip.b, b: ip.a, aN: ip.bN, bN: ip.aN };
+    const inSlots = !!(files.A && files.B && files.A.name === c.names[0] && files.B.name === c.names[1]);
+    const buttons = [];
+    // this comparison keeps the roles as chosen; the new one takes them swapped
+    if (inSlots) buttons.push([t("A and B really are these: swap A and B and compare again"), () => { c.interp = cleanInterp(ip); noteInterpChange(c); swapAndCompare(c, swapped); }]);
+    buttons.push([t("I chose the roles the wrong way round: swap the roles only"), () => setInterp(c, swapped)]);
+    buttons.push([t("Keep as it is"), () => setInterp(c, ip), true]);
+    askUser(t("A is the later surface"),
+      t("A is set as <b>{a}</b> and B as <b>{b}</b>, so the reference is the later surface. The correlations barely depend on the order, and the differences are written as {later} − {earlier} either way.",
+        { a: esc(roleLabel(ip, "a")), b: esc(roleLabel(ip, "b")), later: esc(roleLabel(ip, "a")), earlier: esc(roleLabel(ip, "b")) })
+      + (inSlots ? "" : " " + t("To swap A and B themselves, open the two surfaces in the slots again.")), buttons);
+    return;
+  }
+  setInterp(c, ip);
+}
+// A and B swapped in their slots and compared again; the new comparison takes the swapped roles
+function swapAndCompare(c, ip) {
+  const a = files.A, b = files.B;
+  if (!a || !b || !ready || busy()) return;
+  const extra = (f) => { const e = {}; if (f.isCrop) { e.isCrop = true; e.from = f.from; } if (f.aid) e.aid = f.aid; return e; };
+  setFile("A", b.name, b.content, extra(b));
+  setFile("B", a.name, a.content, extra(a));
+  _pendingInterp = { names: [b.name, a.name], interp: ip };
+  runGradient(true);
+  if (!running) _pendingInterp = null;
+}
+function setInterp(c, ip) {
+  c.interp = cleanInterp(ip);
+  noteInterpChange(c);
+  refreshComparisonProps();
+  updateComparisonNodes();
+  showView("interpret", { cid: c.id });
+}
+// the records of every interpreted comparison (a rescan level may have changed), and the session
+// has changes to save
+function noteInterpChange(c) {
+  const all = Object.values(_C).filter((o) => o.interp && !o.batch && o.records[0]);
+  all.sort((p, q) => (interpTask(q.interp) === "reference") - (interpTask(p.interp) === "reference"));   // the rescan levels first
+  all.forEach((o) => { o.records[0].interpretation = interpretationRecord(o); });
+  if (c && c.records[0]) _saved.delete(c.records[0]);
+  updateButtons();
+}
+function refreshComparisonProps() {
+  Object.values(_C).forEach((o) => { const m = metricsOf(o); if (m && o.props) { o.props = comparisonProps(o, m); o.propsLang = LANG; } });
+  const c = _C[_curC];
+  if (c) _props.rq_gradient = c.props;
+  if (_view && VIEWS[_view] && VIEWS[_view].kind === "rq_gradient") showProps("rq_gradient");
 }
 
 // ── The summary of the session ─────────────────────────────────────────────────
@@ -1727,7 +2201,7 @@ function renderSummaryView() {
 function showBatchPair(i) {
   const b = _lastBatch, it = b && b.items[i];
   if (!it || running || !ready) return;
-  if (b.a) setFile("A", b.a.name, b.a.content, b.a.isCrop ? { isCrop: true, from: b.a.from } : {});
+  if (b.a) setFile("A", b.a.name, b.a.content, { ...(b.a.isCrop ? { isCrop: true, from: b.a.from } : {}), ...(b.a.aid ? { aid: b.a.aid } : {}) });
   setFile("B", it.name, it.content);
   runGradient();
 }
@@ -1765,7 +2239,7 @@ function showView(id, opts = {}) {
       if (a.held) {
         if (!_lastStatus || _lastStatus[0] !== "Drawing the analysis…") _statusBeforeDraw = _lastStatus;
         rebuildAnalysis(aid, id); setStatus("Drawing the analysis…", "info");
-      }
+      } else setStatus("The engine no longer holds this analysis, so it cannot be drawn. Analyse its file again to see it.", "error");
       return;
     }
     // drawn before the theme, colours, detail or language changed: drawn again now (shown as it
@@ -1776,17 +2250,20 @@ function showView(id, opts = {}) {
     const cid = opts.cid || _curC, c = _C[cid];
     if (!c) return;
     if (cid !== _curC) selectComparison(cid);
-    if (v.type === "html") { if (!_lastBatch) return; }
+    if (v.type === "html") { if (id === "interpret" ? !(c.interp && !c.batch) : !_lastBatch) return; }
     else if (!c.figs) {
       if (c.held) {
         if (!_lastStatus || _lastStatus[0] !== "Drawing the analysis…") _statusBeforeDraw = _lastStatus;
         rebuildComparison(cid, id); setStatus("Drawing the analysis…", "info");
-      }
+      } else setStatus("The engine no longer holds this comparison, so it cannot be drawn. Compare the pair again to see it.", "error");
       return;
     }
     const need = viewKeys(id).filter((k) => c.staleKeys && c.staleKeys.has(k));
     if (c.held && (need.length || c.propsLang !== LANG)) rebuildComparison(cid, null, need);
   }
+  // a view a redraw was to open is forgotten once another is shown (2026-10-28)
+  Object.values(_A).forEach((a) => { a.pendingView = null; });
+  Object.values(_C).forEach((c) => { c.pendingView = null; });
   _view = id;
   const aidSel = v.kind === "pvisual" ? _curA : null, cidSel = v.kind === "rq_gradient" ? _curC : null;
   if (_guide && _guide.owner !== (aidSel || cidSel)) hideGuide();        // the tip was about another result
@@ -1829,6 +2306,9 @@ function showView(id, opts = {}) {
   } else if (v.kind === "session") {
     renderSummaryView();
     document.getElementById("summary-view").classList.add("active");
+  } else if (id === "interpret") {
+    renderInterpretView();
+    document.getElementById("interpret-view").classList.add("active");
   } else {
     renderBatchView();
     document.getElementById("batch-view").classList.add("active");
@@ -2192,6 +2672,7 @@ function xsAxes(d) {
 // a cross-section from the engine; for an analysis with the measured ends, so its fixed axes
 // cover the same stretch of channel as the slider
 function askXs(kind, rid, x) {
+  if (!ready) return Promise.reject(new Error("the engine is starting"));
   const rng = kind === "pvisual" ? xsRange(kind) : null;
   return ask("xsection", { aid: kind === "pvisual" ? rid : null, cid: kind === "pvisual" ? null : rid, x,
                            lo: rng ? rng.lo : null, hi: rng ? rng.hi : null }, "xs");
@@ -2208,8 +2689,9 @@ function xsCsv(kind, d) {
 function openXsPanel(x0) {
   const v = _view && VIEWS[_view];
   if (!v || v.type !== "3d") return;
-  const kind = v.kind, aid = kind === "pvisual" ? _curA : _curC;
+  const kind = v.kind, aid = kind === "pvisual" ? _curA : _curC, view0 = _view;
   askXs(kind, aid, x0).then((m) => {
+    if (_view !== view0 || (kind === "pvisual" ? _curA : _curC) !== aid) return;      // another view meanwhile
     const d = JSON.parse(m.data), rng = xsRange(kind, d);
     _section = { mode: "xs", kind, key: kind === "pvisual" ? "cross_section" : "cross_sections", x: d.x, aid,
                  xTitle: "Y, across the channel (µm)", detail: () => xsDetail(d.x, rng), series: xsSeries(kind, d, false), csv: xsCsv(kind, d),
@@ -2349,7 +2831,7 @@ function exportSection() {
   const S = _section;
   if (!S) return;
   const lines = [S.csv.head.join(","), ...S.csv.rows.map((r) => r.map((v) => v == null ? "" : +Number(v).toPrecision(8)).join(","))];
-  saveFile(`${exportName(S.kind, S.key)}_section.csv`, "text/csv", textBlob(lines.join("\n") + "\n", "text/csv")).catch(() => {});
+  saveFile(`${exportName(S.kind, S.key, S.aid)}_section.csv`, "text/csv", textBlob(lines.join("\n") + "\n", "text/csv")).catch(() => {});
 }
 
 function updateColorBar(trace, c) {
@@ -2508,6 +2990,7 @@ function propsTable() {
     return out;
   };
   document.querySelectorAll("#metrics-panel .pgroup").forEach((g) => {
+    if (!g.querySelector(".prow, .ptable tr")) return;           // scales and notes only (where the values stand, how to read them)
     rows.push([], [clean(g.querySelector(".pgroup-head").textContent)]);
     g.querySelectorAll(".prow").forEach((r) => {
       const k = clean(r.querySelector(".pk").textContent), pv = r.querySelector(".pv"), pm = pv.querySelector(".pm");
@@ -2519,6 +3002,8 @@ function propsTable() {
     });
     g.querySelectorAll(".ptable tr").forEach((tr) => rows.push([...tr.children].map((c) => clean(c.textContent))));
   });
+  // the notes below the groups (the grid, the orientation of B, the channel interior)
+  document.querySelectorAll("#metrics-panel > .pnote").forEach((n) => { const s = clean(n.textContent); if (s) rows.push([], [s]); });
   return rows.map((r) => r.join("\t")).join("\n") + "\n";
 }
 
@@ -2570,7 +3055,7 @@ function shortName(name) { return stem(name).replace(/_Crop(?:ped)?_?Voxel[\d.]+
 
 function exportName(kind, key, aid) {
   if (kind === "pvisual") { const a = _A[aid || _curA]; return `${stem(a ? a.file : "surface")}_${key}`; }
-  const n = _lastPairNames || ["A", "B"];
+  const n = (aid && _C[aid] && _C[aid].names) || _lastPairNames || ["A", "B"];
   return `${stem(n[0])}_vs_${stem(n[1])}_${key}`;
 }
 
@@ -2807,7 +3292,7 @@ function exportCSV() {
 
 function saveSession() {
   const kept = Object.values(_A).filter((a) => a.held), keptC = Object.values(_C).filter((c) => c.held);
-  if (!ready || running || _reporting || !(kept.length || keptC.length)) return;
+  if (!ready || busy() || !(kept.length || keptC.length)) return;
   const slot = (k) => files[k] ? { name: files[k].name, isCrop: !!files[k].isCrop, from: files[k].from || null, aid: files[k].aid || null } : null;
   // version 3 (2026-10-25): every comparison the engine holds, not only the last
   const state = { format: "marq-session", version: 3, software: `${APP.name} ${APP.version}`, saved: new Date().toISOString(),
@@ -2815,7 +3300,8 @@ function saveSession() {
     analyses: kept.map((a) => ({ id: a.id, file: a.file, name: a.name, crop: { filename: a.crop.filename, available: a.crop.available },
                                  record: session.analyses.indexOf(a.record) })),
     comparisons: keptC.map((c) => ({ id: c.id, names: c.names, params: c.params, records: c.records.map((r) => session.comparisons.indexOf(r)),
-                                     batch: c.batch ? { names: c.batch.names, rows: c.batch.rows } : null })),
+                                     batch: c.batch ? { names: c.batch.names, rows: c.batch.rows } : null,
+                                     aids: c.aids || null, interp: c.interp || null })),
     current: _curA, currentC: _curC, aSeq: _aSeq, cSeq: _cSeq, slots: { A: slot("A"), B: slot("B") }, view: _view, settings: collectParamValues() };
   const slots = {};
   ["A", "B"].forEach((k) => { if (files[k]) slots[k] = files[k].content; });
@@ -2859,7 +3345,12 @@ function readSessionFile(file) {
       let st = null;
       try { st = JSON.parse(m.state); } catch {}
       _opening = false;
-      restoreSession(st, m.have || {}, m.slots || {});
+      try { restoreSession(st, m.have || {}, m.slots || {}); }
+      catch (err) {                // a file edited by hand: said, not left half open (2026-10-28)
+        appendLog("ERROR while opening the session: " + ((err && err.stack) || err));
+        setStatus("Error: {msg}", "error", { msg: t("damaged session file") });
+        showNotice("The session could not be opened", () => t("The session file is damaged or is not a MaRQ session. The log has the details."));
+      }
     }).catch(() => {}).finally(() => { _opening = false; updateButtons(); });
   };
   r.onerror = () => showNotice("The file could not be opened", () => t("{name} could not be read. If it is on a network or cloud drive, copy it to this computer first.", { name: file.name }));
@@ -2867,7 +3358,9 @@ function readSessionFile(file) {
 }
 
 function restoreSession(st, have, slots) {
-  if (!st || st.format !== "marq-session" || !st.session) {
+  if (!st || st.format !== "marq-session" || !st.session) {           // the engine refuses such a file first
+    Object.values(_A).forEach((a) => { a.held = false; });
+    Object.values(_C).forEach((c) => { c.held = false; });
     showNotice("The session could not be opened", () => t("This file is not a MaRQ session."));
     return;
   }
@@ -2884,7 +3377,7 @@ function restoreSession(st, have, slots) {
   const list = st.version >= 2 ? (st.analyses || [])
     : heldIds.length ? [{ id: "a1", file: (session.analyses.at(-1) || {}).file || "", crop: st.crop || {}, record: session.analyses.length - 1 }] : [];
   list.filter((x) => heldIds.includes(x.id)).forEach((x) => {
-    const a = _A[x.id] = { id: x.id, file: x.file, name: x.name || uniqueName(stem(x.file) || "surface"), record: session.analyses[x.record] || null,
+    const a = _A[x.id] = { id: x.id, file: String(x.file || ""), name: x.name ? String(x.name) : uniqueName(stem(String(x.file || "")) || "surface"), record: session.analyses[x.record] || null,
                            figs: null, props: null, held: true, staleKeys: new Set(), rebuilding: false,
                            crop: { filename: (x.crop || {}).filename || null, available: !!(x.crop || {}).available, text: null } };
     addAnalysisNode(a);
@@ -2902,9 +3395,11 @@ function restoreSession(st, have, slots) {
                         records: Array.from({ length: Math.min(last, nRows(st.lastBatch)) }, (_, i) => last - nRows(st.lastBatch) + i),
                         batch: st.lastBatch || null }] : [];
   listC.filter((x) => heldC.includes(x.id)).forEach((x) => {
-    const c = _C[x.id] = { id: x.id, names: x.names, params: x.params, figs: null, props: null, metrics: null, held: true,
-                           staleKeys: new Set(), rebuilding: false, records: (x.records || []).map((i) => session.comparisons[i]).filter(Boolean),
-                           batch: x.batch ? { ...x.batch, a: null, items: [] } : null };
+    const c = _C[x.id] = { id: x.id, names: Array.isArray(x.names) && x.names.length === 2 ? x.names.map(String) : ["A", "B"], params: x.params,
+                           figs: null, props: null, metrics: null, held: true, staleKeys: new Set(), rebuilding: false,
+                           records: (Array.isArray(x.records) ? x.records : []).map((i) => session.comparisons[i]).filter(Boolean),
+                           batch: x.batch && Array.isArray(x.batch.rows) ? { ...x.batch, a: null, items: [] } : null,
+                           aids: Array.isArray(x.aids) ? x.aids : null, interp: cleanInterp(x.interp) };
     addComparisonNode(c);
   });
   _cSeq = Math.max(st.cSeq || 0, ...Object.keys(_C).map((k) => parseInt(k.slice(1), 10) || 0));
@@ -3065,6 +3560,7 @@ function reportPage(kind, imgs, logo, aid) {
     <div class="settings"><h2>${esc(t("Settings"))}</h2><table>${rows}</table><p class="note">${esc(t("Values that differ from the paper defaults are in bold."))}</p></div></div>
   ${batch}
   <div class="figs">${imgs.map((src) => `<img src="${src}" alt="">`).join("")}</div>
+  ${C && C.interp && !C.batch ? `<h2>${esc(t("Interpretation"))}</h2><div class="interp">${interpretHtml(C, true)}</div>` : ""}
   <footer>${esc(APP.name)}, ${esc(t(APP.full))}, ${esc(t("version"))} ${APP.version} · ${esc(APP.repo.replace(/^https?:\/\//, ""))}</footer>
 </section>`;
 }
@@ -3112,6 +3608,23 @@ table.batch td.key { color: #d32f2f; font-weight: 600; }
 .figs img { width: 100%; display: block; border: 1px solid #ececee; }
 .page.rq_gradient .figs img { max-height: 128mm; object-fit: contain; }
 footer { margin-top: 4mm; padding-top: 1.5mm; border-top: 1px solid #e1e1e4; color: #8a8a92; font-size: 7pt; }
+.ponly { display: none; }
+.rbrow { display: grid; grid-template-columns: 9mm 1fr 11mm; align-items: center; gap: 2mm; padding: .5mm 0 .5mm 2mm; }
+.rbv { text-align: right; }
+.rbar { position: relative; height: 1.5mm; background: #ececef; border-radius: .75mm; margin: .7mm 0 1.4mm; }
+.rb-band { position: absolute; top: 0; bottom: 0; background: #c4c4cc; border-radius: .75mm; }
+.rb-range { position: absolute; top: calc(100% + .45mm); height: .4mm; background: #8a8a92; }
+.rb-val { position: absolute; top: -.75mm; width: .9mm; height: 3mm; margin-left: -.45mm; background: #d32f2f; border-radius: .3mm; }
+.rb-own { position: absolute; top: -.55mm; width: .55mm; height: 2.6mm; margin-left: -.27mm; background: #1f1f22; }
+.rbscale { display: flex; justify-content: space-between; margin: -.6mm 13mm 0 13mm; color: #8a8a92; font-size: 6.6pt; }
+.interp .int-head { margin-bottom: 2mm; } .interp .int-title { font-size: 11pt; font-weight: 600; }
+.interp .int-tag { margin-left: 2mm; font-size: 7pt; color: #8a8a92; border: 1px solid #d6d6da; border-radius: 3mm; padding: 0 1.5mm; }
+.interp .int-purpose { color: #55555c; margin: .5mm 0 1.2mm; } .interp .int-surf b { display: inline-block; width: 4mm; color: #8a8a92; }
+.interp .int-surf .fname { color: #8a8a92; margin-left: 2mm; } .interp .int-glyph svg { width: 9mm; height: auto; vertical-align: middle; margin-right: 1.5mm; } .interp .int-sec { font-size: 7.4pt; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #8a8a92; margin: 3mm 0 1mm; }
+.interp .int-note { border-left: 2px solid #d6d6da; padding: .6mm 2mm; color: #55555c; margin: 1.2mm 0; }
+.interp table.int-table { width: 100%; border-collapse: collapse; } .interp .int-table th { font-weight: 600; color: #8a8a92; text-align: left; border-bottom: 1px solid #e1e1e4; padding: .5mm 1mm; font-size: 7.4pt; }
+.interp .int-table td { padding: .7mm 1mm; border-bottom: 1px solid #f0f0f2; vertical-align: top; } .interp .int-table td.num { text-align: right; white-space: nowrap; }
+.interp .int-table td.ib { width: 28mm; vertical-align: middle; } .interp .int-table td.ir { color: #55555c; } .interp .int-table .il small { color: #8a8a92; }
 @media print {
   html { background: #fff; } .bar { display: none; }
   .page { width: auto; min-height: 0; margin: 0; padding: 0; box-shadow: none; break-after: page; }
@@ -3215,7 +3728,7 @@ function fileCommand(cmd) {
 
 // ── Running with the launcher ──────────────────────────────────────────────────
 // Every MaRQ page tells the launcher it is open, every 20 s, and goodbye when it closes; the
-// launcher stops a minute after the last one has gone. A call that fails means it has stopped.
+// launcher stops a few seconds after the last one has gone. A call that fails means it has stopped.
 
 const PAGE_ID = Math.random().toString(36).slice(2) + Date.now().toString(36);
 let _serverLost = false;
@@ -3501,6 +4014,7 @@ function cubeLabels() {
 function setLanguage(lang, rebuild = true) {
   applyLanguage(lang);
   document.getElementById("lang-select").value = LANG;
+  document.getElementById("lang-select").setAttribute("aria-label", t("Interface language"));   // skipped by the page's translation
   document.querySelectorAll(".file-name").forEach((el) => { if (!el.classList.contains("has-file")) el.textContent = t(el.dataset.placeholder || ""); });
   ["1", "A", "B"].forEach((slot) => { const f = files[slot]; if (f && f.isCrop) document.getElementById("file" + slot + "-name").textContent = t("crop of {name}", { name: f.from }); });
   updateBatchCount();
@@ -3514,6 +4028,8 @@ function setLanguage(lang, rebuild = true) {
   if (_section) drawSection();
   if (_xs && _view && VIEWS[_view].type === "xs") drawXs();
   updateOptionsMenu();
+  if (document.getElementById("modal-interpret").style.display === "flex") fillInterpretDialog(dialogRoles());
+  if (document.getElementById("modal-tasks").style.display === "flex") openTasks(_tasksActive);
   if (_noticeArgs && document.getElementById("vp-notice").style.display === "flex") showNotice(..._noticeArgs);
   toolHint(document.getElementById("tool-hint").dataset.msg || null);
   if (_lastStatus) setStatus(..._lastStatus);
@@ -3540,6 +4056,11 @@ function toggleTheme() {
 window.addEventListener("DOMContentLoaded", () => {
   _theme = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
   document.querySelectorAll(".file-name").forEach((el) => { el.dataset.placeholder = el.textContent; });
+  // each setting named by its label for screen readers (the label is translated with the page)
+  document.querySelectorAll(".param-card").forEach((card, i) => {
+    const l = card.querySelector(".param-label"), f = card.querySelector("input, select");
+    if (l && f && !f.getAttribute("aria-label")) { l.id = l.id || "param-label-" + i; f.setAttribute("aria-labelledby", l.id); }
+  });
   // the language: the one chosen in the menu last time, otherwise English. It is saved only when
   // chosen, under a key of its own (the key of before, marq.lang, was written at every start with
   // the browser's language, and so tells no choice)
@@ -3643,6 +4164,18 @@ window.addEventListener("DOMContentLoaded", () => {
     m.addEventListener("click", (e) => { if (e.target === m && down === m) closeModal(m.id); down = null; });
   });
   window.addEventListener("keydown", (e) => {
+    if (e.key === "Tab") {                 // the dialog on top keeps the focus (2026-10-28)
+      const open = Array.from(document.querySelectorAll(".modal")).filter((m) => m.style.display === "flex");
+      const box = open.length ? open.at(-1).querySelector(".modal-box") : null;
+      const f = box ? Array.from(box.querySelectorAll("button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])"))
+        .filter((x) => !x.disabled && x.offsetParent !== null) : [];
+      if (f.length) {
+        const i = f.indexOf(document.activeElement);
+        if (e.shiftKey && i <= 0) { e.preventDefault(); f.at(-1).focus(); }
+        else if (!e.shiftKey && (i < 0 || i === f.length - 1)) { e.preventDefault(); f[0].focus(); }
+      }
+      return;
+    }
     if (e.key === "Escape") {
       // the dialog on top: the last open one in the page (one opened from Settings comes after it)
       const open = Array.from(document.querySelectorAll(".modal")).filter((m) => m.style.display === "flex");

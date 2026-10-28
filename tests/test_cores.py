@@ -426,6 +426,34 @@ def test_points_without_a_number_are_left_out():
         assert near(a[k], b[k], 0.5), (k, a[k], b[k])
 
 
+def test_a_fill_value_far_below_is_left_out():
+    # an instrument's fill value (one point at -1e9 µm) neither runs the analysis out of memory nor
+    # changes the channel (2026-10-28)
+    P = channel(); P[1234, 2] = -1e9
+    ch = M["run_pvisual"](P, UI, quiet)["channel"]
+    assert near(ch["mean_depth"], 300.0, 0.3), ch["mean_depth"]
+
+
+def test_a_floor_shorter_than_the_roughness_strip():
+    # the 4000 µm strip is shortened to a floor 3 mm long, so the channel's end walls stay out of
+    # its roughness: Gaussian noise of SD 0.5 µm gives Sa 0.40 and Sq 0.50 (2026-10-28)
+    r = M["run_pvisual"](channel(L=3000.0), UI, quiet)["roughness"]
+    f, reg = r["floor"], r["regions"]["floor"]
+    assert near(f["Sa"], 0.40, 0.02) and near(f["Sq"], 0.50, 0.03), f
+    assert 2500 < reg["x_max"] - reg["x_min"] < 3000, reg
+
+
+def test_the_whole_overlap_used_is_said():
+    # fewer than 10 cells in the channel interior of both surfaces: the whole overlap is used, and
+    # the metrics say so (2026-10-28)
+    c = base()
+    assert c["cmp"]["metrics"]["mask_fallback"] is False
+    B = np.asarray(c["rb"]["cropped_cloud"]).copy(); B[:, 2] *= 0.09
+    path = os.path.join(TMP, "shallow_b.txt"); np.savetxt(path, B, fmt="%.6f")
+    m = compare(crop_file(c["ra"], "a.txt"), path)["metrics"]
+    assert m["mask_fallback"] is True and m["n_mask"] == m["n_valid"], m
+
+
 # ── the figures ─────────────────────────────────────────────────────────────────
 
 def test_figures_build_in_both_languages():

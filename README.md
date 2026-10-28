@@ -88,13 +88,14 @@ it against the sample data of the archive.
 **Offline.** `vendor/` holds Plotly.js, three.js and the Pyodide runtime with NumPy and
 SciPy (37 MB; versions and licences in `vendor/README.md`), so the first start needs no
 download and the status bar reads "Ready (offline bundle)". If `vendor/` is missing,
-for example after a source-only download, the page falls back to the CDNs and needs
-internet for the first start; `python tools/fetch_vendor.py` restores the bundle.
+for example after a source-only download, Plotly and Pyodide come from the CDNs, which
+needs internet for the first start, and the 3D views are drawn with Plotly instead of
+three.js; `python tools/fetch_vendor.py` restores the bundle.
 
 ## The window
 
 - **Ribbon** (top): the commands, grouped as *Surface* (Open, Analyse, Keep as A,
-  Keep as B, Save crop), *Comparison* (Open A, Open B, Compare, the batch), *Export*,
+  Keep as B, Save crop), *Comparison* (Open A, Open B, Compare, Interpret, the batch), *Export*,
   *View* and *Setup* (Settings, Log). The command a first-time user most likely needs
   next is outlined in red.
 - **Browser** (left): the inputs (the scan to analyse, surface A, surface B; click a row
@@ -107,7 +108,7 @@ internet for the first start; `python tools/fetch_vendor.py` restores the bundle
   the × of a node removes its analysis from the session. Every comparison, and every
   batch, has a node of its own in the same way (B by its name, "vs" A beside it); the
   engine keeps the newest four. *Summary of the session* lists every analysis and every
-  comparison in one table, batch rows and results no longer held included, with a button
+  comparison in two tables, batch rows and results no longer held included, with a button
   to open each one the browser lists. A dot beside a result marks one made with other
   settings than those now in *Settings*; Properties then says which.
 - **Properties** (right): the measured values of the result on screen, with an
@@ -175,9 +176,9 @@ scale* (View) stretches the heights, ×2 to ×10, to show shallow features. With
 **True proportions** (View, on by default) every 2D plot whose two axes are lengths uses
 the same scale on both, so the channel keeps its shape and a variation is shown in
 proportion to the channel's size; switch it off to let each axis fill the panel when a
-small variation has to be read. **Link the maps** zooms and pans the six comparison maps
-together; **Link the 3D views** keeps one camera for surface A, surface B and the slope
-error. *Colours* sets the colour scale of the height maps (Earth unless changed) and *3D detail*
+small variation has to be read. The link button (a chain) of the map views zooms and pans
+the six comparison maps together; that of the 3D views keeps one camera for surface A,
+surface B and the slope error. *Colours* sets the colour scale of the height maps (Earth unless changed) and *3D detail*
 the mesh of the 3D views (High unless changed; *Very high* draws every cell, the analysis
 crop at the voxel size and the comparison grid at its full spacing).
 
@@ -230,7 +231,13 @@ at the paper's settings, a voxel of 5 µm:
   cells (for example 40 mm by 5 mm at 5 µm); a larger grid stops with a message to choose a
   larger spacing or to crop the surfaces. A surface whose floor carries less than 1.5 µm of
   texture is taken for an idealised (CAD) surface: RQ becomes the key result of its
-  comparisons.
+  comparisons. Heights more than 10 mm from the field, such as an instrument's fill values,
+  never count as a floor level.
+- **Short floors and shallow pairs.** A floor shorter than the floor roughness strip (4000 µm)
+  shortens the strip: it ends inside the measured floor by a quarter of the floor width, as it
+  stays clear of the walls, and the log says so. When fewer than 10 cells lie in the channel
+  interior of both surfaces, the correlations are taken over the whole common grid, and
+  Properties says so.
 
 ## Workflow A: one surface
 
@@ -313,8 +320,9 @@ at the paper's settings, a voxel of 5 µm:
    orientation check are fixed in the core.
 3. **Compare**. The properties show RQd, RQ, RQdx and RQdy, each with its RMSE, and
    state the orientation kept for B, the grid and the size of the channel-interior
-   mask. The tool reports the numbers and the maps and leaves their interpretation to
-   the user; the paper defines no acceptance thresholds. The views are *Surface A* and
+   mask. They also place RQd and RQ on their 0 to 1 scale, with the paper's study shaded
+   for a pair of scans, and say how to read them. MaRQ grades nothing: the paper defines no
+   acceptance thresholds. The views are *Surface A* and
    *Surface B* in 3D, the *Slope error* drawn in 3D on surface B, the *Height maps* (A, B
    and the signed difference A − B) and the *Slope maps* (the slope magnitudes of A and B
    and the unsigned slope error), each with the outline of the channel-interior mask (a
@@ -324,7 +332,27 @@ at the paper's settings, a voxel of 5 µm:
    axes are fixed at their largest ranges over the channel. The two map views zoom and pan together. The log states which orientation of B was kept, the
    valid-cell fraction and the mask size; its metrics table is that of the kept
    orientation.
-4. **Batch**: choose several files with *Batch files…* and click **Run batch**. The
+4. **Interpret** (after a comparison; batches are not interpreted): choose what A and B are,
+   the design (CAD), the tool as made, the tool after use, a part, or the same surface scanned
+   again. The tool stands for the mould, master or stamp. The pair makes one of the assessment
+   tasks of the paper (Tool fabrication quality, Replication quality, Tool degradation, Overall
+   chain quality; the design against a tool after use, and a rescan, are two more), named as you
+   choose, beside the paper's table of the tasks with its drawings of the surfaces (*Which values
+   to read*, also in Properties). The *Interpretation* view, a node of the comparison, lists
+   the values to read for the task, the dimensions of A and B side by side with the later minus
+   the earlier surface, and a reading of each against a reference, never a verdict: the rescan
+   level of the earlier surface, when a second scan of it was compared with the same settings and
+   interpreted as such in the session, or else the paper's study (an unchanged surface scanned
+   again 0.92 to 0.95, its tool-to-part pairs 0.17 to 0.91, differences below 0.02 not
+   interpreted). With roles set, Properties follows them: a design among them makes RQ and the
+   dimensions the primary measures. When A is set as the later surface, MaRQ asks whether A and
+   B really are these (then it swaps them and compares again; offered while the two surfaces are
+   still in the slots), whether the roles were chosen the wrong way round (it swaps the roles), or
+   to keep it as it is: the correlations barely depend on the order (by about 0.001 when B is
+   turned 180°), and the differences are written later minus earlier either way. The
+   interpretation is saved in the session, written to the Results JSON and printed on the
+   comparison's page of the report.
+5. **Batch**: choose several files with *Batch files…* and click **Run batch**. The
    batch has its own node; its *Batch results* view lists RQ, RQdx, RQdy and RQd for every
    file, and *Show* re-runs one pair for its figures. Surface A is read once for the whole
    batch; the numbers are those of each pair compared alone.

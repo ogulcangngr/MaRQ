@@ -13,7 +13,8 @@ versions and verifies the package checksums against Pyodide's lock file.
 | `pyodide/scipy-1.18.0-*.whl` | SciPy, with OpenBLAS inside (`scipy.libs/libopenblas.so`) | 1.18.0 | BSD-3-Clause | same |
 
 `index.html` and `worker.js` load these local copies first and fall back to the
-CDNs above only when a file is missing, so a checkout without this folder still
+CDNs above only when a file is missing (three.js has no fallback: without it the 3D views are
+drawn with Plotly), so a checkout without this folder still
 works online. Licence texts: https://github.com/plotly/plotly.js/blob/master/LICENSE, https://github.com/mrdoob/three.js/blob/dev/LICENSE,
 https://github.com/pyodide/pyodide/blob/main/LICENSE, https://numpy.org/doc/stable/license.html,
 https://github.com/scipy/scipy/blob/main/LICENSE.txt, https://github.com/OpenMathLib/OpenBLAS/blob/develop/LICENSE.

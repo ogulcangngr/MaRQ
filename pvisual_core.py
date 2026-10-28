@@ -309,11 +309,12 @@ def _raised(rc, q):
     return bool(np.percentile(rc, 100 - q) > -np.percentile(rc, q))
 
 
-def _floor_peak(rc, step=5.0, min_n=200, min_frac=2e-4):
+def _floor_peak(rc, step=5.0, min_n=200, min_frac=2e-4, cap=10000.0):
     """Height below the field (rc < 0) of the fullest 5 um level more than 40 um from it, when that level
     holds at least min_n points and min_frac of all, as a floor does (scattered spikes or dropouts do
-    not); 0 otherwise."""
-    ch = rc[rc < -40.0]
+    not); 0 otherwise. Levels deeper than `cap` (instrument fill values) are ignored, as in
+    _deep_level: one point at -1e9 µm would otherwise ask for 2e8 levels (2026-10-28)."""
+    ch = rc[(rc < -40.0) & (rc > -cap)]
     if len(ch) < min_n:
         return 0.0
     h, e = np.histogram(ch, bins=np.arange(np.floor(ch.min() / step) * step, -40.0 + step, step))
@@ -1095,6 +1096,18 @@ def run_pvisual(file_path: str, params: dict = None, log_fn=print) -> dict:
     floor_ref = nominal if nominal > 0 else floor_width
     fhx = p["floor_eval_length"] / 2.0
     fhy = floor_ref * p["floor_eval_frac"] / 2.0
+    # A floor shorter than the strip shortens it: an end of the strip past a measured end of the floor
+    # moves inside it by the distance the strip keeps from the walls (a quarter of the floor width),
+    # so the end walls stay out of the floor roughness (2026-10-28). A floor as long as the strip, or
+    # longer, keeps the strip as set.
+    fx_lo, fx_hi = -fhx, fhx
+    if np.isfinite(end_lo) and np.isfinite(end_hi) and np.isfinite(floor_width):
+        if end_lo > -fhx:
+            fx_lo = end_lo + 0.25 * floor_width
+        if end_hi < fhx:
+            fx_hi = end_hi - 0.25 * floor_width
+        if (fx_lo, fx_hi) != (-fhx, fhx):
+            log_fn(f"  floor strip shortened to {max(fx_hi - fx_lo, 0.0):.0f} µm: the floor is shorter than the strip")
     # Field strips: FIXED size, auto-placed past the lip (L and R kept separate).
     field_w  = p["field_eval_width"]
     field_hx = p["field_eval_length"] / 2.0
@@ -1115,7 +1128,7 @@ def run_pvisual(file_path: str, params: dict = None, log_fn=print) -> dict:
     def _rgh(m):
         return _roughness_region(xr[m], yr[m], zr[m])
 
-    floor_mask = (np.abs(xr) < fhx) & (np.abs(yr) < fhy) & (zr <= floor_z_thr)
+    floor_mask = (xr > fx_lo) & (xr < fx_hi) & (np.abs(yr) < fhy) & (zr <= floor_z_thr)
     sl_mask = ((np.abs(xr) < field_hx) &
                (yr >= sl_y_min) & (yr <= sl_y_max) & (zr >= surf_z_thr))
     sr_mask = ((np.abs(xr) < field_hx) &
@@ -1123,7 +1136,7 @@ def run_pvisual(file_path: str, params: dict = None, log_fn=print) -> dict:
     floor_rgh, sl_rgh, sr_rgh = _rgh(floor_mask), _rgh(sl_mask), _rgh(sr_mask)
 
     roughness_regions = {
-        "floor":      {"x_min": float(-fhx), "x_max": float(fhx),
+        "floor":      {"x_min": float(fx_lo), "x_max": float(fx_hi),
                        "y_min": float(-fhy), "y_max": float(fhy)},
         "surf_left":  {"x_min": float(-field_hx), "x_max": float(field_hx),
                        "y_min": float(sl_y_min), "y_max": float(sl_y_max)},

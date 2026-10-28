@@ -7,7 +7,7 @@ With the internet blocked: analyses the insert and the part, keeps them as A and
 them (the metrics against tests/test_features_expected.json; --record writes that file), then
 goes through the views a user opens: both analyses in the tree, the height and slope maps, the
 cross-section at a position, the 3D view with the one-click cross-section (when the headless
-browser has WebGL), the report, the language, a session saved and opened again in a fresh
+browser has WebGL), Interpret and its view, the report, the language, a session saved and opened again in a fresh
 page, and the conveniences (one header-rows setting, results made with other settings marked,
 the side panes hidden, MaRQ's own dialogs, the Feature setting and its dialog, the Options menu and
 the interface size, a file in millimetres, the example). Exit code 0 when everything holds.
@@ -131,6 +131,65 @@ with sync_playwright() as p:
     tree(page, "gradxs"); wait(page, "() => _xs && _xs.kind === 'rq_gradient' && _xs.d", 60)
     check("cross-sections of A and B", page.evaluate("() => document.getElementById('xs-plot').data.length") == 3)
 
+    # Interpret: the Properties of the comparison place RQd and RQ on their 0 to 1 scale and say how
+    # to read them; the roles of A and B make the task, whose values the Interpretation view shows
+    # with A and B side by side (the part is made 4 µm wider); A set as the later surface asks, and
+    # Keep as it is or swapping the roles is taken; a second scan of a surface is its rescan level
+    pp = page.evaluate("""() => { const p = document.getElementById('metrics-panel'), m = session.comparisons[0].metrics;
+        return [!!p.querySelector('.rbar .rb-val'), !!p.querySelector('.rbar .rb-band') === (m.primary !== 'r_z'),
+                p.textContent.includes('How to read these'), !document.getElementById('interpret-open').disabled]; }""")
+    check("Properties: the values on their 0 to 1 scale, and how to read them", pp == [True, True, True, True], pp)
+
+    def roles(a_role, b_role):
+        page.evaluate("() => openInterpret()"); time.sleep(0.3)
+        page.select_option("#int-a", a_role); page.select_option("#int-b", b_role); time.sleep(0.2)
+        said = page.evaluate("() => [document.getElementById('int-task').textContent.split('.')[0], (document.querySelector('#int-table th.on') || {}).textContent || null]")
+        page.click("#int-go"); time.sleep(0.6)
+        return said
+    FW = """() => { const v = document.getElementById('interpret-view'), c = _C[_curC];
+        const row = [...v.querySelectorAll('table.size tbody tr')].find(r => r.cells[0].textContent.startsWith('Floor width'));
+        const ra = surfaceRecord(c, 0), rb = surfaceRecord(c, 1);
+        return [_view, (v.querySelector('.int-title') || {}).textContent, row ? row.cells[3].textContent : null,
+                ra && rb ? +(rb.channel.floor_width - ra.channel.floor_width).toFixed(1) : null, c.interp.a + ',' + c.interp.b,
+                getComputedStyle(document.querySelector(`.trow.cinterp[data-cid="${c.id}"]`)).display !== 'none',
+                (session.comparisons[0].interpretation || {}).task || null, !!v.querySelector('.int-note')]; }"""
+    num = lambda s: float(s.replace("\u2212", "-").replace("µm", "").replace("+", "").strip()) if s else float("nan")
+    said = roles("tool", "part")
+    v1 = page.evaluate(FW)
+    check("Interpret: a tool and its part are Replication quality, A and B side by side",
+          said == ["This pair: Replication quality", "Replication quality"] and v1[:2] == ["interpret", "Replication quality"]
+          and v1[3] is not None and abs(num(v1[2]) - v1[3]) < 0.051 and abs(v1[3] - 4) < 1
+          and v1[4:7] == ["tool,part", True, "replication"] and not v1[7], f"{said} {v1}")
+    roles("part", "tool")
+    asked = page.evaluate("() => [document.getElementById('modal-ask').style.display, document.querySelectorAll('#ask-buttons button').length, document.getElementById('ask-title').textContent]")
+    page.click("#ask-buttons button:has-text('Keep as it is')"); time.sleep(0.6)
+    v2 = page.evaluate(FW)
+    roles("part", "tool")
+    page.click("#ask-buttons button:has-text('swap the roles only')"); time.sleep(0.6)
+    v3 = page.evaluate(FW)
+    check("Interpret: A set as the later surface asks; kept, the differences are later minus earlier; or the roles swap",
+          asked == ["flex", 3, "A is the later surface"] and v2[4] == "part,tool" and v2[7] and abs(num(v2[2]) + v1[3]) < 0.051
+          and v3[4] == "tool,part" and not v3[7], f"{asked} {v2} {v3}")
+    # the record of a rescan pair of A's surface (as noteInterpChange writes it); one made with other
+    # settings, or without a number, does not count
+    lev = page.evaluate("""() => { const c = _C[_curC], rec = (par, r) => ({ file_a: c.names[0], file_b: 'rescan.txt', parameters: par,
+                                    metrics: { r_mag: r }, interpretation: { task: 'reference' } });
+        session.comparisons.push(rec(c.params, 0.93));
+        const r = rescanLevel(c, 0), read = readRQd(0.85, r, 'replication');
+        session.comparisons.splice(-1, 1, rec({ ...c.params, grid_spacing: 7 }, 0.93));
+        const other = rescanLevel(c, 0);
+        session.comparisons.splice(-1, 1, rec(c.params, NaN));
+        const none = rescanLevel(c, 0);
+        session.comparisons.pop();
+        return [r && r.r, read.startsWith('0.080 below'), interpTask({ a: 'tool', b: 'rescan' }), other, none]; }""")
+    check("a second scan of the same surface, with the same settings, is its rescan level", lev == [0.93, True, "reference", None, None], lev)
+    order = page.evaluate("""() => [interpTask({ a: 'used', aN: 2000000, b: 'part', bN: 5 }), interpEarlier({ a: 'used', aN: 2000000, b: 'part', bN: 5 }),
+        interpEarlier({ a: 'rescan', b: 'design' }), interpEarlier({ a: 'rescan', b: 'rescan' }), interpEarlier({ a: 'rescan', b: 'tool' }),
+        interpTask({ a: 'used', aN: 20, b: 'used', bN: 5 }), interpEarlier({ a: 'used', aN: 20, b: 'used', bN: 5 }),
+        JSON.stringify(cleanInterp({ a: 'tool', b: 'part', aN: 2.5, bN: 3 })), cleanInterp({ a: null, b: 'part' }), cleanInterp({ a: 'constructor', b: 'part' })]""")
+    check("Interpret: the stage decides the order at any number of uses; roles read back are checked",
+          order == ["replication", 0, 0, 0, 1, "degradation", 1, '{"a":"tool","b":"part","aN":null,"bN":3}', None, None], order)
+
     # 3D, when the headless browser has WebGL: the three.js viewport, or Plotly's 3D surface where
     # three.js cannot start (no WebGL 2 in some headless browsers without a graphics card)
     webgl = page.evaluate("() => { try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch (e) { return false; } }")
@@ -163,6 +222,7 @@ with sync_playwright() as p:
     wait(page, f"() => ({count})('section.page') > 0", 120); time.sleep(1)
     pages_n, figs = page.evaluate(count, "section.page"), page.evaluate(count, ".figs img")
     check("report: a page per result, with figures", pages_n == 3 and figs >= 6, f"pages {pages_n}, figures {figs}")
+    check("report: the interpretation on the page of the comparison", page.evaluate(count, ".interp") == 1 and page.evaluate(count, ".rbar") >= 4)
     page.keyboard.press("Escape"); time.sleep(0.5)
 
     # language
@@ -187,11 +247,46 @@ with sync_playwright() as p:
     wait(page, "() => _figs.rq_gradient && _figs.pvisual && !_restoring", 300); time.sleep(1)
     m2 = page.evaluate("() => session.comparisons[0].metrics")
     check("session opened again", all(abs(m2[k] - m[k]) < 1e-12 for k in KEYS) and page.evaluate("() => Object.keys(_A).length") == 2)
+    check("the interpretation kept in the session", page.evaluate("() => Object.values(_C).map(c => c.interp ? c.interp.a + ',' + c.interp.b : '-').join()") == "tool,part")
     n0 = page.evaluate("() => _serial.rq_gradient")
     page.click("#run-gradient"); wait(page, f"() => !running && _serial.rq_gradient > {n0}")
     # the same pair with the same settings stays one row of the exports
     check("compared again after opening it, still one row", page.evaluate("() => session.comparisons.length") == 1
           and abs(page.evaluate("() => session.comparisons[0].metrics.r_mag") - m["r_mag"]) < 1e-9)
+
+    # a session file whose record is damaged is refused before the engine replaces anything: the
+    # results on the page keep their own crops; one edited by hand opens, its odd fields left out
+    def session_copy(name, edit, swap=False):  # swap: the two analyses' results trade places in the file
+        out = os.path.join(tmp, name)
+        with zipfile.ZipFile(sess) as zi, zipfile.ZipFile(out, "w") as zo:
+            ids = sorted({n.split(".")[0][8:] for n in zi.namelist() if n.startswith("pvisual_")})
+            ren = {ids[0]: ids[1], ids[1]: ids[0]} if swap and len(ids) == 2 else {}
+            for it in zi.infolist():
+                data, fn = zi.read(it.filename), it.filename
+                if fn.startswith("pvisual_") and fn.split(".")[0][8:] in ren:
+                    fn = "pvisual_" + ren[fn.split(".")[0][8:]] + "." + fn.split(".", 1)[1]
+                zo.writestr(fn, edit(data) if fn == "marq_session.json" else data)
+        return out
+    def open_session(path):                     # MaRQ asks first when the results on screen are not saved
+        page.set_input_files("#session-input", path); time.sleep(0.5)
+        if page.evaluate("() => document.getElementById('modal-ask').style.display === 'flex'"):
+            page.click("#ask-buttons button:has-text('Open the session')")
+    crop_len = "async () => (await ask('export_crop', { aid: Object.keys(_A)[0] }, 'crop')).data.length"
+    c0 = page.evaluate(crop_len)
+    open_session(session_copy("damaged.marq", lambda d: d + b"x", swap=True))
+    wait(page, "() => !_opening", 120); time.sleep(0.5)
+    dmg = [page.inner_text("#status-bar"), page.evaluate(crop_len) == c0, page.evaluate("() => Object.keys(_A).length")]
+    def edited(d):
+        st = json.loads(d)
+        st["comparisons"][0]["names"] = None; st["comparisons"][0]["interp"] = {"a": None, "b": "part"}
+        return json.dumps(st).encode()
+    open_session(session_copy("edited.marq", edited))
+    wait(page, "() => !_opening && !_restoring", 300); time.sleep(1)
+    ed = page.evaluate("() => { const c = Object.values(_C)[0]; return [c.names.join(), c.interp, _lastStatus[0]]; }")
+    check("a damaged session file is refused, the results kept; one edited by hand opens",
+          "damaged session file" in dmg[0] and dmg[1] and dmg[2] == 2 and ed == ["A,B", None, "Session opened: {name}"], f"{dmg} {ed}")
+    open_session(sess)                                                # the session as saved, for what follows
+    wait(page, "() => !_opening && _figs.rq_gradient && _figs.pvisual && !_restoring", 300); time.sleep(1)
 
     # conveniences: one header-rows setting, results made with other settings, the side panes,
     # MaRQ's own dialogs, a file in millimetres, the example

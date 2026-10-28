@@ -12,6 +12,28 @@ let runtimeSource = "local";
 let pyodide = null;
 const post = (m) => self.postMessage(m);
 
+// Pyodide 314.0.7 takes the address of a long Python string, or of a buffer, as a signed number
+// in five of its functions: once its memory has grown past 2 GB (the whole scan of an insert
+// takes it there), a result, a crop or a saved session is read from the wrong place, or not at
+// all. They get the address unsigned, as the rest of Pyodide has it (2026-10-28).
+const UNSIGNED_ARGS = { _python2js_ascii: [0], JsvBuffer_assignToPtr: [1], JsvBuffer_assignFromPtr: [1],
+                        _pyproxy_get_buffer_result: [0, 1, 2], _python2js_buffer_inner: [0] };
+let unsignedDone = false;
+function unsignedImports(imports) {
+  const env = imports && imports.env;
+  if (unsignedDone || !env || !Object.prototype.hasOwnProperty.call(env, "_python2js_ascii")) return;
+  unsignedDone = true;                                // Python's own module; its libraries come later
+  for (const [name, args] of Object.entries(UNSIGNED_ARGS)) {
+    const f = env[name];
+    if (typeof f !== "function") continue;
+    env[name] = Object.assign(function (...a) { for (const i of args) a[i] >>>= 0; return f.apply(this, a); }, { sig: f.sig });
+  }
+}
+for (const k of ["instantiate", "instantiateStreaming"]) {
+  const f = WebAssembly[k];
+  WebAssembly[k] = function (source, imports, ...rest) { unsignedImports(imports); return f.call(this, source, imports, ...rest); };
+}
+
 // the runtime from the bundle; from the internet when the bundle is missing or damaged
 async function startRuntime(where) {
   runtimeSource = where;
@@ -173,6 +195,13 @@ def session_unpack(data):
     names = z.namelist()
     if "marq_session.json" not in names:
         raise ValueError("not a MaRQ session file")
+    # the record of the session is checked first: a damaged or edited one is refused before
+    # anything is read or replaced (2026-10-28)
+    state = z.read("marq_session.json").decode("utf-8")
+    st = _sjson.loads(state)
+    if (not isinstance(st, dict) or st.get("format") != "marq-session" or not isinstance(st.get("session"), dict)
+            or not isinstance(st.get("analyses", []), list) or not isinstance(st.get("comparisons", []), list)):
+        raise ValueError("not a MaRQ session file")
     have = {"pvisual": [], "rq_gradient": []}
     # everything is read first and replaces what the engine holds only when the whole file has
     # been read: a damaged file leaves the results of the page as they were (2026-10-25)
@@ -187,7 +216,6 @@ def session_unpack(data):
             got2[cid] = _s_full("rq_gradient", _s_get(z, n[:-5]))
             have["rq_gradient"].append(cid)
     slots = {n[5:-4]: z.read(n) for n in names if n.startswith("slot_")}
-    state = z.read("marq_session.json").decode("utf-8")
     _results.clear(); _held.clear(); _results2.clear(); _held2.clear()
     for aid, r in got1.items():
         _results[aid] = r; _held.append(aid)
@@ -427,8 +455,10 @@ function withoutHeader(bytes, name, skipRows) {
   }
   // columns separated by semicolons with decimal commas (a spreadsheet in many languages): the
   // commas are read as decimal points (2026-10-25)
-  const row = lines[Math.min(first, lines.length - 1)] || "";
-  if (/;/.test(row) && /\d,\d/.test(row) && !/\d\.\d/.test(row)) {
+  // and those separated by tabs or spaces with decimal commas, every value a number (2026-10-28)
+  const row = lines[Math.min(first, lines.length - 1)] || "", cells = row.trim().split(/[\s;]+/);
+  const commaCells = cells.length >= 3 && cells.slice(0, 3).every((s) => /^[+-]?\d+(,\d+)?([eE][+-]?\d+)?$/.test(s));
+  if (/\d,\d/.test(row) && !/\d\.\d/.test(row) && (/;/.test(row) || commaCells)) {
     out = new TextEncoder().encode(new TextDecoder("utf-8").decode(out).replace(/,/g, "."));
     post({ type: "log", line: `  Decimal commas in ${name} read as decimal points` });
   }

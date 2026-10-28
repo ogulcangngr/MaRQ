@@ -85,13 +85,19 @@ class Pages:
 PAGES = Pages()
 
 
+def own_hosts(port):
+    """The names this server answers to; a browser leaves out port 80."""
+    hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
+    return hosts | {"127.0.0.1", "localhost"} if port == 80 else hosts
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     extensions_map = TYPES
 
     def do_POST(self):
         port = self.server.server_address[1]
         path, _, query = self.path.partition("?")
-        if self.headers.get("Host") in (f"127.0.0.1:{port}", f"localhost:{port}") and path in ("/__alive", "/__bye"):
+        if self.headers.get("Host") in own_hosts(port) and path in ("/__alive", "/__bye"):
             pid = urllib.parse.parse_qs(query).get("id", [""])[0][:100]
             if pid:
                 (PAGES.alive if path == "/__alive" else PAGES.bye)(pid)
@@ -108,7 +114,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         # folder listings, and no "not modified" by date: a folder from an older zip has older
         # dates than the files the browser may hold from another MaRQ on the same port
         port = self.server.server_address[1]
-        if self.headers.get("Host") not in (f"127.0.0.1:{port}", f"localhost:{port}"):
+        if self.headers.get("Host") not in own_hosts(port):
             self.send_error(403)
             return None
         path = self.path.split("?", 1)[0].split("#", 1)[0]
@@ -121,7 +127,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return None
-        if any(seg.startswith(".") or "\\" in seg for seg in path.split("/")):
+        # the path as it will be read (%2e is a dot), and as the disk names it: on Windows a short
+        # name (GIT~1) stands for a hidden folder (2026-10-28)
+        real = os.path.relpath(os.path.realpath(self.translate_path(path)), HERE)
+        if any(seg.startswith(".") or "\\" in seg or "~" in seg for seg in urllib.parse.unquote(path).split("/")) \
+                or real.startswith("..") or any(seg.startswith(".") for seg in real.split(os.sep) if real != "."):
             self.send_error(404)
             return None
         if path != "/" and os.path.isdir(self.translate_path(path)):
@@ -195,6 +205,13 @@ def browsers():
                                       "microsoft-edge", "microsoft-edge-stable", "brave-browser")]
 
 
+def open_browser(url, tab):
+    """MaRQ's own window, else a browser tab; said when neither opens."""
+    if not ((not tab and open_window(url)) or webbrowser.open(url)):
+        print(f"  The browser could not be opened automatically. Open Chrome, Edge, Firefox\n"
+              f"  or Safari yourself and go to   {url}")
+
+
 def open_window(url):
     """MaRQ in a window of its own (the application mode of Chrome or Edge); False when
     neither is installed, and the caller opens a browser tab instead."""
@@ -236,7 +253,7 @@ def main():
     if running:
         print(f"MaRQ is already running from this folder, at {running}; a new MaRQ window opens.")
         if not os.environ.get("MARQ_NO_BROWSER"):
-            (not tab and open_window(running)) or webbrowser.open(running)
+            open_browser(running, tab)
         return
     url = f"http://127.0.0.1:{server.server_address[1]}/"
     bundled = os.path.exists(os.path.join(HERE, "vendor", "pyodide", "pyodide.mjs"))
@@ -261,7 +278,7 @@ def main():
     else:
         print("\n  Keep this window open while you use MaRQ; close it (or press Ctrl+C) to stop MaRQ.\n")
     if not os.environ.get("MARQ_NO_BROWSER"):                # tests start the server alone
-        threading.Timer(0.6, lambda: (not tab and open_window(url)) or webbrowser.open(url)).start()
+        threading.Timer(0.6, lambda: open_browser(url, tab)).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:

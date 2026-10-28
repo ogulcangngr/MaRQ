@@ -534,6 +534,77 @@ version.
     out when the interface is reduced to about half or less.
   - `tests/e2e_features.py`: the menu, a size and Automatic again, the figure scaled as a whole with
     the pointer on its point, and a zoom of 300 % undone.
+- Interpret (2026-10-28, J. Charmet's review: a sentence on how to read the correlations, or a
+  graph of where they stand). No analysis change.
+  - Properties of a comparison: RQd and RQ on their 0 to 1 scale, the paper's study shaded for a
+    pair of scans (an unchanged surface scanned again, 0.92 to 0.95) and lined (its tool-to-part
+    pairs, 0.17 to 0.91), with the rescan level of the surface marked once known; and how to
+    read them, from the paper: a correlation over the channel interior, not a percentage,
+    without size; for a replica RQd and RQdy grade the shape, read against a rescan; differences
+    below about 0.02 not interpreted. The same in the report.
+  - *Interpret* (ribbon, tip after a comparison, Properties): the roles of A and B (Design (CAD),
+    Tool, as made, Tool after use, Part, The same surface, scanned again) make the assessment
+    task of the paper's figure, named as they are chosen beside a table of the tasks with the
+    figure's drawings of the surfaces (*Which values to read*). The *Interpretation* view: the
+    values to read for the task, the dimensions of A and B side by side (later minus earlier,
+    from the analyses they were kept from), a reading of each against the rescan level of the
+    surface or the paper's study, and the maps to open. A set as
+    the later surface asks: swap A and B and compare again, swap the roles, or keep it as it is
+    (the correlations barely depend on the order: up to 0.0012 on the sample pairs, when B is
+    turned 180°). Kept in the session, the Results JSON (`interpretation` of the comparison)
+    and the report. Batches unchanged.
+  - `tests/e2e_features.py`: the scale and the note, a tool and its part as Replication quality
+    with A and B side by side, the reversed order kept and swapped, a rescan as the reference
+    level, the interpretation in the report and in a session opened again.
+- A final check before release (2026-10-28: the whole software reviewed, area by area). Three
+  analysis fixes, approved one by one; the paper's numbers stay the same except one row of its
+  Supplement Table S5 (below), and the sample data give the same numbers to the last digit.
+  - An instrument's fill value (a point at -1e9 µm, say) is no longer taken for a floor level:
+    a single one asked for 2e8 histogram levels and ran the analysis out of memory; levels more
+    than 10 mm from the field are left out, as the depth of the floor already left them out.
+  - A floor shorter than the floor roughness strip (4000 µm) shortens the strip, which then
+    ends inside the measured floor by a quarter of the floor width (as it keeps from the walls):
+    the strip ran into the channel's end walls, and on a test floor 3.9 mm long gave Sa 0.97
+    for a true 0.40 µm. A floor as long as the strip, or longer, keeps it as set. Of the paper's
+    channels only eight White ones, sheared after shots 1 and 5, are shorter; one of them is in
+    Table S5 (the White 300 µm part of the first shot: floor Sa 3.15 → 3.12, Sq 4.17 → 4.06,
+    Sz 86.7 → 29.3 µm, the old Sz from points of the end wall).
+  - When fewer than 10 cells lie in the channel interior of both surfaces, the correlations are
+    taken over the whole common grid, as before; the metrics now say so (`mask_fallback`), and
+    Properties too.
+  - Memory past 2 GB: Pyodide 314.0.7 takes the address of a long Python string, or of a
+    buffer, as a signed number in five of its functions, so once its memory grew past 2 GB
+    (the whole scan of an insert, 12 million points, takes it to 2.5 GB) a result, a crop or a
+    saved session came out of the wrong place ("the result could not be shown"), or not at
+    all. `worker.js` hands those functions the address unsigned, as the rest of Pyodide has
+    it; checked at 2.5 GB with every way a result, a crop and a session cross over.
+  - Sessions: a damaged record is refused before the engine replaces anything (the results on
+    the page could otherwise be shown with another surface's numbers); a file edited by hand is
+    said, not left half open, and odd fields (names, roles) are left out; nothing is saved while
+    a session opens.
+  - Interpret: the stage decides the order at any number of uses (from a million uses a tool
+    was taken as later than its part); a second scan beside a design, or two second scans, ask
+    no order; the rescan level comes from the records of the session, only of a comparison made
+    with the same settings, so it holds in a session opened again; with roles set, Properties
+    follows them (a design among them makes RQ and the dimensions primary), and says when MaRQ
+    took a smooth surface for a design that the roles do not hold; two smooth surfaces are
+    proposed as a tool and its part; "A and B really are these" keeps the roles on the first
+    comparison too; whole numbers of uses only; the open view follows a removed comparison or
+    analysis; the tasks window keeps its column across a change of language; the JSON names
+    the earlier surface `earlier_surface`.
+  - The interface: a cross-section asked of an engine that is restarting no longer gives the
+    start-up message; a result the engine no longer holds says so when it cannot be drawn; a
+    cross-section that arrives after a change of view, or a redraw for a view left meanwhile, no
+    longer takes the view back; a failed run is no longer laid on a file opened during it; the
+    notice of a drop of several files stays; tab- or space-separated files with decimal commas
+    are read, and a cut-off file is said in words; *Show* of a batch row keeps A linked to its
+    analysis; *Copy* of Properties leaves out the groups of notes and adds the notes below them.
+  - The Python server (`run_marq.py`): hidden files are refused also when their names are
+    URL-encoded or written as Windows short names (`GIT~1`); port 80 works; it says when no
+    browser opens.
+  - Documentation: three.js has no fallback to the internet (the 3D views are then drawn with
+    Plotly); the summary has two tables; the link buttons are described as buttons; the
+    Turkish README has the three questions MaRQ asks before keeping a surface.
 
 ## 0.9 (2026-09-30)
 

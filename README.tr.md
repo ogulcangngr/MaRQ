@@ -92,15 +92,15 @@ ya da WebKit'te çalıştırır ve arşivin örnek verileriyle denetler.
 **Çevrimdışı.** `vendor/` klasörü Plotly.js, three.js ve NumPy ile SciPy içeren Pyodide
 çalışma ortamını barındırır (37 MB; sürümler ve lisanslar `vendor/README.md` içinde).
 Bu yüzden ilk başlatma hiçbir şey indirmez ve durum çubuğunda "Hazır (çevrimdışı paket)"
-yazar. `vendor/` yoksa, örneğin yalnızca kaynak kod indirildiyse, sayfa içerik dağıtım
-ağlarına (CDN) döner ve ilk başlatmada internet gerekir; `python tools/fetch_vendor.py`
-paketi geri getirir.
+yazar. `vendor/` yoksa, örneğin yalnızca kaynak kod indirildiyse, Plotly ve Pyodide içerik
+dağıtım ağlarından (CDN) gelir, bu yüzden ilk başlatmada internet gerekir, ve 3B görünümler
+three.js yerine Plotly ile çizilir; `python tools/fetch_vendor.py` paketi geri getirir.
 
 ## Pencere
 
 - **Şerit** (üstte): komutlar, gruplar hâlinde: *Yüzey* (Aç, Analiz et, A olarak ata,
-  B olarak ata, Kırpımı kaydet), *Karşılaştırma* (A'yı aç, B'yi aç, Karşılaştır, toplu
-  işlem), *Dışa aktar*, *Görünüm* ve *Genel* (Ayarlar, Günlük). İlk kez kullanan birinin
+  B olarak ata, Kırpımı kaydet), *Karşılaştırma* (A'yı aç, B'yi aç, Karşılaştır, Yorumla,
+  toplu işlem), *Dışa aktar*, *Görünüm* ve *Genel* (Ayarlar, Günlük). İlk kez kullanan birinin
   büyük olasılıkla sıradaki komutu kırmızı çerçeveyle gösterilir.
 - **Model ağacı** (solda): girdiler (analiz edilecek tarama, A yüzeyi, B yüzeyi; bir dosya
   açmak için satıra tıklayın ya da dosyayı üzerine bırakın) ve her sonucun bütün
@@ -113,7 +113,7 @@ paketi geri getirir.
   oturumdan çıkarır. Her karşılaştırmanın ve her toplu karşılaştırmanın da aynı biçimde
   kendi düğümü vardır (B adıyla, yanında A); motor en yeni dördünü tutar. *Oturumun özeti*
   bütün analizleri ve karşılaştırmaları, toplu satırlar ve artık tutulmayan sonuçlar dahil,
-  tek bir tabloda listeler; model ağacındakiler bir düğmeyle açılır. Bir sonucun yanındaki nokta, onun *Ayarlar*'daki şimdiki değerlerden
+  iki tabloda listeler; model ağacındakiler bir düğmeyle açılır. Bir sonucun yanındaki nokta, onun *Ayarlar*'daki şimdiki değerlerden
   farklı ayarlarla yapıldığını gösterir; Özellikler hangilerinin değiştiğini söyler.
 - **Özellikler** (sağda): ekrandaki sonucun ölçülen değerleri; fareyle üzerine
   gelindiğinde her birinin açıklaması çıkar. Uzunluklar 0,1 µm, açılar 0,1° ve
@@ -178,9 +178,9 @@ göstermek için yükseklikleri ×2 ile ×10 arasında büyütebilir. **Gerçek 
 (Görünüm, varsayılan olarak açık) iki ekseni de uzunluk olan her 2B grafikte iki eksende
 aynı ölçeği kullanır; böylece kanal biçimini korur ve bir değişim kanalın boyutuyla
 orantılı gösterilir. Küçük bir değişimin okunması gerektiğinde, her eksenin paneli
-doldurması için kapatın. **Haritaları bağla** altı karşılaştırma haritasını birlikte
-yakınlaştırır ve kaydırır; **3B görünümleri bağla** A yüzeyi, B yüzeyi ve eğim hatası için
-tek bir kamera kullanır. *Renkler* yükseklik haritalarının renk ölçeğini (değiştirilmedikçe Earth), *3B ayrıntı* 3B
+doldurması için kapatın. Harita görünümlerinin bağlantı düğmesi (bir zincir) altı
+karşılaştırma haritasını birlikte yakınlaştırır ve kaydırır; 3B görünümlerinki A yüzeyi,
+B yüzeyi ve eğim hatası için tek bir kamera kullanır. *Renkler* yükseklik haritalarının renk ölçeğini (değiştirilmedikçe Earth), *3B ayrıntı* 3B
 görünümlerin ağını belirler (değiştirilmedikçe Yüksek; *Çok yüksek* her hücreyi çizer: analiz
 kırpımını voksel boyutunda, karşılaştırma ızgarasını tam aralığında).
 
@@ -233,6 +233,13 @@ ayarlarında, 5 µm'lik vokselle sınanmıştır:
   8 milyon hücreye kadar (örneğin 5 µm'de 40 mm'ye 5 mm); daha büyük bir ızgara, daha büyük bir
   aralık seçmeyi ya da yüzeyleri kırpmayı söyleyen bir iletiyle durur. Tabanında 1,5 µm'den az
   doku bulunan bir yüzey idealize (CAD) yüzey sayılır: karşılaştırmalarında temel sonuç RQ olur.
+  Çevre yüzeyden 10 mm'den uzak yükseklikler, örneğin cihazın dolgu değerleri, hiçbir zaman
+  taban düzeyi sayılmaz.
+- **Kısa tabanlar ve sığ çiftler.** Taban pürüzlülüğü şeridinden (4000 µm) kısa bir taban şeridi
+  kısaltır: şerit, duvarlardan uzak durduğu gibi, ölçülen tabanın içinde taban genişliğinin
+  dörtte biri kadar önce biter ve günlük bunu belirtir. İki yüzeyin ortak kanal içinde 10'dan az
+  hücre kaldığında korelasyonlar ortak ızgaranın tamamı üzerinden alınır ve Özellikler bunu
+  belirtir.
 
 ## İş akışı A: tek yüzey
 
@@ -300,7 +307,10 @@ ayarlarında, 5 µm'lik vokselle sınanmıştır:
 
 1. A yüzeyini (referans) ve B yüzeyini (karşılaştırılan yüzey) kırpımlarla doldurun: ya
    her yüzeyi analiz ettikten sonra *A olarak ata* ve *B olarak ata* ile, ya da kırpım
-   dosyaları için *A'yı aç* ve *B'yi aç* ile. MaRQ aynı noktaları içeren iki yüzeyi
+   dosyaları için *A'yı aç* ve *B'yi aç* ile. MaRQ, tarama yuvasındaki nokta bulutu henüz
+   analiz edilmemişse atamadan önce sorar, bir analizi hem A hem B olarak atamayı reddeder ve
+   adında "crop" geçmeyen bir dosyayı A, B ya da toplu işlem dosyası olarak almadan önce sorar.
+   Ayrıca aynı noktaları içeren iki yüzeyi
    karşılaştırmadan önce (RQ = 1 verir) ve A'nın noktalarını içeren ya da listedeki başka
    bir dosyayı tekrarlayan dosyalarla toplu karşılaştırmadan önce sorar; dosyaları adlarına
    göre değil içeriklerine göre tanır. Aynı kanalın herhangi iki yüzeyi
@@ -313,8 +323,9 @@ ayarlarında, 5 µm'lik vokselle sınanmıştır:
    180 derecelik yön denetimi çekirdekte sabittir.
 3. **Karşılaştır**. Özellikler RQd, RQ, RQdx ve RQdy değerlerini, her birinin RMSE'siyle
    gösterir; B için korunan yönü, ızgarayı ve kanal içi maskenin boyutunu belirtir.
-   Araç sayıları ve haritaları verir, yorumlamayı kullanıcıya bırakır; makale bir kabul
-   eşiği tanımlamaz. Görünümler şunlardır: 3B'de *A yüzeyi* ve *B yüzeyi*, B yüzeyi
+   Özellikler ayrıca RQd ile RQ'yu 0 ile 1 arasındaki ölçeklerinde gösterir, iki tarama
+   için makaledeki çalışmayı gölgeler ve nasıl okunacaklarını söyler. MaRQ not vermez:
+   makale bir kabul eşiği tanımlamaz. Görünümler şunlardır: 3B'de *A yüzeyi* ve *B yüzeyi*, B yüzeyi
    üzerinde 3B çizilmiş *Eğim hatası*, *Yükseklik haritaları* (A, B ve işaretli fark A − B)
    ve *Eğim haritaları* (A ile B'nin eğim büyüklükleri ve işaretsiz eğim hatası), her biri
    kanal içi maskenin sınırıyla (haritaların altındaki bir düğme onu gösterir ya da
@@ -322,7 +333,26 @@ ayarlarında, 5 µm'lik vokselle sınanmıştır:
    *A ve B kesitleri*, ikinci eksende yükseklik farkı A − B ile; yükseklik ve fark eksenleri
    kanal boyunca en geniş aralıklarında sabittir. İki harita görünümü birlikte yakınlaştırılır ve kaydırılır. Günlük, B'nin hangi yönünün korunduğunu,
    geçerli hücre oranını ve maske boyutunu belirtir; ölçüt tablosu korunan yöne aittir.
-4. **Toplu işlem**: *Toplu dosyalar…* ile birden çok dosya seçin ve **Toplu karşılaştır**'a
+4. **Yorumla** (bir karşılaştırmadan sonra; toplu işlemler yorumlanmaz): A ile B'nin ne
+   olduğunu seçin: tasarım (CAD), üretildiği gibi kalıp, kullanımdan sonra kalıp, bir parça ya
+   da yeniden taranmış aynı yüzey. Kalıp burada bir kalıp, ana kalıp ya da damga olabilir. Çift, makaledeki değerlendirme görevlerinden birini oluşturur (Kalıp üretim
+   kalitesi, Kopyalama kalitesi, Kalıbın bozulması, Tüm zincirin kalitesi; kullanılmış kalıba
+   karşı tasarım ve yeniden tarama iki ek görevdir). Görev, seçim yapılırken, makaledeki
+   görevler tablosunun ve yüzey çizimlerinin yanında adlandırılır (*Hangi değerler okunur*,
+   Özellikler'de de). Karşılaştırmanın bir düğümü olan *Yorum* görünümü görev için okunacak
+   değerleri, A ile B'nin boyutlarını yan yana ve sonraki eksi önceki yüzey olarak, her birinin
+   bir referansla okumasını verir, asla bir hüküm vermez: önceki yüzeyin ikinci bir taraması
+   oturumda aynı ayarlarla karşılaştırılıp öyle yorumlandıysa onun yeniden tarama düzeyi, yoksa
+   makaledeki çalışma (yeniden taranan değişmemiş bir yüzey 0,92 ile 0,95, kalıp-parça çiftleri
+   0,17 ile 0,91, 0,02'den küçük farklar yorumlanmaz). Roller seçildiğinde Özellikler onlara
+   uyar: aralarında bir tasarım varsa birincil ölçüler RQ ve boyutlardır. A daha sonraki yüzey
+   olarak seçildiğinde MaRQ, A ile B'nin gerçekten bunlar olup olmadığını (öyleyse ikisini
+   değiştirip yeniden karşılaştırır; iki yüzey hâlâ yuvalardayken sunulur), rollerin ters
+   seçilip seçilmediğini (rolleri değiştirir) ya da olduğu gibi bırakmayı sorar:
+   korelasyonlar sıraya neredeyse hiç bağlı değildir (B 180° döndürüldüğünde yaklaşık 0,001) ve
+   farklar her durumda sonraki eksi önceki olarak yazılır. Yorum oturumla kaydedilir, Sonuçlar
+   (JSON)'a yazılır ve raporda karşılaştırmanın sayfasına basılır.
+5. **Toplu işlem**: *Toplu dosyalar…* ile birden çok dosya seçin ve **Toplu karşılaştır**'a
    tıklayın. *Toplu sonuçlar* görünümü her dosya için RQ, RQdx, RQdy ve RQd değerlerini
    listeler; *Göster* bir çifti şekilleri için yeniden çalıştırır. Toplu karşılaştırmanın
    kendi düğümü vardır; A yüzeyi bütün liste için bir kez okunur, sayılar her çiftin tek

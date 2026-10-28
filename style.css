@@ -113,6 +113,7 @@ sub { font-size: .72em; vertical-align: -.25em; line-height: 0; }
 .tb-lang .ico { width: 1rem; height: 1rem; }
 .tb-lang select { border: none; background: transparent; color: inherit; font-size: .8rem; cursor: pointer; padding: 0 .1rem; }
 .tb-lang select:focus { outline: none; }
+.tb-lang:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }   /* the menu reached by Tab */
 .tb-lang select option { background: var(--pane); color: var(--text); }
 /* File menu */
 .tb-menu { position: relative; }
@@ -607,6 +608,64 @@ html.ui-mid .rpair .rtool .dot { top: .15rem; right: auto; left: 1.15rem; width:
 html.ui-narrow { --left: 16.5rem; --right: 16.5rem; }
 html.ui-narrow #doc-title { display: none; }
 html.ui-narrow .rtool { width: 3.8rem; }
-html.ui-narrow .rgroup { padding: 0 .28rem; }
+html.ui-narrow .rgroup { padding: 0 .2rem; }          /* the Turkish ribbon fits at 1024 px */
 html.ui-narrow .rselect { gap: .4rem; }
 html.ui-narrow .rselect select { min-width: 5.4rem; }
+
+/* ── Interpret: the 0 to 1 scales, the Interpretation view, the table of the tasks ── */
+.rbrow { display: grid; grid-template-columns: 2.4rem 1fr 2.8rem; align-items: center; gap: .55rem; padding: .3rem .7rem; font-size: .8rem; }
+.rbrow .rbv { text-align: right; font-variant-numeric: tabular-nums; }
+.rbar { position: relative; height: .42rem; background: var(--line); border-radius: .21rem; margin: .15rem 0 .35rem; }
+.rb-band { position: absolute; top: 0; bottom: 0; background: var(--text3); opacity: .5; border-radius: .21rem; }
+.rb-range { position: absolute; top: calc(100% + .12rem); height: .12rem; background: var(--text3); border-radius: .06rem; }
+.rb-val { position: absolute; top: -.22rem; width: .22rem; height: .86rem; margin-left: -.11rem; background: var(--accent); border-radius: .08rem; }
+.rb-own { position: absolute; top: -.16rem; width: .14rem; height: .74rem; margin-left: -.07rem; background: var(--text); border-radius: .05rem; }
+.rbscale { display: flex; justify-content: space-between; margin: -.2rem 4.05rem 0 3.65rem; font-size: .66rem; color: var(--text3); }
+.int-links { display: flex; align-items: center; gap: .8rem; }
+.int-links a { color: var(--accent); }
+.int-wrap { max-width: 68rem; }
+.int-head { margin-bottom: .6rem; }
+.int-title { font-size: 1.1rem; font-weight: 600; color: var(--text); }
+.int-tag { margin-left: .6rem; font-size: .7rem; padding: .05rem .5rem; border: 1px solid var(--line-2); border-radius: 1rem; color: var(--text2); vertical-align: .1rem; }
+.int-purpose { color: var(--text2); font-size: .86rem; margin: .2rem 0 .55rem; }
+.int-surf { font-size: .84rem; color: var(--text); margin: .12rem 0; }
+.int-surf b { display: inline-block; width: 1.2rem; color: var(--text3); }
+.int-surf .fname { color: var(--text3); margin-left: .6rem; }
+.int-acts { display: flex; flex-wrap: wrap; gap: .45rem; margin: .6rem 0 .2rem; }
+.int-sec { font-size: .74rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text3); margin: 1.1rem 0 .45rem; }
+.int-note { border-left: 2px solid var(--line-2); padding: .3rem .65rem; color: var(--text2); font-size: .82rem; margin: .45rem 0; line-height: 1.45; }
+.int-table { width: 100%; border-collapse: collapse; font-size: .84rem; background: var(--pane); border: 1px solid var(--line); border-radius: var(--r); }
+.int-table th, .int-table td { padding: .45rem .7rem; border-bottom: 1px solid var(--line); vertical-align: top; text-align: left; }
+.int-table th { font-size: .72rem; color: var(--text3); font-weight: 600; background: var(--pane-head); }
+.int-table td.il { color: var(--text); white-space: nowrap; }
+.int-table td.il small { color: var(--text2); font-size: .72rem; }
+.int-table td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.int-table td.ib { width: 22%; min-width: 8rem; vertical-align: middle; }
+.int-table td.ir { color: var(--text2); line-height: 1.45; }
+.int-table .pm { color: var(--text3); font-size: .74rem; }
+.int-legend { padding-left: 0; }
+.int-roles { display: flex; gap: 1.6rem; flex-wrap: wrap; }
+.int-role { display: flex; gap: .6rem; align-items: flex-end; }
+.int-role .field select { min-width: 15rem; }
+.int-n input { width: 6.5rem; }
+.modal-body.about p.int-task { margin: .5rem 0 .3rem; font-size: .9rem; }
+.task-table { width: 100%; border-collapse: separate; border-spacing: .3rem 0; font-size: .8rem; table-layout: fixed; }
+.task-table th, .task-table td { padding: .45rem .55rem; vertical-align: top; text-align: left; border-bottom: 1px solid var(--line); line-height: 1.4; }
+.task-table tr:first-child th { font-size: .8rem; color: var(--text); background: var(--pane-head); border-radius: var(--r) var(--r) 0 0; border-bottom: none; border-top: 3px solid transparent; }
+.task-table th:first-child, .task-table tr:first-child th:first-child { width: 7.5rem; color: var(--text3); font-size: .72rem; font-weight: 600; background: none; }
+.task-table td { color: var(--text2); }
+.task-table .on { background: var(--accent-soft); color: var(--text); }
+.task-table tr:first-child th.on { background: var(--accent-soft); }
+.tpair { display: flex; border: 1px dashed var(--line-2); border-radius: var(--r); padding: .35rem .2rem .25rem; background: var(--pane); }
+.tglyph { margin: 0; flex: 1; min-width: 0; text-align: center; }
+.tglyph + .tglyph { border-left: 1px solid var(--line); }
+.tglyph svg { display: block; width: 100%; max-width: 5.6rem; height: auto; margin: 0 auto; }
+.tglyph figcaption { font-size: .7rem; color: var(--text2); margin-top: .15rem; line-height: 1.25; }
+.int-glyph svg { width: 2.7rem; height: auto; vertical-align: middle; margin-right: .45rem; }
+.task-table ul { margin: 0; padding-left: 1rem; }
+.rchip { display: inline-block; padding: .05rem .5rem; border-radius: .7rem; font-size: .74rem; border: 1px solid var(--line-2); color: var(--text); white-space: nowrap; margin: .12rem 0; }
+.rchip.r-design { border-style: dashed; }
+.rchip.r-tool { border-color: #d9822b; }
+.rchip.r-used { border-color: #9a6332; }
+.rchip.r-part { border-color: #3d8bfd; }
+.rarrow { margin: 0 .3rem; color: var(--text3); }
