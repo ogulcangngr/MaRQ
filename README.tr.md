@@ -23,10 +23,9 @@ olmadan da çalışır. Arayüz İngilizce ya da Türkçedir.
 
 RQd ve yazılım şu makalede anlatılmaktadır: M. O. Güngör, J. Charmet, E. Yıldırım,
 *A 3D measurement workflow for assessing replication quality and tool degradation
-in moulded microfluidic channels*, Measurement (gönderildi, 2026). Yazılımı, beklenen
+in moulded microfluidic channels*, arXiv:2610.39046 (2026), https://arxiv.org/abs/2610.39046. Yazılımı, beklenen
 sonuçlarıyla bir örnek kanalı ve çalışmanın nokta bulutlarını içeren eşlik arşivi
-Zenodo'dadır: https://doi.org/10.5281/zenodo.22813916 (makale yayımlanana kadar erişimi
-kısıtlıdır).
+Zenodo'dadır: https://doi.org/10.5281/zenodo.22813916.
 
 ## MaRQ'ı çalıştırma
 

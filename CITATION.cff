@@ -26,6 +26,7 @@ preferred-citation:
       given-names: "Jérôme"
     - family-names: "Yıldırım"
       given-names: "Ender"
-  journal: "Measurement"
+  journal: "arXiv preprint"
   year: 2026
-  notes: "submitted; DOI to be added on publication"
+  doi: "10.48550/arXiv.2610.39046"
+  url: "https://arxiv.org/abs/2610.39046"
